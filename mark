@@ -57,6 +57,7 @@ op.add_option('--columns',dest='columns',action='store',default=None,help='''Thi
 op.add_option('--comment',dest='comment_format',action='store',default='^\s*#.*',help='''Specifies the pattern used to identify comment lines, which is '%default' by default.''')
 op.add_option('--csv',dest='csv',action='store_true',default=False,help='''For use with -f, this option specifies that the data is in CSV format.''')
 op.add_option('-d','--delimiter',dest='delim',default=None,help='''For use with -f, this option specifies a regular expression that matches field delimiters. The default is '\s+', which matches one or more whitespace characters.''')
+op.add_option('-D','--diff',dest='diff',action='store_true',default=False,help='''Turns on diff mode, which colors lines removed differently from lines added.''')
 op.add_option('-f','--fields',dest='fields',action='store',default=None,help='''Specifies which fields are to be marked. Field ranges are separated by commas and take the form "m[-[n]]" or "[[m]-]n" where m is the first column in the range (counted from 1) and n is the last. See --csv and -d for data parsing options.''')
 op.add_option('-g','--grep',dest='grep',action='store_true',default=False,help='''Output only lines that match at least one color filter.''')
 op.add_option('-i',dest='ignore_case',action='store_true',default=False,help='''Ignore case when matching patterns.''')
@@ -86,15 +87,24 @@ if opt.columns:
     die('patterns may not be used with --columns')
   if opt.comment_mode:
     die('-C cannot be used with --columns')
+  if opt.diff:
+    die('-D (--diff) cannot be used with --columns')
 if opt.fields:
   if opt.comment_mode:
     die('-C cannot be used with -f (--fields)')
+  if opt.diff:
+    die('-D (--diff) cannot be used with -f (--fields)')
   if opt.delim and opt.csv:
     die('-d (--delimiter) cannot be used with --csv')
   if not opt.csv and not opt.delim:
     opt.delim=r'\s+'
 if opt.comment_mode:
+  if opt.diff:
+    die('-D (--diff) and -C cannot be used together.')
   pat.insert(0,opt.comment_format)
+elif opt.diff:
+  pat.insert(0,'^[+>].*')
+  pat.insert(0,'^[-<].*')
 
 def complete(word,wordlist):
   'Return a list of words from wordlist that begin with word.'
