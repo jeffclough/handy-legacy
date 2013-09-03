@@ -1,0 +1,331 @@
+#!/usr/bin/env python
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+# chronorename - Rename files according to modification time.
+# Copyright (C) 2006 Jeff Clough
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the
+# Free Software Foundation; either version 2 of the License, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+#
+# Author Contact Info:
+# Jeff Clough <unclejeff@gatech.edu>
+#
+
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+# Run this command with no arguments to see a usage message.
+#
+# This code requires EXIF.py, available as
+# http://home.cfl.rr.com/genecash/digital_camera/EXIF.py
+#
+# -- Jeff Clough, Humble Programmer
+#
+
+from getopt import getopt
+from math import *
+from os import *
+from sys import *
+from string import *
+from time import *
+from os import path
+
+import EXIF
+import os
+import re
+
+VERSION='0.5'
+std_format='{dir}{series}%x_%X{ext}'
+
+# Provide defalut values for command line options.
+opt_exif_time=False
+opt_format=std_format
+opt_inc_start=1
+opt_series=''
+opt_fake=False
+opt_lcext=True
+opt_sep='-'
+opt_digits=2
+
+def process_options(optlist):
+  '''Given a list of options from the command line, set the global options
+  appropriately and return a list of any arguments that may have been given as
+  well.'''
+
+  global opt_exif_time,opt_lcext,opt_format,opt_inc_start,opt_fake,opt_series,opt_sep,opt_digits
+
+  try:
+    opts,args=getopt(optlist,'d:Eef:i:nS:s:v')
+  except Exception,e:
+    print e
+    exit(1)
+
+  for opt,arg in opts:
+    if opt=='-d':
+      try:
+	opt_digits=int(arg)
+      except:
+	print >>stderr,'%s: -d requires an integer value. Found "%s".'%(path.basename(argv[0]),arg)
+	exit(1)
+    elif opt=='-e':
+      opt_exif_time=True
+    elif opt=='-E':
+      opt_lcext=False
+    elif opt=='-f':
+      opt_format=arg
+    elif opt=='-i':
+      try:
+	opt_inc_start=int(arg)
+      except:
+	print >>stderr,'%s: -i requires an integer value. Found "%s".'%(path.basename(argv[0]),arg)
+	exit(1)
+    elif opt=='-n':
+      opt_fake=True
+    elif opt=='-s':
+      opt_series=arg
+    elif opt=='-S':
+      opt_sep=arg
+    elif opt=='-v':
+      print '%s v%s'%(path.basename(argv[0]),VERSION)
+      exit(0)
+  return args
+
+def usage():
+  prog=path.basename(argv[0])
+  print '''\
+Synopsis:
+  %s [options] path...
+
+Description:
+  Digital cameras are great, but they're not very creative about what they
+  name the images they create, not to mention that they generally use all
+  upper case in the filename. The filename "IMG_0052.JPG" doesn't tell me
+  where, when, or on what occasion the picture was taken. Sure, there's EXIF
+  data embedded in the file, but that doesn't do me any good from the commad
+  line ... until now.
+
+  This command renames a file according to its time of last modification or,
+  if the -e option is given and the file contains EXIF information, according
+  to the time the image was created. The time may be formatted in any number
+  of ways.
+
+  A series name may also be given with the -s option. Any series name is
+  placed before the time and separated from it with a dash (-) character. This
+  comes in handy when you'd like to group a series of pictures together by
+  filename. For example:
+
+    chronorename -s "my vacation" *.JPG
+
+  which renames the JPEG files to "my vacation-YYYYMMDD hhmmss.jpg" where
+  "YYYYMMDD hhmmss" is replaced by the time of the file's most recent
+  modification. If you add the -e option, the time used will be taken from
+  each file's internal EXIF data if that is available.
+
+Options:
+  If a CHRONORENAME_OPT environment variable exists, default values for the
+  options below are taken from it. Such defaults are, of course, overridden by
+  any command line options. Any filename arguments that are found in this
+  environment variable are non-quietly ignored.
+
+  -d n	Specify how many digits are to be used when creating suffixes to avoid
+	filename collisions. (See -i.) (default=%d)
+
+  -e    Gets time from EXIF data (if present) rather than from the OS. If no
+	EXIF data is available from a given file, that file's time of last
+	modification is used.
+
+  -E	Do not automatically lowercase the file extension.
+
+  -f s	Sets the format for renaming files. The format string may contain
+        both strftime(3) fields and components of the path being renamed:
+	  %%a  Locale's abbreviated weekday name.    
+	  %%A  Locale's full weekday name.	  
+	  %%b  Locale's abbreviated month name.  
+	  %%B  Locale's full month name.	
+	  %%c  Locale's appropriate date and time representation.	
+	  %%d  Day of the month as a decimal number [01,31].   
+	  %%H  Hour (24-hour clock) as a decimal number [00,23].	
+	  %%I  Hour (12-hour clock) as a decimal number [01,12].	
+	  %%j  Day of the year as a decimal number [001,366].  
+	  %%m  Month as a decimal number [01,12].	
+	  %%M  Minute as a decimal number [00,59].	  
+	  %%p  Locale's equivalent of either AM or PM.
+	  %%S  Second as a decimal number [00,61].
+	  %%U  Week number of the year (Sunday as the first day of the week)
+	      as a decimal number [00,53]. All days in a new year preceding
+	      the first Sunday are considered to be in week 0.
+	  %%w  Weekday as a decimal number [0(Sunday),6].	
+	  %%W  Week number of the year (Monday as the first day of the week)
+	      as a decimal number [00,53]. All days in a new year preceding
+	      the first Monday are considered to be in week 0.
+	  %%x  Same as %%Y%%m%%d. (WARNING: Nonstandard)
+	  %%X  Same as %%H%%M%%S. (WARNING: Nonstandard)
+	  %%y  Year without century as a decimal number [00,99].	
+	  %%Y  Year with century as a decimal number.  
+	  %%Z  Time zone name (no characters if no time zone exists).  
+	  %%%%  A literal "%%" character.
+
+	  {dir} is replaced with the the path (including the ending '/') to
+	  the file being renamed.
+
+	  {basepath} is replaced with the path and filename of the file
+	  being renamed, but not the extension (or the dot preceeding it).
+
+	  {basename} is replaced with the filename of the file being
+	  renamed, but not the path or extension.
+
+	  {ext} is replaced with the extension (including the dot) of the
+	  file being renamed.
+
+	  {series} is replaced with the series text specified on the command
+	  line, which might be an empty string. (See -s and -S.)
+
+	  (default="%s")
+
+  -i n	Sets the start value for incrementing when avoiding filename
+	collision. To avoid renaming a file to the name of an existing file,
+	which would effectively delete the existing file, an integer value is
+	appended to the end of the new name. Increasingly high numbers are
+	tried until a new filename is found that does not conflict with an
+	existing one. (See -d.) (default=%d)
+
+  -n	Tells %s to only pretend to rename files.
+	This is useful for testing.
+
+  -s s  Sets the name of this series of files to s. If s ends with a letter or
+	a digit, a dash ('-') is appended to it to separate it from the time.
+	If you prefer another non-alpha, non-digit separator (e.g. '.'),
+	putting it at the end of the series ('my series.') name will suppress
+	this behavior. (default='')
+
+  -S s  Sets the default separator string to s. (default='%s')
+
+  -v    Prints the version (%s) of %s and exits.
+
+WARNINGS:
+1) ALWAYS use the -n command line option to get a preview of how the
+files in question will be renamed. Mistakes are easy to make, and some
+mistakes are difficult, embarrassing, or even impossible to correct.
+
+2) Assuming that you've ignored warning #1, be aware that leaving {dir}
+out of a format string that is used for renaming files in a specified
+directory will cause them to be moved to the current directory, which
+may not be what you want. E.g.:
+
+  %s -f "my_vaction-%%x_%%X{ext}" photos/*.jpg
+
+will rename the files, but it will also move them to the current
+directory. What you probably meant to say was:
+
+  %s -f "{dir}my_vaction-%%x_%%X{ext}" photos/*.jpg
+
+or even better:
+
+  %s -s my_vacation photos/*.jpg
+
+which does the same thing.
+'''%(prog,opt_digits,opt_format,opt_inc_start,prog,opt_sep,VERSION,prog,prog,prog,prog)
+
+def basepath(s):
+  return path.splitext(s)[0]
+
+def pathext(s):
+  return path.splitext(s)[1]
+
+def expand(template,fn):
+  '''Replace the special components of template with peices of the filename
+  and any series that was specified on the command line.'''
+
+  global opt_series
+
+  d={}
+  s=path.dirname(fn)
+  if s:
+    s+='/'
+  d['{dir}']=s
+  d['{basepath}']=basepath(fn)
+  d['{basename}']=path.basename(fn)
+  if len(opt_series)>0 and opt_series[-1] in letters+digits:
+    opt_series+=opt_sep
+  d['{series}']=opt_series
+  d['{ext}']=pathext(fn)
+  if opt_lcext:
+    d['{ext}']=lower(d['{ext}'])
+
+  for field in d:
+    template=replace(template,field,d[field])
+  return template
+
+def GetExifData(fn):
+  '''Given a filename, return the EXIF data from that file in dictionary
+  form.'''
+
+  f=file(fn)
+  d=EXIF.process_file(f)
+  f.close()
+  return d
+
+def GetNewName(filename,fmt):
+  '''Given the current name of a file to be renamed and the format to be
+  used in renaming it, return the new filename.'''
+
+  global opt_exif_time
+ 
+  # Get the mod time of this file, or the EXIF time if available.
+  t=path.getmtime(filename)
+  if opt_exif_time:
+    edata=GetExifData(filename)
+    if 'EXIF DateTimeOriginal' in edata:
+      exif_time=str(edata['EXIF DateTimeOriginal'])
+      t=mktime(strptime(exif_time,'%Y:%m:%d %H:%M:%S'))
+  # Compose the time portion of the new filename.
+  fmt=replace(replace(fmt,'%x','%Y%m%d'),'%X','%H%M%S')
+  s=strftime(fmt,localtime(t))
+  # Resolve the remaining portions of the new filename.
+  s=expand(s,filename)
+  return s
+
+# Handle any options given in CHRONORENAME_OPT first.
+if 'CHRONORENAME_OPT' in os.environ:
+  args=process_options(os.environ['CHRONORENAME_OPT'].split())
+  if args:
+    print >>stderr,'%s: Ignoring filename arguments in CHRONORENAME_OPT: %s'%(path.basename(argv[0]),join(args))
+
+# Now handle options from the command line.
+args=process_options(argv[1:])
+if not args:
+  usage()
+  exit(1)
+
+# Process our command line arguments, which should all be filenames.
+for oldfn in args:
+  try:
+    s=GetNewName(oldfn,opt_format)
+    if opt_fake:
+      print '%s -> %s'%(oldfn,s)
+    else:
+      s1=s
+      suffix=opt_inc_start
+      while path.exists(s):
+	s=expand('{basepath}%s%0*d{ext}'%(opt_sep,opt_digits,suffix),s1)
+	suffix+=1
+      print '%s -> %s'%(oldfn,s)
+      rename(oldfn,s)
+  except OSError,(errno,strerr):
+    print >>stderr,'%s: %s: %s'%(path.basename(argv[0]),strerr,f)
+  #except Exception,e:
+  #  print >>stderr,'%s: %s'%(path.basename(argv[0]),str(e))
