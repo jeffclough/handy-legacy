@@ -1,0 +1,105 @@
+.PU
+.TH datecycle 1
+.SH NAME
+datecycle \- a command for aging files by renaming them according to date
+.br
+.SH SYNOPSIS
+.ll +8
+.B datecycle
+.RB [-nTvz] [-f fmt] [-g group] [-l count[h|d|w|m|y|K|M|G]] [-m mode] [-o old_dir] [-u user]
+[
+.I "path \$..."
+]
+.ll -8
+.br
+.SH DESCRIPTION 
+datecycle maintains the specified number, period, or size of previous
+versions of the file secified by path by renaming the file with a suffix
+corresponding to the current date and time, and then removing the oldest
+versions of that file until the limit of previous files is met.
+
+If there is an error while processing a given path argument, an
+appripriate error message is written to standard error and then
+processing continues with any remaining path arguments.
+
+.SH OPTIONS
+.TP
+.B \-f
+specifies the format of the suffix to be appended to the name of the
+file in question in order to distinguish them from each other. The
+strftime() function's format syntax is used here, and it defaults to
+".%Y%m%d%H%M". Observe that the '.' that separates the name of the
+original file from the data given in the suffix is part of the 
+suffix format. The TZ environment variable is used in the date and
+time that are formatted into the suffix.
+.TP
+.B \-g
+specifies the group that should own created files.
+.TP
+.B \-l
+specifies the limit of previous versions of a given file to keep. It
+defaults to a value of "14d", which keeps 14 days of versions of the
+file. If count ends with h, d, w, m, or y, then any files older than
+count hours, days, weeks, months, or years are deleted. If count ends
+with K, M, or G, then the oldest version of the file in question is
+deleted until the total size of all previous versions is less than
+count kilobytes, megabytes, or gigabytes. No units are specified,
+then count is simply the number of previous version of the flie to
+be kept.
+.TP
+.B \-m
+specifies octal permissions to set any created files to.
+.TP
+.B \-n
+tells datecycle to only pretend to age file files in question.
+Operations that would have been performed will be described in text
+written to standard output instead.
+.TP
+.B \-o
+specifies the directory where previous versions of the file in
+question are to be placed and can be found. This defaults to the
+directory where the original file's dreictory.
+.TP
+.B \-T
+tells datecycle to use the current date and time when aging path.
+The default behavior is to use the time of path's last modification.
+.TP
+.B \-u
+specifies the user who should own created files.
+.TP
+.B \-v
+turns on verbose mode, sending diagnostic messages to standard
+error.
+.TP
+.B \-V
+prints the version of datecycle to standard output.
+.TP
+.B \-z
+specifies that path is to be cycled, even if it is an empty file.
+The default behavior is that the file specified by path will be
+ignored if it has a size of zero bytes.
+.br
+.SH EXIT STATUS
+.TP
+.B 0
+Cycle completed without incident.
+.TP
+.B 1
+path not found.
+.TP
+.B 2
+access violation.
+.TP
+.B 3
+Unsupported time format ("%Ex" or "%Ox")
+.TP
+.B 10
+Invalid command line option or missing argument.
+.br
+.SH BUGS
+In order to keep the code simple, 31 days are assumed to be in every
+month, and only 365 days are assumed to be in ever year.
+
+If an error is encountered while cycling any of a list of paths
+given on the command line, datecycle's exit status will reflect only
+the last error encountered. 

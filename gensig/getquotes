@@ -1,0 +1,83 @@
+#!/usr/bin/env python
+
+import httplib,os,re,sys,time,types
+
+
+host='wordsmith.org'
+archive=httplib.HTTPConnection(host)
+
+def GetMonthNum(monthname):
+  '''Given the name of a month (possibly abbreviated), return a month number
+  from 1 to 12. Return None if the value of monthname cannot be matched
+  against the name of an actual month.'''
+
+  months=('january','february','march','april','may','june',
+  'july','august','september','october','november','december')
+
+  m=monthname.lower()
+  l=[]
+  for i in range(len(abr)):
+    if abr[i].startswith(m):
+      l.append(i)
+  if len(l)==1:
+    return l[0]+1
+  return None
+
+def GetMonthlyQuotes(month=None,year=None):
+  '''Given a month (current-1 by default) and year (current by default),
+  filter the quotes from the corresponding A.Word.A.Day archive and return
+  them as a list of strings.'''
+
+  # Compose the name of our document. Allow month to be either a string
+  # or an integer.
+  if type(month)==types.StringTypes:
+    month=GetMonthNum(month)
+  if not month or not year:
+    tm=time.localtime(time.time())
+    if not year:
+      year=tm[0]
+    if not month:
+      month=tm[1]-1
+      if month<1:
+	year,month=year-1,12
+  doc='/awad/archives/%02d%02d'%(month,year%100)
+
+  # Get our document
+  archive.request('GET',doc)
+  rsp=archive.getresponse()
+  if rsp.status!=200:
+    print >>sys.stderr,'%s:%s responds with "%d %s"'%(host,doc,rsp.status,rsp.reason)
+    return None
+
+  # Read the quotes from our document.
+  lines=rsp.read().split('\n')
+  qlist=[]
+  for s in lines:
+    if s.startswith('X-Bonus: '):
+      qlist.append(s[9:])
+
+  qlist.sort()
+  return qlist
+
+# Get month and year, if present, from the command line.
+month=None
+year=None
+if len(sys.argv)>1:
+  month=sys.argv[1]
+  try:
+    month=int(month)
+  except:
+    month=GetMonthNum(month)
+    if not month:
+      print >>sys.stderr,'%s: "%s" is not a valid month.'%(sys.argv[0],sys.argv[1])
+      sys.exit(1)
+  if len(sys.argv)>2:
+    year=sys.argv[2]
+    try:
+      year=int(year)
+    except:
+      print >>sys.stderr,'%s: "%s" is not a valid year.'%(sys.argv[0],sys.argv[2])
+
+
+ql=GetMonthlyQuotes(month,year)
+print '\n'.join(ql)

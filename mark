@@ -1,0 +1,316 @@
+#!/usr/bin/env python
+
+import csv,optparse,os,re,sys
+
+# ANSI color escape sequences:
+attr=dict(
+  normal='0',
+  bold='1',
+  italics='2',
+  understore='3',
+  reverse='7',
+  strikethrough='9',
+)
+foreground=dict(
+  black='30',
+  red='31',
+  green='32',
+  yellow='33',
+  blue='34',
+  magenta='35',
+  cyan='36',
+  white='37',
+)
+background=dict(
+  black='40',
+  red='41',
+  green='42',
+  yellow='43',
+  blue='44',
+  magenta='45',
+  cyan='46',
+  white='47',
+)
+norm_color='\033['+attr['normal']+'m'
+
+progname=os.path.basename(sys.argv[0])
+def die(msg='',rc=1):
+  'Print the message and terminate this process with the given return code.'
+
+  if msg:
+    print >>sys.stderr,progname+': '+msg
+  sys.exit(rc)
+
+op=optparse.OptionParser('''usage: %prog [options] [pattern ...]
+
+Description: The %prog command is a filter (reads from standard input and
+writes to standard output) that scans each line for any regular expression
+patterns given as its arguments. When part of an input line is found to match
+a given pattern, ANSI highlighting sequences are inserted before and after
+that part of the line before it is output. Matches for the first pattern are
+colored red, the second are colored green, the third are colored yellow, and
+so on through blue, magenta, and cyan. The --palette option can be used to
+change the list of colors.''')
+
+op.add_option('-C',dest='comment_mode',action='store_true',default=False,help='''Turns on comment mode, which inserts the comment pattern (see --comment) at the start of the pattern list. This marks any line whose first non-space character is '#', which is very commonly a comment line. Use the --comment option to change the pattern used to idententify comments.''')
+op.add_option('--columns',dest='columns',action='store',default=None,help='''This option turns on fixed-column mode and accepts a comma-separated list of column numbers as its argument. Each given column number identifies the beginning of a column in each line of the input data. This option cannot be used with other highlighting modes.''')
+op.add_option('--comment',dest='comment_format',action='store',default='^\s*#.*',help='''Specifies the pattern used to identify comment lines, which is '%default' by default.''')
+op.add_option('--csv',dest='csv',action='store_true',default=False,help='''For use with -f, this option specifies that the data is in CSV format.''')
+op.add_option('-d','--delimiter',dest='delim',default=None,help='''For use with -f, this option specifies a regular expression that matches field delimiters. The default is '\s+', which matches one or more whitespace characters.''')
+op.add_option('-f','--fields',dest='fields',action='store',default=None,help='''Specifies which fields are to be marked. Field ranges are separated by commas and take the form "m[-[n]]" or "[[m]-]n" where m is the first column in the range (counted from 1) and n is the last. See --csv and -d for data parsing options.''')
+op.add_option('-i',dest='ignore_case',action='store_true',default=False,help='''Ignore case when matching patterns.''')
+op.add_option('--palette',dest='palette',action='store',default='red on black,green,yellow,blue,magenta,cyan',help='''Comma-delimited list of color specifications to use to highlight matches for patterns. Each spec is of the form "[ATTR] FG [on BG]" where ATTR is any of bold, italics, underscore, or strikethrough, and FG and BG may be any of black, red, green, yellow, blue, magenta, cyan, or white. Two other possible values for a colorspec can be "normal" and "reverse", which don't make sence with other ATTR, FB, or BG values. You should also know that ATTR, FG, and BG values are persistent from one entry to the next, so, for example "red on black,green,yellow" specifies that matches for the first pattern should be red, second pattern are green, third are yellow, and that all have black backgrounds. The default setting is "%default".''')
+op.add_option('-r','--reverse',dest='reverse',action='store_true',default=False,help='''Reverse foreground and background colors of highlighted sections.''')
+op.add_option('-w',dest='wrap',action='store_true',default=False,help='''Turn on color wrapping mode. By default, for n colors in the palette, the any pattern beyond the nth pattern simply uses the last color in the palette. Wrapping mode changes this behavior to so the the first color is used for the n+1st pattern, the second for the n+2nd, and so on.''')
+
+#re_columnList=re.compile(r'(?:\s*(\d+)\s*,)*(?:\s*(\d+)\s*)')
+re_number=re.compile(r'\d+')
+
+opt,pat=op.parse_args()
+if opt.reverse:
+  foreground,background=background,foreground
+if opt.columns:
+  opt.columns=[int(x)-1 for x in re_number.findall(opt.columns)]
+  if [x for x in opt.columns if x<0]:
+    die('column numbers must be positive integers: %s'%' '.join(['%s'%(x+1) for x in opt.columns]))
+  cols=list(opt.columns)
+  cols.sort()
+  if opt.columns!=cols:
+    die('column numbers must be in ascending order: %s'%' '.join(['%s'%(x+1) for x in opt.columns]))
+  if opt.columns[0]!=0:
+    opt.columns.insert(0,0)
+  if opt.fields:
+    die('-f (--fields) may not be used with --columns.')
+  if pat:
+    die('patterns may not be used with --columns')
+  if opt.comment_mode:
+    die('-C cannot be used with --columns')
+if opt.fields:
+  if opt.comment_mode:
+    die('-C cannot be used with -f (--fields)')
+  if opt.delim and opt.csv:
+    die('-d (--delimiter) cannot be used with --csv')
+  if not opt.csv and not opt.delim:
+    opt.delim=r'\s+'
+if opt.comment_mode:
+  pat.insert(0,opt.comment_format)
+
+def complete(word,wordlist):
+  'Return a list of words from wordlist that begin with word.'
+
+  return [x for x in wordlist if x.startswith(word)]
+
+def parseColorsFromSpec(spec):
+  'Return the (attr,foreground,background) components from the colorspec.'
+
+  # Set up defaults, and lower-case our colorspec.
+  a=f=b=None
+  spec=spec.lower()
+
+  # Separate the attribute and foreground from the background.
+  l=spec.strip().split('on')
+  if len(l)>2:
+    die('bad colorspec "%s"'%spec)
+  if len(l)>1:
+    f,b=[x.strip() for x in l]
+  else:
+    f=l[0]
+
+  # Separate the attribute and foreground.
+  l=f.split()
+  if len(l)>2:
+    die('bad colorspec "%s"'%spec)
+  if len(l)>1:
+    a,f=l
+  elif len(l)==1:
+    f=l[0]
+  else:
+    f=None
+
+  # Complete any partial attribute or color names.
+  if a!=None:
+    l=complete(a,attr.keys())
+    if len(l)<1: die('unknown attribute "%s"'%a)
+    if len(l)>1: die('ambiguous attribute "%s"'%a)
+    a=l[0]
+  if f!=None:
+    l=complete(f,foreground.keys())
+    if len(l)<1:
+      if a==None:
+        a,f=f,None
+        l=complete(a,attr.keys())
+        if len(l)<1:
+          die('unknown attribute or foreground color "%s"'%a)
+        if len(l)>1:
+          die('ambiguous attribute "%s"'%a)
+        a=l[0]
+      else:
+        die('bad colorspec "%s"'%spec)
+    elif len(l)>1:
+      die('ambiguous foreground color "%s"'%f)
+    else:
+      f=l[0]
+  if b!=None:
+    l=complete(b,background.keys())
+    if len(l)<1: die('unknown background color "%s"'%b)
+    if len(l)>1: die('ambiguous foreground color "%s"'%b)
+    b=l[0]
+
+  # Return our triplet of tokens.
+  return (a,f,b)
+
+def colorOf(i):
+  'Return the ANSI sequence for color of the ith pattern.'
+
+  if opt.wrap:
+    i%=len(opt.palette)
+  elif i>=len(opt.palette):
+    i=-1
+  return opt.palette[i]
+
+def parseRangeList(s):
+  '''Convert string list of ranges into a list of (n,m) range tuples.'''
+
+  ranges=[x.strip() for x in s.split(',')]
+  f=[]
+  for r in ranges:
+    r=r.split('-')
+    if len(r)==1:
+      m=int(r[0])
+      n=m-1
+    else:
+      n,m=r
+      if n=='':
+        n=0
+      else:
+        n=int(n)-1
+      if m=='':
+        m=None
+      else:
+        m=int(m)
+    f.append((n,m))
+  return f
+
+class DelimitedDataReader(object):
+  'Parses fields based on a delimiting regular expression.'
+
+  def __init__(self,stream=sys.stdin,delimiter=r'\s+'):
+    'Set our input stream and delimiting regular expression.'
+
+    self.stream=stream
+    self.delim=re.compile(delimiter)
+
+  def __iter__(self):
+    return self
+
+  def next(self):
+    '''Return a list of (field,deliter) pairs for each field and
+    terminating delimiter in the next line of input.'''
+
+    s=self.stream.readline()
+    if not s:
+      raise StopIteration
+    if s[-1]=='\n':
+      s=s[:-1]
+    flist=[]
+    m=self.delim.search(s)
+    i=0
+    while m:
+      flist.append([s[i:m.start()],m.group()])
+      i=m.end()
+      m=self.delim.search(s,i)
+    flist.append([s[i:],''])
+    return flist
+
+# Convert opt.palette into a list of ANSI escape sequences.
+l=[]
+pa,pf,pb='normal','white','black' # Set up defaults for previous values.
+for cs in opt.palette.split(','):
+  # Get the components of this colorspec, using default from previous spec.
+  a,f,b=parseColorsFromSpec(cs)
+  if not a: a=pa
+  if not f: f=pf
+  if not b: b=pb
+
+  # Get the ASCII sequence for this colorspec.
+  try:
+    l.append('\x1b[%s;%s;%sm'%(attr[a],foreground[f],background[b]))
+  except:
+    print 'a=%r, f=%r, b=%r'%(a,f,b)
+    raise
+
+  # Set up default values for the next colorspec.
+  pa,pf,pb=a,f,b
+opt.palette=l
+
+# Combine and compile our patterns into a single regular expression.
+if pat:
+  if opt.ignore_case:
+    pat=re.compile('|'.join(['(%s)'%x.replace('(','(?:') for x in pat]),re.I)
+  else:
+    pat=re.compile('|'.join(['(%s)'%x.replace('(','(?:') for x in pat]))
+
+if opt.fields:
+  if opt.delim:
+    opt.delim=re.compile(opt.delim)
+
+if opt.columns:
+  # Color each field of our fixed field width data.
+  r=range(len(opt.columns))
+  opt.columns.append(None)
+  for s in sys.stdin:
+    try:
+      s=(''.join([colorOf(i)+s[opt.columns[i]:opt.columns[i+1]] for i in r])).replace('\n',norm_color)
+      print s
+    except:
+      print 'l=%r'%l
+      print 'opt.columns=%r'%opt.columns
+      print 's=%r'%s
+      print 'i=%r'%i
+      raise
+elif opt.fields:
+  # Highlight fields based on position.
+  opt.fields=parseRangeList(opt.fields)
+  frange=range(len(opt.fields))
+  if opt.delim:
+    # Handle space- or custom-delimited data.
+    reader=DelimitedDataReader(sys.stdin,opt.delim)
+    for flist in reader:
+      for i in frange:
+	j,k=opt.fields[i]
+	for f in range(j,[k,len(flist)][k==None]):
+	  if f<len(flist):
+	    flist[f][0]=colorOf(i)+flist[f][0]+norm_color
+      print ''.join([f+d for f,d in flist])
+  else:
+    # Handle CSV data.
+    reader=csv.reader(sys.stdin)
+    writer=csv.writer(sys.stdout)
+    for flist in reader:
+      for i in frange:
+	j,k=opt.fields[i]
+	for f in range(j,[k,len(flist)][k==None]):
+	  if f<len(flist):
+	    flist[f]=colorOf(i)+flist[f]+norm_color
+      writer.writerow(flist)
+else:
+  # Highlight based on RE matching.
+  for s in sys.stdin:
+    # Scan each line for matches to our patterns and insert highlighting.
+    m=pat.search(s)
+    while m:
+      g=m.groups()
+      if not g:
+        break
+      for i in range(len(g)):
+        if g[i]!=None:
+          break
+      if opt.comment_mode:
+        highlight=colorOf(i+1)
+      else:
+        highlight=colorOf(i)
+      j,k=m.span()
+      #print 'j=%d k=%d match=%r'%(j,k,g[i])
+      s=s[:j]+highlight+s[j:k]+norm_color+s[k:]
+      m=pat.search(s,k+len(highlight)+len(norm_color))
+    sys.stdout.write(s)

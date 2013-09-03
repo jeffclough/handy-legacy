@@ -1,0 +1,120 @@
+#!/usr/bin/env python
+
+import os,re,socket,sys
+from optparse import OptionParser
+from pprint import pprint
+
+class IPRange(object):
+
+  re_iprange=re.compile(r'(?P<a>\d+)(?:\.(?P<b>\d+)(?:\.(?P<c>\d+)(?:\.(?P<d>\d+))?)?)?(?:/(?P<mask>\d+))?$')
+
+  class Error(Exception):
+    def __init__(self,msg):
+      self.msg=msg
+    def __str__(self):
+      return self.msg
+
+  def __init__(self,range_spec,broadcast=True):
+    '''Range range_spec may take one of two forms:
+
+    Partial dotted decimal: For example "1.2.3", is translated into
+    "1.2.3.0/24" and represents the range from 1.2.3.1 to 1.2.3.254.
+    A range_spec value of "1.2.3.0" would have the same result.
+
+    Slash notation: For example "4.5.0.0/16".'''
+
+    m=self.re_iprange.match(range_spec)
+    if not m:
+      raise self.Error('Invalid IP address or subnet format: %r'%range_spec)
+    # Convert these values from strings to integers, and store them in the local
+    # value a, b, c, d, and mask (names taken from re_iprange).
+    for var,val in m.groupdict().items():
+      if val!=None:
+        val=int(val)
+      exec('%s=%r'%(var,val))
+    if b==None:
+      b=c=d=0
+      if mask==None:
+        mask=8
+    elif c==None:
+      c=d=0
+      if mask==None:
+        mask=16
+    elif d==None:
+      d=0
+      if mask==None:
+        mask=24
+    if mask==None:
+      if d==0:
+        if c==0:
+          if b==0:
+            mask=8
+          else:
+            mask=16
+        else:
+          mask=24
+      else:
+        mask=32
+    # Validate these values.
+    n=a<<24|b<<16|c<<8|d
+    m=(0xffffffff00000000>>mask)&0xffffffff
+    if n&m!=n:
+      raise self.Error('Network %d.%d.%d.%d (0x%08x) exceeds %d-bit mask (0x%08x): %r'%(prog,a,b,c,d,n,mask,m,range_spec))
+
+    # Set up for iteration (just in case that's what we're being created for).
+    self.allow_broadcast=broadcast
+    self.network=n
+    self.netmask=m
+    self.masksize=mask
+    self.broadcast=(m^0xffffffff)&0xffffffff
+
+  def __iter__(self):
+    self.addr=0
+    return self
+
+  def next(self):
+    self.addr+=1
+    if not self.allow_broadcast and self.addr==1:
+      self.addr+=1
+    #print ''
+    #print 'mask=%08x'%self.netmask
+    #print 'addr=%08x'%self.addr
+    if self.addr&self.netmask!=0 or (not self.allow_broadcast and self.addr==self.broadcast):
+      raise StopIteration
+    x=self.network|self.addr
+    return '%d.%d.%d.%d'%((x>>24)&0xff,(x>>16)&0xff,(x>>8)&0xff,x&0xff)
+
+# Parse the command line.
+prog=os.path.basename(sys.argv[0])
+op=OptionParser(usage='''usage: %prog IP|SUBNET ...
+
+Description: The %prog command accepts IP and/or SUBNET arguments on the
+command line and writes the corresponding host names to standard output.
+''')
+op.add_option('-a','--aliases',dest='aliases',action='store_true',default=False,help='''Output DNS aliases as well as canonnical host names.''')
+op.add_option('-b','--broadcast',dest='broadcast',action='store_true',default=False,help='''Allow "broadcast addresses" to be used withing the given IP ranges. Without this option, the host portion of the address valued 1 and netmask-1 will be ignored.''')
+op.add_option('--test',dest='test',action='store_true',default=False,help='''Run this program's internal tests, report the results, and quit.''')
+op.add_option('-v','--verbose',dest='verbose',action='store_true',default=False,help='''Verbose forces lines to be output even for addresses that are not found in DNS.''')
+opt,args=op.parse_args()
+
+if opt.test:
+  import doctest
+  doctest.testmod()
+  sys.exit(0)
+
+for arg in args:
+  print '%s:'%arg
+  for addr in IPRange(arg,broadcast=opt.broadcast):
+    try:
+      name,aliases,addresses=socket.gethostbyaddr(addr)
+      if opt.aliases and aliases:
+        print '  %-15s %s (aka: %s)'%(addr,name,', '.join(aliases))
+      else:
+        print '  %-15s %s'%(addr,name)
+    except socket.herror,e:
+      if e[0]==1: # unknown host
+        if opt.verbose:
+          print '  %-15s'%addr
+      else:
+        raise
+

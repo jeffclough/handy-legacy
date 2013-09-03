@@ -1,0 +1,326 @@
+#!/usr/bin/env python
+
+###############################################################################
+###############################################################################
+#
+# SYNOPSIS
+#   gensig [-a] [-Q|-s sigfile] [-h] [-f quotefile] [searchterm]
+#
+# DESCRIPTION
+#   gensig generates an email signature by combining a signature template in
+#   sigfile with a quote that is randomly selected from quotefile. The
+#   signature is composed of two columns. The text from the signature template
+#   is in the left-hand coloumn, and the text from the randomly selected quote
+#   is in the right-hand column. The signature is formatted to fit within 72
+#   characters per line and is written to standard output. Use the options
+#   below to modify this default behavior.
+#
+# OPTIONS
+#   -a	tells gensig to write all quotes to standard output. This would most
+#	often be used with -Q and a searchpattern arugment in order to see
+#	all quotes matching that search pattern. A blank line is written
+#	after each quote to increase readability.
+#
+#   -f	specifies the name of a text file where quotes may be found. If no -f
+#	option is given, the file ~/etc/qutoes will be used by default. A
+#	quote must occupy only a single line of text in the quote file,
+#	though the line may be of arbitrary length. Some quotes are in verse,
+#	and the line structure of such a quote may be preserved by seperating
+#	the lines with the string " / " (space, slash, space). The attribution
+#	of a quote must be immediately preceded by " -" (space, dash) with no
+#	space following the dash.
+#
+#	Note: The way gensig randomly selects a quote from the quote file
+#	      prevents it from ever selecting the first line in the file.
+#	      This line may be left blank, or it may be used for your own
+#	      purposes, but it will never be selected as a quote.
+#
+#   -h	tells gensig to protect the formatting of the text of the signature
+#	that is written to standard output from the ravages of HTML by
+#	preceeding the text with <PRE> and following it with </PRE> to
+#	indicate to an HTML interpreter that it is preformatted.
+#
+#   -m	suppresses the "--" signature marker.
+#
+#   -Q	tells gensig to output only a randomly selected quote. No signature
+#	template will be used. This might be used to periodically create a
+#	new message of the day, where the text of a signature template might
+#	not be applicable or appropriate.
+#
+#   -s	specifies the name of a text file that holds the signature template
+#	to be used. If no -s option is given, the file ~/etc/default.sig will
+#	be used by default.
+#
+# ARGUMENTS
+#   Any arguments on the command line are joined together with spaces and
+#   regarded as a single Python regular expression. These are an extension of
+#   POSIX regular expressions. See http://python.org/lib/re-syntax.html for
+#   details, but the rudiments are ...
+#
+# EXMAPLES
+#   The quotes shown below have been split into as many lines as are needed
+#   in order to depict them for the purpose of this explanation, but remember
+#   that EACH QUOTE MUST OCCUPY EXACTLY ONE LINE OF TEXT IN THE QUOTE FILE.
+#
+#   "Did you sleep well?" "No, I made a couple of mistakes." -Steven Wright
+#   A Robin Red breast in a Cage / Puts all Heaven in a Rage. -William Blake,
+#   poet, engraver, and painter (1757-1827)
+#
+#   The first quote above is simple prose and is attributed to Steven Wright.
+#   The second quote above is an example of verse, with two lines, followed
+#   by a lengthy attribution to William Blake.
+#
+#   Signature templates are completely free-form text file, but it is a good
+#   idea to sharply limit the length of the lines they contain because these
+#   lines will appear to the left of the text of whatever quote gensig
+#   randomly selects form its quote file. Here are two examples:
+#
+#     The file default.sig:
+#	Jeff Clough
+#	  ---  ___o
+#	----  -\ <,
+#	 -- (*)/ (*)
+#
+#     The file work.sig:
+#	Jeff Clough
+#	GA Tech/OIT/TS
+#	w:404-893-5555
+#	c:770-238-5555
+#
+#    If default.sig is used, gensig might generate something like:
+#     Jeff Clough  | "Did you sleep well" "No, I made a couple of mistakes."
+#	---  ___o  | -Steven Wright
+#     ----  -\ <,
+#      -- (*)/ (*)
+#
+#   If work.sig is used, and (just for fun) the other quote from the example
+#   above is used, gensig would output:
+#     Jeff Clough    | A Robin Red breast in a Cage
+#     GA Tech/OIT/TS | Puts all Heaven in a Rage.
+#     w:404-893-5555 | -William Blake, poet, engraver, and painter (1757-1827)
+#     c:770-238-5555
+#
+# BUGS
+#   Please report any bugs you find in this script to Jeff Clough
+#   <jeff.clough@oit.gatech.edu>.
+#
+###############################################################################
+###############################################################################
+
+from string import *
+from getopt import *
+import os
+import re
+import sys
+
+# Modify these variables to suit your needs:
+instdir=os.path.expanduser('~/my')
+opt_sig=            "%s/etc/default.sig"%instdir
+opt_quotefile=      "%s/etc/quotes"%instdir
+sTmpQuotes=	    "/tmp/%s.quotes"%os.environ['USER']
+nSignatureWidth=    72
+nJustificationFlags=0 # 1 to RJ sig, 2 to RJ quote, 3 for both.
+sAttributionPattern=r' -[A-Za-z]' # Matches start of attribution.
+
+###############################################################################
+###############################################################################
+
+opt_quote_only=0    # Default to signature mode.
+opt_all=0	    # Show all (or matching) quotes.
+opt_html=0          # Default to plain text.
+opt_grep=''         # Don't limit our search for quotes.
+opt_sigmarker=True  # True if we should print an initial '--' line.
+
+l_opt,l_arg=getopt(sys.argv[1:],'Qahf:ms:')
+for opt,arg in l_opt:
+  if opt=='-Q':
+    opt_quote_only=1
+  elif opt=='-a':
+    opt_all=1
+  elif opt=='-h':
+    opt_html=1
+  elif opt=='-f':
+    opt_quotefile=arg
+  elif opt=='-m':
+    opt_sigmarker=False
+  elif opt=='-s':
+    opt_sig=arg
+if l_arg:
+  opt_grep=' '.join(l_arg)
+
+# If we're to select only from quotes that match a given pattern, write all
+# such quotes into a temp file and regard that as our pool of quotes.
+if len(opt_grep)>0:
+  re_pattern=re.compile(opt_grep,re.IGNORECASE)
+  tf=file(sTmpQuotes,'w')
+  print >>tf,'This file was created and is continually overwritten by %s.'%sys.argv[0]
+  qf=file(opt_quotefile,'rU')
+  match_count=0
+  for s in qf:
+    s=s.strip()
+    if re_pattern.search(s):
+      match_count+=1
+      print >>tf,s
+  tf.close()
+  qf.close()
+  if match_count==0:
+    print "%s: No matching quote found"%sys.argv[0]
+    sys.exit(1)
+  else:
+    opt_quotefile=sTmpQuotes
+
+###############################################################################
+###############################################################################
+
+# Perform word-wrap on the given string, returning a list of strings that
+# fit within the given column width.
+def wordwrap(s,width=72):
+  '''Word-wrap string s and return a list of strings that fit within the
+  given column width.'''
+  
+  p=[]          # Our paragraph begins life as an empty list.
+  word=split(s) # word is a list of each word in s.
+  line=""       # line will accumulate text to be placed into p.
+  for w in word:
+    if (len(line)+len(w)<=width):
+      line+=w+' '
+    else:
+      p.append(strip(line))
+      line=w+' '
+  else:
+    p.append(strip(line))
+  return p      # Return our paragraph of wrapped lines.
+
+###############################################################################
+###############################################################################
+
+# Format the given quote to the the given number of columns. Also handle
+# verse notation and attribution.
+def wrapquote(sQuote,nQuoteWidth=72):
+  # Just in case we're dealing with verse, divide the raw quote into lines
+  # of verse. For prose, the resulting list will contain a single string.
+  lQtemp=map(strip,split(sQuote,' / ')) 
+
+  # Look for the attribution on in the last line. If found, split the last
+  # line of lQtemp so that the attribution becomes the new last line.
+  s=lQtemp[-1]
+  remAttr=re.search(sAttributionPattern,s) # Find the attribution.
+  if remAttr!=None:
+    lQtemp[-1:]=[s[:remAttr.start()].strip(),s[remAttr.start():].strip()]
+
+  # Divide the quote into pieces small enough to fit into our signature.
+  lQuote=[]
+  for s in lQtemp:
+    lQuote.extend(wordwrap(s,nQuoteWidth))
+  return lQuote
+
+###############################################################################
+###############################################################################
+
+def AddQuoteToSignature(sSignature,sQuote,nWrap=72,nFlags=0):
+  '''Add quote text to the right of the signature text and return the resulting string.
+
+sSignature is a multiline string containing identity and contact information.
+sQuote is a single-line string of arbitrary length that will be wordwrapped into pieces small enough to fit to the right the signature lines.
+nWrap is the total desired column width of the resulting signature.
+nFlags is bitmapped: bit 0 right-justifies the signature; bit 1 right-justifies the quote.
+The return value is a multi-line string containing the signature text on the left and the quote on the right, seperated by " | ".'''
+
+  # Split (on line boundaries) our signature into a list of strings.
+  # Get the length of the longest signature line and compute our quote width.
+  lSig=map(rstrip,split(sSignature,'\n'))
+  nSigWidth=0
+  for s in lSig:nSigWidth=max(nSigWidth,len(s))
+  nQuoteWidth=nWrap-nSigWidth-3 # Allow for ' | ' between signature and quote.
+
+  # Return the joined signature and quote lines.
+  def stitch(sSigLine,sQuoteLine):
+    sSep=' | '
+    if sSigLine==None:
+      sSigLine=''
+      sSep='   '
+    if sQuoteLine==None:
+      sQuoteLine=''
+      sSep='   '
+    if nFlags&1:
+      fmt='%*s%s'  # Right-justify the signature.
+    else:
+      fmt='%-*s%s' # Left-justify the signature.
+    if nFlags&2:
+      fmt+='%*s'    # Right-justify the quote.
+    else:
+      fmt+='%-*s'   # Left-justify the quote.
+    return rstrip(fmt%(nSigWidth,sSigLine,sSep,nQuoteWidth,sQuoteLine))
+
+  # Format our quote to fit to the right of our signature text.
+  lQuote=wrapquote(sQuote,nQuoteWidth)
+
+  # Stitch our signature text and our quote text together and combine all this
+  # into one long multi-line string. Return this string value.
+  return join(map(stitch,lSig,lQuote),'\n')
+
+###############################################################################
+###############################################################################
+
+def WriteQuote(sSigText,sQuote,nSignatureWidth):
+  '''Write the given sSigText and sQuote to standard output in
+  nSignatureWidth columns, possibly protecting it from HTML interpreters
+  and possibly omitting the signature text.'''
+
+  # Apply this quote to our signature text and print the result.
+  if opt_html:
+    print "<pre>"
+  if opt_quote_only:
+    for s in wrapquote(sQuote):
+      print s
+  else:
+    if opt_sigmarker:
+      print "--"
+    print AddQuoteToSignature(sSigText,sQuote,nSignatureWidth)
+  if opt_html:
+    print "</pre>"
+
+###############################################################################
+###############################################################################
+
+import random
+
+try:
+  sSigText=''
+  if not opt_quote_only:
+    # Read our signature text from the signature file.
+    try:
+      f=open(opt_sig)
+      if f!=None:
+	sSigText=f.read()
+	f.close()
+    except:
+      pass # Ignore any exception arising from reading our signature file.
+  if sSigText=='':
+    sSigText="NO SIGNATURE\nPROVIDED"
+
+  # Read a random line from our quote file.
+  if opt_all:
+    f=open(opt_quotefile)
+    sQuote=f.readline() # Discard the first line of our quote file.
+    sQuote=f.readline()
+    while len(sQuote)>0:
+      WriteQuote(sSigText,sQuote,nSignatureWidth)
+      sQuote=f.readline()
+      print ""
+    f.close()
+  else:
+    f=open(opt_quotefile)
+    random.seed()
+    f.seek(-1,2)
+    nPos=f.tell()
+    sQuote=''
+    while len(sQuote)==0:
+      nPos=random.randint(0,nPos)
+      f.seek(nPos,0)
+      sQuote=f.readline() # Discard what is probably a partial line.
+      sQuote=f.readline()
+    f.close()
+    WriteQuote(sSigText,sQuote,nSignatureWidth)
+except IOError,(errno,strerror):
+  print 'Error while generating signature.\n%s: %s\n'%(opt_quotefile,strerror)
