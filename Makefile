@@ -6,14 +6,14 @@
 PROGS=datecycle dump freq mix numlines portname randword secdel \
       timeshift
       
-SCRIPTS=chronorename decode64 encode64 gensig/gensig mark names
+SCRIPTS=chronorename decode64 encode64 gensig/gensig mark names pa
 
 DATA=gensig/quotes gensig/*.sig
 
 
 CC=cc
 GCC=gcc
-#SYSTYPE=`uname`
+SYSTYPE=`uname`
 ifeq "$(SYSTYPE)" "Linux"
   NETLIBS=
   STATIC=-static -static-libgcc
@@ -33,9 +33,9 @@ endif
 all: $(PROGS)
 
 install: $(PROGS)
-	@for p in $(PROGS); do echo mv $$p ~/my/bin; mv $$p ~/my/bin; done
-	@for p in $(SCRIPTS); do echo cp -p $$p ~/my/bin; cp -p $$p ~/my/bin; done
-	@for p in $(DATA); do echo cp -p $$p ~/my/etc; cp -p $$p ~/my/etc; done
+	@for p in $(PROGS); do echo cp -p $$p $(HOME)/my/bin; cp -p $$p $(HOME)/my/bin; done
+	@for p in $(SCRIPTS); do echo cp -p $$p $(HOME)/my/bin; cp -p $$p $(HOME)/my/bin; done
+	@for p in $(DATA); do echo cp -p $$p $(HOME)/my/etc; cp -p $$p $(HOME)/my/etc; done
 
 clean:
 	rm -f $(PROGS)
