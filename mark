@@ -58,6 +58,7 @@ op.add_option('--comment',dest='comment_format',action='store',default='^\s*#.*'
 op.add_option('--csv',dest='csv',action='store_true',default=False,help='''For use with -f, this option specifies that the data is in CSV format.''')
 op.add_option('-d','--delimiter',dest='delim',default=None,help='''For use with -f, this option specifies a regular expression that matches field delimiters. The default is '\s+', which matches one or more whitespace characters.''')
 op.add_option('-f','--fields',dest='fields',action='store',default=None,help='''Specifies which fields are to be marked. Field ranges are separated by commas and take the form "m[-[n]]" or "[[m]-]n" where m is the first column in the range (counted from 1) and n is the last. See --csv and -d for data parsing options.''')
+op.add_option('-g','--grep',dest='grep',action='store_true',default=False,help='''Output only lines that match at least one color filter.''')
 op.add_option('-i',dest='ignore_case',action='store_true',default=False,help='''Ignore case when matching patterns.''')
 op.add_option('--palette',dest='palette',action='store',default='red on black,green,yellow,blue,magenta,cyan',help='''Comma-delimited list of color specifications to use to highlight matches for patterns. Each spec is of the form "[ATTR] FG [on BG]" where ATTR is any of bold, italics, underscore, or strikethrough, and FG and BG may be any of black, red, green, yellow, blue, magenta, cyan, or white. Two other possible values for a colorspec can be "normal" and "reverse", which don't make sence with other ATTR, FB, or BG values. You should also know that ATTR, FG, and BG values are persistent from one entry to the next, so, for example "red on black,green,yellow" specifies that matches for the first pattern should be red, second pattern are green, third are yellow, and that all have black backgrounds. The default setting is "%default".''')
 op.add_option('-r','--reverse',dest='reverse',action='store_true',default=False,help='''Reverse foreground and background colors of highlighted sections.''')
@@ -301,20 +302,21 @@ else:
   while s:
     # Scan each line for matches to our patterns and insert highlighting.
     m=pat.search(s)
-    while m:
-      g=m.groups()
-      if not g:
-        break
-      for i in range(len(g)):
-        if g[i]!=None:
+    if m!=None or not opt.grep:
+      while m:
+        g=m.groups()
+        if not g:
           break
-      if opt.comment_mode:
-        highlight=colorOf(i+1)
-      else:
-        highlight=colorOf(i)
-      j,k=m.span()
-      #print 'j=%d k=%d match=%r'%(j,k,g[i])
-      s=s[:j]+highlight+s[j:k]+norm_color+s[k:]
-      m=pat.search(s,k+len(highlight)+len(norm_color))
-    sys.stdout.write(s)
+        for i in range(len(g)):
+          if g[i]!=None:
+            break
+        if opt.comment_mode:
+          highlight=colorOf(i+1)
+        else:
+          highlight=colorOf(i)
+        j,k=m.span()
+        #print 'j=%d k=%d match=%r'%(j,k,g[i])
+        s=s[:j]+highlight+s[j:k]+norm_color+s[k:]
+        m=pat.search(s,k+len(highlight)+len(norm_color))
+      sys.stdout.write(s)
     s=sys.stdin.readline()
