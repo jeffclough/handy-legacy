@@ -258,7 +258,8 @@ if opt.columns:
   # Color each field of our fixed field width data.
   r=range(len(opt.columns))
   opt.columns.append(None)
-  for s in sys.stdin:
+  s=sys.stdin.readline()
+  while s:
     try:
       s=(''.join([colorOf(i)+s[opt.columns[i]:opt.columns[i+1]] for i in r])).replace('\n',norm_color)
       print s
@@ -268,6 +269,7 @@ if opt.columns:
       print 's=%r'%s
       print 'i=%r'%i
       raise
+    s=sys.stdin.readline()
 elif opt.fields:
   # Highlight fields based on position.
   opt.fields=parseRangeList(opt.fields)
@@ -295,7 +297,8 @@ elif opt.fields:
       writer.writerow(flist)
 else:
   # Highlight based on RE matching.
-  for s in sys.stdin:
+  s=sys.stdin.readline()
+  while s:
     # Scan each line for matches to our patterns and insert highlighting.
     m=pat.search(s)
     while m:
@@ -314,3 +317,4 @@ else:
       s=s[:j]+highlight+s[j:k]+norm_color+s[k:]
       m=pat.search(s,k+len(highlight)+len(norm_color))
     sys.stdout.write(s)
+    s=sys.stdin.readline()
