@@ -115,6 +115,8 @@ op.add_option('--palette',dest='palette',action='store',default='dark',
   help='''Comma-delimited list of color specifications to use to highlight matches for patterns. Each spec is of the form "[ATTR] FG [on BG]" where ATTR is any of bold, italics, underscore, or strikethrough, and FG and BG may be any of black, red, green, yellow, blue, magenta, cyan, or white. Two other possible values for a colorspec can be "normal" and "reverse", which don't make sence with other ATTR, FB, or BG values. You should also know that ATTR, FG, and BG values are persistent from one spec to the next, so, for example "red on black,green,yellow" specifies that matches for the first pattern should be red, second pattern are green, third are yellow, and that all have black backgrounds. Since the palette syntax tends to be verbose, you can also use --palette=dark or --palette=light to use colors generally suitable for dark or light terminal backgrounds, respectively. Since only red, blue, and magenta are used on light backgrounds, using -w is often a good idea with --palette=light. The default setting is "%default".''')
 op.add_option('-r','--reverse',dest='reverse',action='store_true',default=False,
   help='''Reverse foreground and background colors of highlighted sections.''')
+op.add_option('-s','--stanzas',dest='stanzas',action='store_true',default=False,
+  help='''In "stanzas" mode, the the RE arguments are matched against input lines. Output lines are colored according to the most recent RE matched. If only one RE is given, output lines will alternate between the first two colors in thte palette every time the input line matches the RE.'''),
 op.add_option('-w',dest='wrap',action='store_true',default=False,
   help='''Turn on color wrapping mode. By default, for n colors in the palette, the match for any pattern beyond the nth pattern simply uses the last color in the palette. Wrapping mode changes this behavior so the first color is used for the n+1st pattern, the second for the n+2nd, and so on.''')
 
@@ -151,15 +153,19 @@ if opt.columns:
     die('-D (--diff) cannot be used with --columns')
   if opt.input_from:
     die('-I (--input) cannot be used with --columns')
+  if opt.stanzas:
+    die('-s (--stanzas) cannot be used with --columns')
 if opt.fields:
+  if opt.delim and opt.csv:
+    die('-d (--delimiter) cannot be used with --csv')
   if opt.comment_mode:
     die('-C cannot be used with -f (--fields)')
   if opt.diff:
     die('-D (--diff) cannot be used with -f (--fields)')
-  if opt.delim and opt.csv:
-    die('-d (--delimiter) cannot be used with --csv')
   if opt.input_from:
     die('-I (--input) cannot be used with -f (--fields)')
+  if opt.stanzas:
+    die('-s (--stanzas) cannot be used with --fields')
   if not opt.csv and not opt.delim:
     opt.delim=r'\s+'
 if opt.comment_mode:
@@ -183,6 +189,9 @@ if opt.discard:
   opt.discard=re.compile(opt.discard,opt.re_flags)
 if opt.keep:
   opt.keep=re.compile(opt.keep,opt.re_flags)
+
+if not pat:
+  die('No RE arguments given. Nothing to do.')
 
 def complete(word,wordlist):
   'Return a list of words from wordlist that begin with word.'
@@ -351,10 +360,6 @@ for cs in opt.palette.split(','):
   pa,pf,pb=a,f,b
 opt.palette=l
 
-# Combine and compile our patterns into a single regular expression.
-if pat:
-  pat=re.compile('|'.join(['(%s)'%x.replace('(','(?:') for x in pat]),opt.re_flags)
-
 if opt.fields:
   if opt.delim:
     opt.delim=re.compile(opt.delim)
@@ -374,6 +379,38 @@ if opt.columns:
       print 's=%r'%s
       print 'i=%r'%i
       raise
+elif opt.stanzas:
+  # Compile our regular expressions.
+  patcount=len(pat)
+  if pat: # Combine and compile our patterns into a single regular expression.
+    pat=re.compile('|'.join(['(%s)'%x.replace('(','(?:') for x in pat]),opt.re_flags)
+  if patcount>1:
+    # Assign color based on which RE most recently matched.
+    for s in get_input_lines():
+      m=pat.search(s)
+      if m!=None:
+        g=m.groups()
+        if g:
+          for i in range(len(g)):
+            if g[i]!=None:
+              break
+          sys.stdout.write(colorOf(i))
+      sys.stdout.write(s)
+      sys.stdout.flush()
+    sys.stdout.write(normcolor)
+    sys.stdout.flush()
+  else:
+    # Alternate between first two palette entries every time RE is matched.
+    i=1
+    for s in get_input_lines():
+      m=pat.search(s)
+      if m!=None:
+        i=1-i
+        sys.stdout.write(colorOf(i))
+      sys.stdout.write(s)
+      sys.stdout.flush()
+    sys.stdout.write(normcolor)
+    sys.stdout.flush()
 elif opt.fields:
   # Highlight fields based on position.
   opt.fields=parseRangeList(opt.fields)
@@ -403,6 +440,9 @@ elif opt.fields:
       sys.stdout.flush()
 else:
   # Highlight based on RE matching.
+  if pat: # Combine and compile our patterns into a single regular expression.
+    pat=re.compile('|'.join(['(%s)'%x.replace('(','(?:') for x in pat]),opt.re_flags)
+
   for s in get_input_lines():
     # Scan each line for matches to our patterns and insert highlighting.
     m=pat.search(s)
