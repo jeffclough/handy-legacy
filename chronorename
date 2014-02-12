@@ -39,19 +39,20 @@
 from getopt import getopt
 from math import *
 from os import *
-from sys import *
 from string import *
 from time import *
 from os import path
 
-import EXIF
-import os
-import re
+import datetime,os,re,sys,traceback
 
-VERSION='0.5'
-std_format='{dir}{series}%x_%X{ext}'
+import exiftool
+
+VERSION='0.7'
+prefix_format='{dir}{series}%x_%X{ext}'
+std_format='{dir}%x_%X{series}{ext}'
 
 # Provide defalut values for command line options.
+opt_prefix=False
 opt_exif_time=False
 opt_format=std_format
 opt_inc_start=1
@@ -60,27 +61,28 @@ opt_fake=False
 opt_lcext=True
 opt_sep='-'
 opt_digits=2
+opt_ts=0
 
 def process_options(optlist):
   '''Given a list of options from the command line, set the global options
   appropriately and return a list of any arguments that may have been given as
   well.'''
 
-  global opt_exif_time,opt_lcext,opt_format,opt_inc_start,opt_fake,opt_series,opt_sep,opt_digits
+  global opt_prefix,opt_exif_time,opt_lcext,opt_format,opt_inc_start,opt_fake,opt_series,opt_sep,opt_digits,opt_ts
 
   try:
-    opts,args=getopt(optlist,'d:Eef:i:nS:s:v')
+    opts,args=getopt(optlist,'d:Eef:i:nS:s:t:v')
   except Exception,e:
     print e
-    exit(1)
+    sys.exit(1)
 
   for opt,arg in opts:
     if opt=='-d':
       try:
 	opt_digits=int(arg)
       except:
-	print >>stderr,'%s: -d requires an integer value. Found "%s".'%(path.basename(argv[0]),arg)
-	exit(1)
+	print >>sys.stderr,'%s: -d requires an integer value. Found "%s".'%(path.basename(sys.argv[0]),arg)
+	sys.exit(1)
     elif opt=='-e':
       opt_exif_time=True
     elif opt=='-E':
@@ -91,21 +93,48 @@ def process_options(optlist):
       try:
 	opt_inc_start=int(arg)
       except:
-	print >>stderr,'%s: -i requires an integer value. Found "%s".'%(path.basename(argv[0]),arg)
-	exit(1)
+	print >>sys.stderr,'%s: -i requires an integer value. Found "%s".'%(path.basename(sys.argv[0]),arg)
+	sys.exit(1)
     elif opt=='-n':
       opt_fake=True
+    elif opt=='-p':
+      opt_prefix=True
     elif opt=='-s':
       opt_series=arg
     elif opt=='-S':
       opt_sep=arg
+    elif opt=='-t':# time-shift
+      opt_ts=arg
+      m=re.match(r'([-+])?(\d+[ywdhms])?(\d+[ywdhms])?(\d+[ywdhms])?(\d+[ywdhms])?(\d+[ywdhms])?(\d+[ywdhms])?$',arg)
+      if not m:
+	print >>sys.stderr,'%s: invalid time-shift value: %r'%(path.basename(sys.argv[0]),arg)
+	sys.exit(1)
+      m=list(m.groups())
+      sign=1
+      if m[0]!=None and m[0] in '-+':
+	if m[0]=='-':
+	  sign=-1
+	m.pop(0)
+      opt_ts=0
+      for dif in m:
+	if dif:
+	  n,u=int(dif[:-1]),dif[-1]
+	  if u=='y': n*=365*86400
+	  elif u=='w': n*=7*86400
+	  elif u=='d': n*=86400
+	  elif u=='h': n*=3600
+	  elif u=='m': n*=60
+	  opt_ts+=n
+      opt_ts*=sign
     elif opt=='-v':
-      print '%s v%s'%(path.basename(argv[0]),VERSION)
-      exit(0)
+      print '%s v%s'%(path.basename(sys.argv[0]),VERSION)
+      sys.exit(0)
+    if isinstance(opt_ts,int):
+      opt_ts=datetime.timedelta(seconds=opt_ts)
   return args
 
 def usage():
-  prog=path.basename(argv[0])
+  prog=path.basename(sys.argv[0])
   print '''\
 Synopsis:
   %s [options] path...
@@ -214,6 +243,14 @@ Options:
 
   -S s  Sets the default separator string to s. (default='%s')
 
+  -t s  Shifts the time of each photo forward or backward. The value s is a
+	concatenation of at least one string of the form "nu" such that n is an
+	unsigned integer value and u specifies the units expressed by that
+	integer as 'y', 'w', 'd', 'h', 'm', or 's' to represent years, weeks,
+	days, hours, minutes, or seconds. The s value can optionally begin with
+	with + (to shift the time later) or - (earlier). For example "-t -3h8m"
+	will shift the time of each photo earlier by 3 hours and 8 minutes.
+
   -v    Prints the version (%s) of %s and exits.
 
 WARNINGS:
@@ -259,8 +296,11 @@ def expand(template,fn):
   d['{dir}']=s
   d['{basepath}']=basepath(fn)
   d['{basename}']=path.basename(fn)
-  if len(opt_series)>0 and opt_series[-1] in letters+digits:
-    opt_series+=opt_sep
+  if  opt_series:
+    if opt_prefix and opt_series[-1] in letters+digits:
+      opt_series+=opt_sep
+    elif not opt_prefix and opt_series[0] in letters+digits:
+      opt_series=opt_sep+opt_series
   d['{series}']=opt_series
   d['{ext}']=pathext(fn)
   if opt_lcext:
@@ -286,15 +326,22 @@ def GetNewName(filename,fmt):
   global opt_exif_time
  
   # Get the mod time of this file, or the EXIF time if available.
-  t=path.getmtime(filename)
+  t=datetime.datetime.fromtimestamp(path.getmtime(filename))
   if opt_exif_time:
-    edata=GetExifData(filename)
-    if 'EXIF DateTimeOriginal' in edata:
-      exif_time=str(edata['EXIF DateTimeOriginal'])
-      t=mktime(strptime(exif_time,'%Y:%m:%d %H:%M:%S'))
+    data=exiftool.readfile(filename)
+    if data.EXIF!=None:
+      if data.Composite.SubSecDateTimeOriginal:
+	t=data.Composite.SubSecDateTimeOriginal
+      else:
+	t=data.EXIF.DateTimeOriginal
+  #t+=datetime.timedelta(seconds=opt_ts)
+  t+=opt_ts
   # Compose the time portion of the new filename.
-  fmt=replace(replace(fmt,'%x','%Y%m%d'),'%X','%H%M%S')
-  s=strftime(fmt,localtime(t))
+  if hasattr(t,'microsecond'):
+    fmt=replace(replace(fmt,'%x','%Y%m%d'),'%X','%H%M%S'+'.%02d'%(t.microsecond/10000))
+  else:
+    fmt=replace(replace(fmt,'%x','%Y%m%d'),'%X','%H%M%S')
+  s=t.strftime(fmt)
   # Resolve the remaining portions of the new filename.
   s=expand(s,filename)
   return s
@@ -303,13 +350,13 @@ def GetNewName(filename,fmt):
 if 'CHRONORENAME_OPT' in os.environ:
   args=process_options(os.environ['CHRONORENAME_OPT'].split())
   if args:
-    print >>stderr,'%s: Ignoring filename arguments in CHRONORENAME_OPT: %s'%(path.basename(argv[0]),join(args))
+    print >>sys.stderr,'%s: Ignoring filename arguments in CHRONORENAME_OPT: %s'%(path.basename(sys.argv[0]),join(args))
 
 # Now handle options from the command line.
-args=process_options(argv[1:])
+args=process_options(sys.argv[1:])
 if not args:
   usage()
-  exit(1)
+  sys.exit(1)
 
 # Process our command line arguments, which should all be filenames.
 for oldfn in args:
@@ -326,6 +373,7 @@ for oldfn in args:
       print '%s -> %s'%(oldfn,s)
       rename(oldfn,s)
   except OSError,(errno,strerr):
-    print >>stderr,'%s: %s: %s'%(path.basename(argv[0]),strerr,f)
+    raise
+    print >>sys.stderr,'%s: %s: %s'%(path.basename(sys.argv[0]),strerr,oldfn)
   #except Exception,e:
-  #  print >>stderr,'%s: %s'%(path.basename(argv[0]),str(e))
+  #  print >>sys.stderr,'%s: %s'%(path.basename(sys.argv[0]),str(e))
