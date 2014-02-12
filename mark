@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
-import csv,optparse,os,re,sys
+import csv,optparse,os,re,shlex,sys
 
-# ANSI color escape sequences:
+# Color values for ANSI escape sequences:
 attr=dict(
   normal='0',
   bold='1',
@@ -41,7 +41,11 @@ def die(msg='',rc=1):
     print >>sys.stderr,progname+': '+msg
   sys.exit(rc)
 
-op=optparse.OptionParser('''usage: %prog [options] [pattern ...]
+MARKOPTS=os.getenv('MARKOPTS','').strip()
+envopts=shlex.split(MARKOPTS)
+sys.argv[:0]=envopts
+
+usage='''usage: %prog [options] [pattern ...]
 
 Description: The %prog command is a filter (reads from standard input and
 writes to standard output) that scans each line for any regular expression
@@ -50,20 +54,52 @@ a given pattern, ANSI highlighting sequences are inserted before and after
 that part of the line before it is output. Matches for the first pattern are
 colored red, the second are colored green, the third are colored yellow, and
 so on through blue, magenta, and cyan. The --palette option can be used to
-change the list of colors.''')
+change the list of colors.
 
-op.add_option('-C',dest='comment_mode',action='store_true',default=False,help='''Turns on comment mode, which inserts the comment pattern (see --comment) at the start of the pattern list. This marks any line whose first non-space character is '#', which is very commonly a comment line. Use the --comment option to change the pattern used to idententify comments.''')
-op.add_option('--columns',dest='columns',action='store',default=None,help='''This option turns on fixed-column mode and accepts a comma-separated list of column numbers as its argument. Each given column number identifies the beginning of a column in each line of the input data. This option cannot be used with other highlighting modes.''')
-op.add_option('--comment',dest='comment_format',action='store',default='^\s*#.*',help='''Specifies the pattern used to identify comment lines, which is '%default' by default.''')
-op.add_option('--csv',dest='csv',action='store_true',default=False,help='''For use with -f, this option specifies that the data is in CSV format.''')
-op.add_option('-d','--delimiter',dest='delim',default=None,help='''For use with -f, this option specifies a regular expression that matches field delimiters. The default is '\s+', which matches one or more whitespace characters.''')
-op.add_option('-D','--diff',dest='diff',action='store_true',default=False,help='''Turns on diff mode, which colors lines removed differently from lines added.''')
-op.add_option('-f','--fields',dest='fields',action='store',default=None,help='''Specifies which fields are to be marked. Field ranges are separated by commas and take the form "m[-[n]]" or "[[m]-]n" where m is the first column in the range (counted from 1) and n is the last. See --csv and -d for data parsing options.''')
-op.add_option('-g','--grep',dest='grep',action='store_true',default=False,help='''Output only lines that match at least one color filter.''')
-op.add_option('-i',dest='ignore_case',action='store_true',default=False,help='''Ignore case when matching patterns.''')
-op.add_option('--palette',dest='palette',action='store',default='red on black,green,yellow,blue,magenta,cyan',help='''Comma-delimited list of color specifications to use to highlight matches for patterns. Each spec is of the form "[ATTR] FG [on BG]" where ATTR is any of bold, italics, underscore, or strikethrough, and FG and BG may be any of black, red, green, yellow, blue, magenta, cyan, or white. Two other possible values for a colorspec can be "normal" and "reverse", which don't make sence with other ATTR, FB, or BG values. You should also know that ATTR, FG, and BG values are persistent from one entry to the next, so, for example "red on black,green,yellow" specifies that matches for the first pattern should be red, second pattern are green, third are yellow, and that all have black backgrounds. The default setting is "%default".''')
-op.add_option('-r','--reverse',dest='reverse',action='store_true',default=False,help='''Reverse foreground and background colors of highlighted sections.''')
-op.add_option('-w',dest='wrap',action='store_true',default=False,help='''Turn on color wrapping mode. By default, for n colors in the palette, the any pattern beyond the nth pattern simply uses the last color in the palette. Wrapping mode changes this behavior to so the the first color is used for the n+1st pattern, the second for the n+2nd, and so on.''')
+Since %prog is written in Python, Python's regular expression extensions are
+available to you. Python REs are extensions of POSIX EREs, but it uses
+Perl-like character classes (e.g. \s and \w) rather than POSIX character
+classes (e.g. [:space:] and [:word:]). Read more about Python RE syntax at
+http://docs.python.org/library/re.html#regular-expression-syntax. It's quite
+powerful.
+
+The MARKOPTS environment variable may be used to supply default command line
+options to %prog. Anything found in this variable is processed before %prog's
+command line options. The value of MARKOPTS is interpreted in a shell context,
+so be sure to quote or escape any white space. '''
+if MARKOPTS:
+  usage+='''MARKOPTS currently contains:
+
+'''+'\n'.join(['    %s'%x for x in envopts])
+else:
+  usage+='MARKOPTS is currently empty.'
+
+op=optparse.OptionParser(usage=usage)
+
+op.add_option('-C',dest='comment_mode',action='store_true',default=False,
+  help='''Turns on comment mode, which inserts the comment pattern (see --comment) at the start of the pattern list. This marks any line whose first non-space character is '#', which is very commonly a comment line. Use the --comment option to change the pattern used to idententify comments.''')
+op.add_option('--columns',dest='columns',action='store',default=None,
+  help='''This option turns on fixed-column mode and accepts a comma-separated list of column numbers as its argument. Each given column number identifies the beginning of a column in each line of the input data. This option cannot be used with other highlighting modes. The first column is numbered 1.''')
+op.add_option('--comment',dest='comment_format',action='store',default='^\s*#.*',
+  help='''Specifies the pattern used to identify comment lines, which is '%default' by default.''')
+op.add_option('--csv',dest='csv',action='store_true',default=False,
+  help='''For use with -f, this option specifies that the data is in CSV format.''')
+op.add_option('-d','--delimiter',dest='delim',default=None,
+  help='''For use with -f, this option specifies a regular expression that matches field delimiters. The default is '\s+', which matches one or more whitespace characters.''')
+op.add_option('-D','--diff',dest='diff',action='store_true',default=False,
+  help='''Turns on diff mode, which colors lines removed differently from lines added.''')
+op.add_option('-f','--fields',dest='fields',action='store',default=None,
+  help='''Specifies which fields are to be marked. Field ranges are separated by commas and take the form "m[-[n]]" or "[[m]-]n" where m is the first column in the range (counted from 1) and n is the last. See --csv and -d for data parsing options.''')
+op.add_option('-g','--grep',dest='grep',action='store_true',default=False,
+  help='''Output only lines that match at least one color filter.''')
+op.add_option('-i',dest='ignore_case',action='store_true',default=False,
+  help='''Ignore case when matching patterns.''')
+op.add_option('--palette',dest='palette',action='store',default='dark',
+  help='''Comma-delimited list of color specifications to use to highlight matches for patterns. Each spec is of the form "[ATTR] FG [on BG]" where ATTR is any of bold, italics, underscore, or strikethrough, and FG and BG may be any of black, red, green, yellow, blue, magenta, cyan, or white. Two other possible values for a colorspec can be "normal" and "reverse", which don't make sence with other ATTR, FB, or BG values. You should also know that ATTR, FG, and BG values are persistent from one spec to the next, so, for example "red on black,green,yellow" specifies that matches for the first pattern should be red, second pattern are green, third are yellow, and that all have black backgrounds. Since the palette syntax tends to be verbose, you can also use --palette=dark or --palette=light to use colors generally suitable for dark or light terminal backgrounds, respectively. Since only red, blue, and magenta are used on light backgrounds, using -w is often a good idea with --palette=light. The default setting is "%default".''')
+op.add_option('-r','--reverse',dest='reverse',action='store_true',default=False,
+  help='''Reverse foreground and background colors of highlighted sections.''')
+op.add_option('-w',dest='wrap',action='store_true',default=False,
+  help='''Turn on color wrapping mode. By default, for n colors in the palette, the match for any pattern beyond the nth pattern simply uses the last color in the palette. Wrapping mode changes this behavior so the first color is used for the n+1st pattern, the second for the n+2nd, and so on.''')
 
 #re_columnList=re.compile(r'(?:\s*(\d+)\s*,)*(?:\s*(\d+)\s*)')
 re_number=re.compile(r'\d+')
@@ -234,6 +270,10 @@ class DelimitedDataReader(object):
     return flist
 
 # Convert opt.palette into a list of ANSI escape sequences.
+if opt.palette=='dark':
+  opt.palette='norm red on black,green,yellow,bold blue,norm magenta,cyan'
+elif opt.palette=='light':
+  opt.palette='norm red on white,norm blue,magenta'
 l=[]
 pa,pf,pb='normal','white','black' # Set up defaults for previous values.
 for cs in opt.palette.split(','):
@@ -274,6 +314,7 @@ if opt.columns:
     try:
       s=(''.join([colorOf(i)+s[opt.columns[i]:opt.columns[i+1]] for i in r])).replace('\n',norm_color)
       print s
+      sys.stdout.flush()
     except:
       print 'l=%r'%l
       print 'opt.columns=%r'%opt.columns
@@ -295,6 +336,7 @@ elif opt.fields:
 	  if f<len(flist):
 	    flist[f][0]=colorOf(i)+flist[f][0]+norm_color
       print ''.join([f+d for f,d in flist])
+      sys.stdout.flush()
   else:
     # Handle CSV data.
     reader=csv.reader(sys.stdin)
@@ -306,6 +348,7 @@ elif opt.fields:
 	  if f<len(flist):
 	    flist[f]=colorOf(i)+flist[f]+norm_color
       writer.writerow(flist)
+      sys.stdout.flush()
 else:
   # Highlight based on RE matching.
   s=sys.stdin.readline()
@@ -329,4 +372,5 @@ else:
         s=s[:j]+highlight+s[j:k]+norm_color+s[k:]
         m=pat.search(s,k+len(highlight)+len(norm_color))
       sys.stdout.write(s)
+      sys.stdout.flush()
     s=sys.stdin.readline()
