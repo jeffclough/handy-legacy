@@ -3,7 +3,7 @@
 # Note that "make install" will build the executables if necessary.
 #
 
-PROGS=datecycle dump freq mix numlines portname randword secdel \
+PROGS=datecycle dump freq mix numlines ph portname randword secdel \
       timeshift
       
 SCRIPTS=chronorename cutcsv decode64 encode64 gensig/gensig mark names pa
