@@ -66,7 +66,11 @@ powerful.
 The MARKOPTS environment variable may be used to supply default command line
 options to %prog. Anything found in this variable is processed before %prog's
 command line options. The value of MARKOPTS is interpreted in a shell context,
-so be sure to quote or escape any white space. '''
+so be sure to quote or escape any white space.
+
+NOTE: The context options have not yet been implemented!
+'''
+
 if envopts:
   usage+='''MARKOPTS currently contains:
 
@@ -82,6 +86,12 @@ op.add_option('--columns',dest='columns',action='store',default=None,
   help='''This option turns on fixed-column mode and accepts a comma-separated list of column numbers as its argument. Each given column number identifies the beginning of a column in each line of the input data. This option cannot be used with other highlighting modes. The first column is numbered 1.''')
 op.add_option('--comment',dest='comment_format',action='store',default='^\s*#.*',
   help='''Specifies the pattern used to identify comment lines, which is '%default' by default.''')
+op.add_option('--after-context',dest='after',action='store',type='int',default=None,
+  help='''Print NUM lines of leading context before matching lines. Places a line containing -- between contiguous groups of matches.''')
+op.add_option('--before-context',dest='before',action='store',type='int',default=None,
+  help='''Print NUM lines of trailing context before matching lines. Places a line containing -- between contiguous groups of matches.''')
+op.add_option('--context',dest='context',action='store',type='int',default=None,
+  help='''Print NUM lines of leading and trailing context before matching lines. Places a line containing -- between contiguous groups of matches.''')
 op.add_option('--csv',dest='csv',action='store_true',default=False,
   help='''For use with -f, this option specifies that the data is in CSV format.''')
 op.add_option('-d','--delimiter',dest='delim',default=None,
@@ -107,6 +117,9 @@ op.add_option('-w',dest='wrap',action='store_true',default=False,
 re_number=re.compile(r'\d+')
 
 opt,pat=op.parse_args()
+if opt.context!=None:
+  if opt.before!=None: opt.before=opt.context
+  if opt.after!=None: opt.after=opt.context
 if opt.reverse:
   foreground,background=background,foreground
 if opt.columns:
