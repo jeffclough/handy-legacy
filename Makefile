@@ -6,7 +6,7 @@
 PROGS=datecycle dump freq mix numlines portname randword secdel \
       timeshift
       
-SCRIPTS=chronorename decode64 encode64 gensig/gensig mark names pa
+SCRIPTS=chronorename cutcsv decode64 encode64 gensig/gensig mark names pa
 
 DATA=gensig/quotes gensig/*.sig
 
