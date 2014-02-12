@@ -6,7 +6,8 @@ phonetic spelling of each word is written to one line of standard
 output.
 
 Run this program the --help command line option to see command line
-options.
+options. Supported dialects: NATO (the default), RAF, Police, US,
+and Western Union.
 
 '''
 
@@ -22,17 +23,30 @@ dialect=dict(
 dialects=' '.join(sorted(dialect.keys()))
 
 prog=os.path.basename(sys.argv[0])
-op=optparse.OptionParser()
-op.add_option('-d','--dialect',action='store',default='nato',help='Specify one of: %s'%dialects)
-op.add_option('-i','--ignore-case',action='store_true',default=False,help='The format of the output ignores the case of the input. By default F ==> FOXTROT while f ==> Foxtrot, for example.')
+op=optparse.OptionParser(
+  usage='''Usage: %prog [options] any text you'd like
+
+This program spells words in a phonetic alphabet. For instance, in the
+NATO dialect, 'a' becomes 'Alpha', b becomes 'Bravo', and so on. The
+phonetic spelling of each word is written to one line of standard
+output. Supported dialects: NATO (the default), RAF, Police, US, and
+Western Union.''' 
+)
+op.add_option('-d','--dialect',choices=dialect.keys(),default='nato',help='Specify one of: %s'%dialects)
+op.add_option('-i','--ignore-case',action='store_true',default=False,help='The format of the output ignores the case of the input. By default, F ==> FOXTROT while f ==> Foxtrot, for example.')
 opt,args=op.parse_args()
 if opt.dialect not in dialect:
   print >>sys.stderr,'%s: Unknown dialect %s'%(prog,opt.dialect)
   sys.exit(1)
 d=dialect[opt.dialect]
 
-if not args:     # If there are no command line arguments,
-  args=sys.stdin # read words from standard input.
+# If there are no command line arguments ...
+if not args:
+  if os.isatty(sys.stdin.fileno()):
+    op.print_usage() # Show usage message.
+    sys.exit(0)
+  else:
+    args=sys.stdin   # Read "arguments" from standard input.
 
 # Iterate through args (whatever type of sequence that is at this point),
 # and spell each word found there on a line by itself.
