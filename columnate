@@ -1,0 +1,81 @@
+#!/usr/bin/env python
+import os,sys
+from optparse import OptionParser
+from pprint import pprint
+
+op=OptionParser(usage='''
+Read single-column text from standard input. Output multi-column text to
+standard output. The default number of columns (2) and lines (50) can be
+overridden.
+
+usage: $prog [options]
+''')
+op.add_option('-a','--across',dest='dir',action='store_const',const='across',default='down',
+  help='Input data will be output across columns and then down the page.')
+op.add_option('-d','--down',dest='dir',action='store_const',const='down',default='down',
+  help='Input data will be output down the page and then across columns.')
+op.add_option('-f','--float',dest='bFloat',default=False,action='store_true',
+  help='Allow columns to float, as opposed to all being the same width.')
+op.add_option('-c','--columns',dest='cols',type='int',default=2,
+  help='Number of columns per page.')
+op.add_option('-l','--lines',dest='lines',type='int',default=50,
+  help='Number of lines per page.')
+op.add_option('-s','--seperation',dest='sep',type='int',default=2,
+  help='Number of space characters between columns.')
+op.add_option('-w','--width',dest='width',default=79,
+  help='Number of characters per line on the page.')
+opt,args=op.parse_args()
+
+class Page(object):
+  def __init__(self,rows=50,cols=2,sep=2,dir='down',bFloat=False):
+    self.rows=rows
+    self.cols=cols
+    self.sep=sep
+    self.dir=dir
+    self.bFloat=bFloat
+    self.clear()
+
+  def clear(self):
+    self.page=[]
+    for c in range(self.cols):
+      self.page.append([])
+      for l in range(self.rows):
+        self.page[c].append('')
+    self.row=self.col=0
+
+  def write(self):
+    width=[max([len(r) for r in c]) for c in self.page]
+    #print 'widths: %r'%width
+    if max(width)>0:
+      #pprint(self.page)
+      if self.bFloat:
+        fmt=(' '*self.sep).join(['%%-%ds'%w for w in width])
+      else:
+        fmt=(' '*self.sep).join(['%%-%ds'%max(width) for w in width])
+      for l in range(len(self.page[0])):
+        #print '%s %r'%(fmt,tuple([self.page[c][l] for c in range(len(self.page))]))
+        print fmt%tuple([self.page[c][l] for c in range(len(self.page))])
+      self.clear()
+
+  def add_item(self,s):
+    self.page[self.col][self.row]=s
+    #print 'page[%r][%r]=%r'%(self.col,self.row,s)
+    if self.dir=='down':
+      self.row+=1
+      if self.row>=self.rows:
+        self.row,self.col=0,self.col+1
+      if self.col>=self.cols:
+        self.write()
+    else:
+      self.col+=1
+      if self.col>=self.cols:
+        self.row,self.col=self.row+1,0
+      if self.row>=self.rows:
+        self.write()
+
+p=Page(rows=opt.lines,cols=opt.cols,sep=opt.sep,dir=opt.dir,bFloat=opt.bFloat)
+for s in sys.stdin:
+  if s[-1]=='\n':
+    s=s[:-1]
+  p.add_item(s)
+p.write()
