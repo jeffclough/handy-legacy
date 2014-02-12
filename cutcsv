@@ -1,0 +1,251 @@
+#!/usr/bin/env python2.5
+
+import csv,optparse,os,sys
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Handle the command line.
+
+opt_parser=optparse.OptionParser()
+
+opt_parser.add_option('-D','--dialect',
+help='''Accept any one of the following dialect parameters. As many -D options may be specified as are needed.
+
+  delimiter=,
+  quotechar="
+  escapechar=None
+  doublequote=True
+  skipinitialspace=False
+  lineterminator=\\r\\n
+  quoting=QUOTE_MINIMAL''',
+dest='dialect',action='append',default=[])
+
+opt_parser.add_option('-R','--read-as',
+help='''Accept any one of the following dialect parameters. As many -R options may be specified as are needed.
+
+  delimiter=,
+  quotechar="
+  escapechar=None
+  doublequote=True
+  skipinitialspace=False
+  lineterminator=\\r\\n
+  quoting=QUOTE_MINIMAL''',
+dest='read_as',action='append',default=[])
+
+opt_parser.add_option('-W','--write-as',
+help='''Accept any one of the following dialect parameters. As many -W options may be specified as are needed.
+
+  delimiter=,
+  quotechar="
+  escapechar=None
+  doublequote=True
+  skipinitialspace=False
+  lineterminator=\\r\\n
+  quoting=QUOTE_MINIMAL''',
+dest='write_as',action='append',default=[])
+
+opt_parser.add_option('-f',
+help='Output only these fields. FIELDS is made up of one range, or many ranges separated by commas. Each range is one of "N" (the Nth field), "N-" (from the Nth to the last field), "N-M" (from the Nth to the Mth field), or "-M" from the first to the Mth field). Fields are counted beginning with 1, and all ranges are inclusive. By default, all fields are available for output.',
+dest='fields',action='store',default=None)
+
+opt_parser.add_option('-j',
+help='Join the a givn field range into a single field separated by a single character.',
+dest='joinfields',action='store',default=None)
+
+opt_parser.add_option('-o',
+help='Specify a format string outputting the fields. Use %1, %2, etc for output. Note that fields excluded by the -f option (if given) are not counted. I.e., If "-f3-5,7" is given, input field 3 becomes output field 1, 4 becomes 2, 5 becomes 3, and 7 becomes 4. In the absence of this option, the output format is CSV.',
+dest='fmt',action='store',default=None)
+
+opt_parser.add_option('-s',
+help="Strip white space from the left and/or right of each field. STRIP may be l, r, lr, or rl. If l is given, white space is be stripped from the left. If r is given, white space is stripped from the right. (Yes, it's rocket science.) By default, no white space is stripped.",
+dest='strip',action='store',default='')
+
+class CsvDialect(object):
+
+  def __init__(self,spec=None):
+    '''spec is another CsvDialect object or a list of "param=value" strings.'''
+
+    # Set up some default values, just to create a list of valid
+    # dialect parameters.
+    self.delimiter=','
+    self.quotechar='"'
+    self.escapechar=None
+    self.doublequote=True
+    self.skipinitialspace=False
+    self.lineterminator='\r\n'
+    self.quoting=csv.QUOTE_MINIMAL
+
+    if spec==None:
+      spec=[]
+    if isinstance(spec,type(self)):
+      # Make this CsvDialect a copy of the specified CsvDialect object.
+      for attr in [x for x in dir(self) if self.isParam(x)]:
+        setattr(self,attr,getattr(spec,attr))
+    else:
+      # Update our current (default) parameters with those specfied.
+      for param in spec:
+        self.modify(param)
+
+  def isParam(self,p):
+    '''Return True iff p is the name of a valid dialect parameter.'''
+    
+    if hasattr(self,p):
+      a=getattr(self,p)
+      return not(p.startswith('_') or ('%s'%type(a)).endswith("method'>"))
+    return False
+
+  def modify(self,param):
+    '''Given a 'parameter=value' string, make it so in this object.'''
+
+    try:
+      var,val=param.split('=')
+    except:
+      print >>sys.stderr,'%s: %r is not formatted as "parameter=value".'%(sys.argv[0],param)
+      sys.exit(1)
+    var=var.strip()
+    if self.isParam(var):
+      if var in ('delimiter','quotechar','lineterminator'):
+        val=repr(val)
+      elif var=='escapechar':
+        if val.lower()=='none':
+          val='None'
+        else:
+          val=repr(val)
+      elif var in ('doublequote','skipinitialspace'):
+        val=val.title()
+        if val not in ('False','True'):
+          print >>sys.stderr,'%s: %s must be either True or False.'%(sys.argv[0],var)
+          sys.exit(1)
+      elif var=='quoting':
+        val='csv.'+val
+      setattr(self,var,eval(val.replace(r'\r','\r').replace(r'\n','\n').replace(r'\t','\t')))
+    else:
+      print >>sys.stderr,'%s: %r is not a valid dialectic parameter.'%(sys.argv[0],var)
+      sys.exit(1)
+
+  def __str__(self):
+    alist=[x for x in dir(self) if self.isParam(x)]
+    alist.sort()
+    return ' '.join(['%s=%r'%(attr,getattr(self,attr)) for attr in alist])
+
+try:
+  opt,args=opt_parser.parse_args()
+except Exception,e:
+  print >>sys.stderr,str(e)
+  sys.exit(2)
+
+# Set up our dialects.
+default_dialect=CsvDialect(opt.dialect)
+read_dialect=CsvDialect(default_dialect)
+write_dialect=CsvDialect(default_dialect)
+for x in opt.read_as: read_dialect.modify(x)
+for x in opt.write_as: write_dialect.modify(x)
+ 
+# Validate our field stripping specification.
+for ch in opt.strip:
+  if ch not in 'lr':
+    print >>sys.stderr,'arguments to -s may include only l and r'
+    sys.exit(2)
+
+def parseRangeList(s):
+  '''Convert string list of ranges into a list of (n,m) range tuples.'''
+
+  ranges=[x.strip() for x in s.split(',')]
+  f=[]
+  for r in ranges:
+    r=r.split('-')
+    if len(r)==1:
+      m=int(r[0])
+      n=m-1
+    else:
+      n,m=r
+      if n=='':
+	n=0
+      else:
+	n=int(n)-1
+      if m=='':
+	m=None
+      else:
+	m=int(m)
+    f.append((n,m))
+  return f
+
+# Build our range list.
+if opt.fields:
+  opt.fields=parseRangeList(opt.fields)
+else:
+  opt.fields=[(0,None)] # The default range list.
+
+# Build our range list of fields to be joined.
+if opt.joinfields:
+  opt.joinchar=opt.joinchar=opt.joinfields[0]
+  opt.joinfields=parseRangeList(opt.joinfields[1:])
+  opt.joinfields.reverse() # We join fields from right to left.
+else:
+  opt.joinfields=[] # The default list.
+
+# Preprocess our format a bit, if one is given.
+if opt.fmt:
+  opt.fmt=opt.fmt.replace(r'\r','\r').replace(r'\n','\n').replace(r'\t','\t')
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+def stripfield(s,sides):
+  '''Return s stripped of left and/or right white space depending on
+  whether sides includes l and/or r.'''
+
+  l='l' in sides
+  r='r' in sides
+  if l and r:
+    s=s.strip()
+  elif l:
+    s=s.lstrip()
+  elif r:
+    s=s.rstrip()
+  return s
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+# Read from standard input if no filename argument was on the command line.
+if not args:
+  args=['-']
+
+# Prepare for CSV output.
+writer=csv.writer(open('/dev/stdout','wb'),dialect=write_dialect)
+
+for filename in args:
+  if filename=='-':
+    filename='/dev/stdin'
+  else:
+    filename=os.path.expanduser(filename) # Expands '~' to $HOME.
+  reader=csv.reader(open(filename,'rb'),dialect=read_dialect)
+
+  #print 'opt.fields=%r'%opt.fields
+  #print 'opt.joinfields=%r'%opt.joinfields
+  #if opt.joinfields:
+  #  print 'opt.joinchar=%r'%opt.joinchar
+  #sys.exit(0)
+
+  for row in reader:
+    # Join any field ranges we've been told to.
+    for n,m in opt.joinfields:
+      row[n:m]=[opt.joinchar.join([x for x in row[n:m] if x])]
+
+    # Make list of only the fields we want to keep.
+    fields=[]
+    for n,m in opt.fields:
+      fields.extend(row[n:m])
+
+    # Apply any stripping options the user specified.
+    if opt.strip:
+      fields=[stripfield(x,opt.strip) for x in fields]
+
+    # Output the data as the user requested.
+    if opt.fmt: # Output formatted field values.
+      s=opt.fmt
+      field_indices=range(len(fields))
+      field_indices.reverse()
+      for i in field_indices:
+	s=s.replace('%'+str(i+1),fields[i])
+      print s
+    else: # Output CSV.
+      writer.writerows([fields])
