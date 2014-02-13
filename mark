@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import csv,optparse,os,re,shlex,sys
+import csv,optparse,os,re,shlex,string,sys
 
 # ANSI color escape sequences:
 attr=dict(
@@ -125,7 +125,7 @@ op.add_option('-C',dest='comment_mode',action='store_true',default=False,
   help='''Turns on comment mode, which inserts the comment pattern (see --comment) at the start of the pattern list. This marks any line whose first non-space character is '#', which is very commonly a comment line. Use the --comment option to change the pattern used to idententify comments.''')
 op.add_option('--columns',dest='columns',action='store',default=None,
   help='''This option turns on fixed-column mode and accepts a comma-separated list of column numbers as its argument. Each given column number identifies the beginning of a column in each line of the input data. This option cannot be used with other highlighting modes. The first column is numbered 1.''')
-op.add_option('--comment',dest='comment_format',action='store',default='^\s*#.*',
+op.add_option('--comment-format',dest='comment_format',action='store',default='^\s*#.*',
   help='''Specifies the pattern used to identify comment lines, which is '%default' by default.''')
 op.add_option('--after-context',dest='after',action='store',type='int',default=None,
   help='''Print NUM lines of leading context before matching lines. Places a line containing -- between contiguous groups of matches.''')
@@ -140,7 +140,7 @@ op.add_option('-d','--delimiter',dest='delim',default=None,
 op.add_option('-D','--diff',dest='diff',action='store_true',default=False,
   help='''Turns on diff mode, which colors lines removed differently from lines added.''')
 op.add_option('--discard',dest='discard',metavar='RE',action='store',default=None,
-  help='''Discards any lines matching the given RE and keeps all others. Discarding lines of CSV data has not yet been implemented. (Cannot be used with --keep.)''')
+  help='''Discards any lines matching the given RE and keeps all others. Discarding lines of CSV data has not yet been implemented. This option is for filtering only and has no effect on colarization. (Cannot be used with --keep.)''')
 op.add_option('-f','--fields',dest='fields',action='store',default=None,
   help='''Specifies which fields are to be marked. Field ranges are separated by commas and take the form "m[-[n]]" or "[[m]-]n" where m is the first column in the range (counted from 1) and n is the last. Each field *range* gets its own color. E.g., "-f 1-3,6" says to mark fields 1-3 with the first color in the current palette and to color field 6 with the second. See --csv and -d for data parsing options.''')
 op.add_option('-g','--grep',dest='grep',action='store_true',default=False,
@@ -150,7 +150,24 @@ op.add_option('-i',dest='ignore_case',action='store_true',default=False,
 op.add_option('-I','--input',dest='input_from',action='store',choices=('diff','du'),default=None,
   help='''Use sets of pattern known to be helpful for marking the output of certain programs. Valid values are diff and du.''')
 op.add_option('--keep',dest='keep',metavar='RE',action='store',default=None,
-  help='''Keep any lines matching the given RE and discards all others. Keeping lines of CSV data has not yet been implemented. (Cannot be used with --discard.)''')
+  help='''Keep any lines matching the given RE and discards all others. Keeping lines of CSV data has not yet been implemented. This option is for filtering only and has no effect on colarization. (Cannot be used with --discard.)''')
+op.add_option('-L',dest='log_mode',action='store_true',default=False,
+  help='''Turns on log mode, which marks error, warning, info, and debug output in addition to the time, host, and process conent. Also see --log-format. NOT YET FULLY IMPLEMENTED.''')
+op.add_option('--log-format',dest='log_format',action='store',default=r'''
+(?P<time>\w+ \d+ \d+:\d+:\d+)
+\s+
+(?P<host>\S+)
+\s+
+(?P<proc>
+  (?P<prog>[^[]+)
+  \[(?P<pid>\d+(?P<sub>-\d+)?)\]
+)
+\s*
+(?P<level>\S+)?
+:\s*
+(?P<message>.*)
+''',
+  help="Set the format to expect for log text, which is a regular expression that matches and names the various parts of each line of log data when the -L option is used. (default=%default) NOT YET FULLY IMPLEMENTED.")
 op.add_option('--palette',dest='palette',action='store',default='dark',
   help='''Comma-delimited list of color specifications to use to highlight matches for patterns. Each spec is of the form "[ATTR] FG [on BG]" where ATTR is any of bold, italics, underscore, or strikethrough, and FG and BG may be any of black, red, green, yellow, blue, magenta, cyan, or white. Two other possible values for a colorspec can be "normal" and "reverse", which don't make sence with other ATTR, FB, or BG values. You should also know that ATTR, FG, and BG values are persistent from one spec to the next, so, for example "red on black,green,yellow" specifies that matches for the first pattern should be red, second pattern are green, third are yellow, and that all have black backgrounds. Since the palette syntax tends to be verbose, you can also use --palette=dark or --palette=light to use colors generally suitable for dark or light terminal backgrounds, respectively. Since only red, blue, and magenta are used on light backgrounds, using -w is often a good idea with --palette=light. The default setting is "%default".''')
 op.add_option('-r','--reverse',dest='reverse',action='store_true',default=False,
@@ -454,7 +471,7 @@ elif opt.stanzas:
           sys.stdout.write(colorOf(i))
       sys.stdout.write(s)
       sys.stdout.flush()
-    sys.stdout.write(normcolor)
+    sys.stdout.write(norm_color)
     sys.stdout.flush()
   else:
     # Alternate between first two palette entries every time RE is matched.
@@ -466,7 +483,7 @@ elif opt.stanzas:
         sys.stdout.write(colorOf(i))
       sys.stdout.write(s)
       sys.stdout.flush()
-    sys.stdout.write(normcolor)
+    sys.stdout.write(norm_color)
     sys.stdout.flush()
 elif opt.fields:
   # Highlight fields based on position.
@@ -495,6 +512,14 @@ elif opt.fields:
 	    flist[f]=colorOf(i)+flist[f]+norm_color
       writer.writerow(flist)
       sys.stdout.flush()
+elif opt.log_mode:
+  pat=re.compile(opt.log_format)
+  output_format=string.Template('$time $host $prog$level: $message')
+  for s in get_input_lines():
+    m=pat.search(s)
+    if m!=None and not opt.grep:
+      d=m.groupdict('')
+      print output_format.safe_substitute(d)
 else:
   # Highlight based on RE matching.
   if pat: # Combine and compile our patterns into a single regular expression.
