@@ -15,7 +15,7 @@
  * usage() function has been updated to reflect this new capability and syntax.
  *
  * TODO-1: There are enough options now to justify the use of getopt(). This
- * would also facility the ability to turn options back off as well.
+ * would also facilitate the ability to turn options back off as well.
  *
  * TODO-2: It might be nice to be able to specify the precision of the
  * percent mode output either by multiple -p options or by an argument to -p.
