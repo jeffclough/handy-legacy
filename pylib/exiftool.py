@@ -27,7 +27,7 @@ instead. Isn't that nicer!
 
 '''
 
-import datetime,exceptions,os,re,shlex,subprocess,sys
+import datetime,exceptions,json,os,re,shlex,subprocess,sys
 import adhoc
 
 re_exif_time=re.compile('(?P<year>\d\d\d\d):(?P<mon>\d\d):(?P<day>\d\d) (?P<hour>\d\d):(?P<min>\d\d):(?P<sec>\d\d)(\.(?P<cs>\d\d))?')
@@ -51,8 +51,9 @@ def readfile(filename):
   if err:
     print >>sys.stderr,'exiftool error:\n'+err
     sys.exit(1)
-  d=eval(out)[0]
-  for g in d:
+  d=json.loads(out)[0]                # Read exiftool's JSON output, and
+  d=eval(re.sub(r"\bu'","'",repr(d))) # convert unicode to regular strings.
+  for g in d: # Iterate through each group of metadata that exiftool found.
     dd=d[g]
     if isinstance(dd,dict):
       for key,val in dd.iteritems():
