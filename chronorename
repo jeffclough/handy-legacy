@@ -48,6 +48,39 @@ def die(msg,rc=1):
   warn(msg)
   sys.exit(rc)
 
+def english_list(seq,conjunction='and'):
+  '''Return the values in the given sequence as an English phrase. Use
+  the given conjunction, which defaults to 'and'.
+  
+  >>> s=[1,'alpha',2,'beta']
+  >>> english_list([])
+  ''
+  >>> english_list(s[:1])
+  '1'
+  >>> english_list(s[:2])
+  '1 and alpha'
+  >>> english_list(s[:3])
+  '1, alpha, and 2'
+  >>> english_list(s)
+  '1, alpha, 2, and beta'
+  >>> english_list(s,'or')
+  '1, alpha, 2, or beta'
+  >>> english_list(5)
+  Traceback (most recent call last):
+  ...
+  TypeError: english_list requires a sequnece
+  '''
+
+  if not isinstance(seq,list):
+    if isinstance(seq,(dict,list,tuple)):
+      seq=list(seq)
+    else:
+      raise TypeError('english_list requires a sequnece')
+  if len(seq)==0: return ''
+  if len(seq)==1: return str(seq[0])
+  if len(seq)==2: return str(seq[0])+' '+conjunction+' '+str(seq[1])
+  return ', '.join([str(x) for x in seq[:-1]]+[conjunction+' '+str(seq[-1])])
+
 # Set up our command line syntax so that we can parse the command line.
 class IndentedHelpFormatterWithNL(optparse.IndentedHelpFormatter):
   '''This formatter class was shamelessly copied, and only slightly
@@ -252,13 +285,18 @@ op.add_option(
   '-s',dest='series',action='store',default='',
   help="Sets the name of this series of files to s. (default=%default)")
 
+op.time_from_values=('file','photo','system')
 op.add_option(
-  '-t',dest='time_from',action='store',default='photo',
-  help="Set where the time for each picture comes from, and optionally give a time offset. Valid values are 'file' and 'photo'. 'file' takes the time from the file containing each picture. 'photo' takes the time from the metadata (e.i. EXIF data) that the camera stores with each picture inside the file. (The default is 'photo'.) Optionally, a time offset can be given as well. For instance, 'photo+5m22s' uses the metadata time and adds 5 minutes and 22 seconds to it. This is helpful for \"synchronizing\" photos from different cameras whose clocks do not agree. The time offset starts with either + or - and continues with at least one string of the form \"nu\", where n is a number and u specifies the units expressed by that number as 'y', 'w', 'd', 'h', 'm', or 's' to represent years, weeks, days, hours, minutes, or seconds.")
+  '-t',dest='time_from',action='store',choices=op.time_from_values,default='photo',
+  help="Set where the time for each picture comes from, and optionally give a time offset. Valid values are %s. 'file' takes the time from the file containing each picture. 'photo' takes the time from the metadata (i.e. EXIF data) that the camera stores with each picture inside the file. (The default is 'photo'.) Optionally, a time offset can be given as well. For instance, 'photo+5m22s' uses the metadata time and adds 5 minutes and 22 seconds to it. This is helpful for \"synchronizing\" photos from different cameras whose clocks do not agree. The time offset starts with either + or - and continues with at least one string of the form \"nu\", where n is a number and u specifies the units expressed by that number as 'y', 'w', 'd', 'h', 'm', or 's' to represent years, weeks, days, hours, minutes, or seconds."%english_list(op.time_from_values))
 
 op.add_option(
   '--time-fmt',dest='time_fmt',action='store',default='%Y%m%d_%H%M%S',
   help="Set the format of the time stamp to be used when composing new filenames. (default=$default) See the TIME FORMATTING section below for details.")
+
+op.add_option(
+  '--test',dest='test',action='store_true',default=False,
+  help="Run this program's internal tests. No news is good news.")
 
 # Parse command line.
 if 'CHRONORENAME_OPT' in os.environ:
@@ -391,6 +429,12 @@ def getFilenameParts(fn):
   return dict(
     dir=dir,filename=filename,EXT=ext,ext=ext.lower(),time=ts
   )
+
+# Run this program's internal tests if called for.
+if opt.test:
+  import doctest
+  fail_count,test_count=doctest.testmod()
+  sys.exit(fail_count)
 
 # Process our command line arguments, which should all be filenames.
 for oldfn in args:
