@@ -6,6 +6,12 @@ most excellent exiftool command. At the moment, it supports only the
 ability to read EXIF tags from a given file. When I need to do more with
 EXIF (maybe adding or updating GPS data), I'll add that capability then.
 
+Go to http://www.sno.phy.queensu.ca/~phil/exiftool to download the
+exiftool command.
+
+NOTE: Consider using PyExifTool instead of this module.
+http://smarnach.github.io/pyexiftool
+
 The readfile() function returns a complex structure that requires some
 exploration. You can run this module directly against one or more files
 as in the following example:
