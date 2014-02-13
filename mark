@@ -167,7 +167,7 @@ re_number=re.compile(r'\d+')
 
 try:
   opt,pat=op.parse_args()
-except IOError as e:
+except IOError,e:
   errno,errmsg=e.args
   if errmsg=='Broken pipe':
     sys.exit(1)
@@ -245,7 +245,7 @@ if pat:
   for p in pat:
     try:
       x=re.compile(p)
-    except re.error as e:
+    except re.error,e:
       die('RE error (%s): %r'%(' '.join(e.args),p))
 elif not (opt.columns or opt.fields):
   die('No RE arguments given. Nothing to do.')
@@ -501,7 +501,7 @@ else:
     pat='|'.join(['(%s)'%x.replace('(','(?:') for x in pat])
     try:
       pat=re.compile(pat,opt.re_flags)
-    except re.error as e:
+    except re.error,e:
       die('Internal RE error (%s): %r'%(' '.join(e.args),pat))
 
   for s in get_input_lines():
