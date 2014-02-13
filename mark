@@ -41,27 +41,67 @@ def die(msg='',rc=1):
     print >>sys.stderr,progname+': '+msg
   sys.exit(rc)
 
+def re_help():
+  'Send an excerpt of re.__doc__ to standard output.'
+
+  started=False
+  for line in re.__doc__.split('\n'):
+    if started:
+      if 'This module exports' in line:
+        break
+      print line
+    else:
+      if 'Regular expressions can contain both' in line:
+        print line
+        started=True
+  print '''
+You can read an expanded treatment of Python's RE syntax at the
+following URL:
+    http://docs.python.org/library/re.html#regular-expression-syntax
+'''
+
 envopts=shlex.split(os.getenv('MARKOPTS','').strip())
 if envopts:
   sys.argv[1:1]=envopts
 
-usage='''usage: %prog [options] [RE ...]
+usage='''Usage:
+  Form 1: %prog [options] [RE ...]
+  Form 2: %prog [options] --columns=COLUMNS
+  Form 3: %prog [options] --csv
+  Form 4: %prog [options] --fields=FIELDS
 
 Description: The %prog command is a filter (reads from standard input
-and writes to standard output) that scans each line for any regular
-expression REs given as its arguments. When part of an input line is
-found to match a given RE, ANSI highlighting sequences are inserted
-before and after that part of the line before it is output. Matches for
-the first RE are colored red, the second are colored green, the third
-are colored yellow, and so on through blue, magenta, and cyan. The
---palette option can be used to change the list of colors.
+and writes to standard output) that colors its output using ANSI escape
+sequences. Because of this, %prog's output is suitable only for terminal
+display. Redirecting %prog's output to a file or to the input of another
+command (except for things like the "less" command) will likely yield
+unwanted results.
+
+Form 1 of %prog scans each line for any REs (regular expressions) given
+as arguments. Any text matching the first RE is colored by the first
+palette entry, any text matching the second RE is colored by the second,
+and so on. By default, the palette entries are red, green, yellow, bold
+blue, magenta, and cyan, all against a black background. The --palette
+option can be used to change the list of colors.
+
+By default, the number of REs used from the command line is limited to
+the number of entries in the palette. Exceeding this number of REs is
+not an error, but text matching the surplus REs will not be colored. Use
+the -w option to change this bahavior.
 
 Since %prog is written in Python, Python's regular expression extensions
-are available to you. Python REs are extensions of POSIX EREs, but it
-uses Perl-like character classes (e.g. \s and \w) rather than POSIX
-character classes (e.g. [:space:] and [:word:]). Read more about Python
-RE syntax at the following URL. It's quite powerful.
-  http://docs.python.org/library/re.html#regular-expression-syntax
+are available. Python REs are extensions of POSIX EREs, but it uses
+Perl-like character classes (e.g. \s and \w) rather than POSIX character
+classes (e.g. [:space:] and [:word:], respectively), making REs more
+concise. Use --re-help to get a brief lesson in Python REs.
+
+NOTE: Because of how %prog currently handles REs, using the (?...) RE
+forms will cause an error. This is a known bug and is on the list of
+things to fix.
+
+Forms 2-4 take no RE. They use column or field position to determine the
+color of each part of the output, the first field according to the first
+palette entry, and so forth.
 
 The MARKOPTS environment variable may be used to supply default command
 line options to %prog. Anything found in this variable is processed
@@ -92,7 +132,7 @@ op.add_option('--after-context',dest='after',action='store',type='int',default=N
 op.add_option('--before-context',dest='before',action='store',type='int',default=None,
   help='''Print NUM lines of trailing context before matching lines. Places a line containing -- between contiguous groups of matches.''')
 op.add_option('--context',dest='context',action='store',type='int',default=None,
-  help='''Print NUM lines of leading and trailing context before matching lines. Places a line containing -- between contiguous groups of matches.''')
+  help='''Print NUM lines of leading and trailing context before matching lines. Places a line containing -- between contiguous groups of matches. The context options are only useful in combination whth the --grep option.''')
 op.add_option('--csv',dest='csv',action='store_true',default=False,
   help='''For use with -f, this option specifies that the data is in CSV format.''')
 op.add_option('-d','--delimiter',dest='delim',default=None,
@@ -115,6 +155,8 @@ op.add_option('--palette',dest='palette',action='store',default='dark',
   help='''Comma-delimited list of color specifications to use to highlight matches for patterns. Each spec is of the form "[ATTR] FG [on BG]" where ATTR is any of bold, italics, underscore, or strikethrough, and FG and BG may be any of black, red, green, yellow, blue, magenta, cyan, or white. Two other possible values for a colorspec can be "normal" and "reverse", which don't make sence with other ATTR, FB, or BG values. You should also know that ATTR, FG, and BG values are persistent from one spec to the next, so, for example "red on black,green,yellow" specifies that matches for the first pattern should be red, second pattern are green, third are yellow, and that all have black backgrounds. Since the palette syntax tends to be verbose, you can also use --palette=dark or --palette=light to use colors generally suitable for dark or light terminal backgrounds, respectively. Since only red, blue, and magenta are used on light backgrounds, using -w is often a good idea with --palette=light. The default setting is "%default".''')
 op.add_option('-r','--reverse',dest='reverse',action='store_true',default=False,
   help='''Reverse foreground and background colors of highlighted sections.''')
+op.add_option('--re-help',dest='re_help',action='store_true',default=False,
+  help='''Display a brief description of Python regular expressions. Then quit.''')
 op.add_option('-s','--stanzas',dest='stanzas',action='store_true',default=False,
   help='''In "stanzas" mode, the the RE arguments are matched against input lines. Output lines are colored according to the most recent RE matched. If only one RE is given, output lines will alternate between the first two colors in thte palette every time the input line matches the RE.'''),
 op.add_option('-w',dest='wrap',action='store_true',default=False,
@@ -123,7 +165,16 @@ op.add_option('-w',dest='wrap',action='store_true',default=False,
 #re_columnList=re.compile(r'(?:\s*(\d+)\s*,)*(?:\s*(\d+)\s*)')
 re_number=re.compile(r'\d+')
 
-opt,pat=op.parse_args()
+try:
+  opt,pat=op.parse_args()
+except IOError as e:
+  errno,errmsg=e.args
+  if errmsg=='Broken pipe':
+    sys.exit(1)
+  raise
+if opt.re_help:
+  re_help()
+  sys.exit(0)
 if opt.ignore_case:
   opt.re_flags=re.I
 else:
@@ -190,7 +241,13 @@ if opt.discard:
 if opt.keep:
   opt.keep=re.compile(opt.keep,opt.re_flags)
 
-if not pat:
+if pat:
+  for p in pat:
+    try:
+      x=re.compile(p)
+    except re.error as e:
+      die('RE error (%s): %r'%(' '.join(e.args),p))
+elif not (opt.columns or opt.fields):
   die('No RE arguments given. Nothing to do.')
 
 def complete(word,wordlist):
@@ -441,7 +498,11 @@ elif opt.fields:
 else:
   # Highlight based on RE matching.
   if pat: # Combine and compile our patterns into a single regular expression.
-    pat=re.compile('|'.join(['(%s)'%x.replace('(','(?:') for x in pat]),opt.re_flags)
+    pat='|'.join(['(%s)'%x.replace('(','(?:') for x in pat])
+    try:
+      pat=re.compile(pat,opt.re_flags)
+    except re.error as e:
+      die('Internal RE error (%s): %r'%(' '.join(e.args),pat))
 
   for s in get_input_lines():
     # Scan each line for matches to our patterns and insert highlighting.
