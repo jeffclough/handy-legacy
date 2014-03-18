@@ -1,0 +1,32 @@
+#!/usr/bin/env python
+
+import optparse,os,re,socket,sys
+
+op=optparse.OptionParser(
+  usage='usage: %prog [OPTIONS]',
+  description='Replace IP addresses in standard input with host names on the way to standard output.'
+)
+op.parse_args()
+
+reAddr=re.compile(r'\d+\.\d+\.\d+\.\d+')
+hostMap={}
+
+def host(addr):
+  '''Return the host name of the given IPv4 address.'''
+
+  if addr in hostMap:
+    h=hostMap[addr]
+  else:
+    try:
+      h=socket.gethostbyaddr(addr)
+    except:
+      h=('unknown '+addr,[],[addr])
+    hostMap[addr]=h # Store this result so we don't have to look it up again.
+  return h[0]
+
+for line in sys.stdin:
+  # Remove the newline character.
+  if line and line[-1]=='\n':
+    line=line[:-1]
+  line=reAddr.sub((lambda m:host(m.group())),line)
+  print line
