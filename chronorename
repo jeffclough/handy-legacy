@@ -285,14 +285,17 @@ op.add_option(
   '-s',dest='series',action='store',default='',
   help="Sets the name of this series of files to s. (default=%default)")
 
-op.time_from_values=('file','photo','system')
 op.add_option(
-  '-t',dest='time_from',action='store',choices=op.time_from_values,default='photo',
-  help="Set where the time for each picture comes from, and optionally give a time offset. Valid values are %s. 'file' takes the time from the file containing each picture. 'photo' takes the time from the metadata (i.e. EXIF data) that the camera stores with each picture inside the file. (The default is 'photo'.) Optionally, a time offset can be given as well. For instance, 'photo+5m22s' uses the metadata time and adds 5 minutes and 22 seconds to it. This is helpful for \"synchronizing\" photos from different cameras whose clocks do not agree. The time offset starts with either + or - and continues with at least one string of the form \"nu\", where n is a number and u specifies the units expressed by that number as 'y', 'w', 'd', 'h', 'm', or 's' to represent years, weeks, days, hours, minutes, or seconds."%english_list(op.time_from_values))
+  '-S',dest='whole_seconds',action='store_true',default=False,
+  help='Normally, if sub-second time resolution is available for a given file, %S in the time format includes milliseconds as well as seconds. This option suppresses this behavior and uses only whole numbers for seconds when formatting time, even if sub-second time is available.')
+
+op.add_option(
+  '-t',dest='time_from',action='store',default='photo',
+  help="Set where the time for each picture comes from, and optionally give a time offset. Valid values are file, photo, and systm. 'file' takes the time from the file containing each picture. 'photo' takes the time from the metadata (i.e. EXIF data) that the camera stores with each picture inside the file. (The default is 'photo'.) Optionally, a time offset can be given as well. For instance, 'photo+5m22s' uses the metadata time and adds 5 minutes and 22 seconds to it. This is helpful for \"synchronizing\" photos from different cameras whose clocks do not agree. The time offset starts with either + or - and continues with at least one string of the form \"nu\", where n is a number and u specifies the units expressed by that number as 'y', 'w', 'd', 'h', 'm', or 's' to represent years, weeks, days, hours, minutes, or seconds.")
 
 op.add_option(
   '--time-fmt',dest='time_fmt',action='store',default='%Y%m%d_%H%M%S',
-  help="Set the format of the time stamp to be used when composing new filenames. (default=$default) See the TIME FORMATTING section below for details.")
+  help="Set the format of the time stamp to be used when composing new filenames. (default=%default) See the TIME FORMATTING section below for details and the -S option above.")
 
 op.add_option(
   '--test',dest='test',action='store_true',default=False,
@@ -418,7 +421,7 @@ def getFilenameParts(fn):
   #print 'DEBUG: ts.microsecond=%r'%ts.microsecond
   #print "DEBUG: hasattr(ts,'microsecond')=%r"%hasattr(ts,'microsecond')
   #print "DEBUG: '%%S' in fmt = %r"%('%S' in fmt)
-  if hasattr(ts,'microsecond') and'%S' in fmt:
+  if not opt.whole_seconds and hasattr(ts,'microsecond') and'%S' in fmt:
     fmt=fmt.replace('%S','%%S.%03d'%(ts.microsecond/1000))
     #print 'DEBUG: new fmt=%r'%fmt
   #print 'DEBUG: fmt=%r'%fmt
