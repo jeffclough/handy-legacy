@@ -18,7 +18,7 @@ for n in sys.argv[1:]:
   # Find all factors for this value of n.
   factors=set([])
   x=1.0
-  limit=math.sqrt(n)
+  limit=int(round(math.sqrt(n)))
   while x<=limit:
     x+=1
     f,i=math.modf(n/x)

@@ -17,7 +17,7 @@ for f in args:
   # Get the time this file was created, accessed, or modified.
   if opt.time=='created':
     t=os.stat(f).st_ctime
-  if opt.time=='accessed':
+  elif opt.time=='accessed':
     t=os.stat(f).st_atime
   else:
     t=os.stat(f).st_mtime

@@ -59,8 +59,8 @@ Formatting (from Python's docs for its time module):
 op.add_option('-c','--epoch',dest='epoch',default=False,action='store_true',help="Output the number of C Epoch seconds. Overrides --output-format.")
 op.add_option('-h','--help',dest='help_me',default=False,action='store_true',help="Display this help text and exit.")
 op.add_option('-t','--time',dest='time',action='store',default=None,help="Use the given time rather than the current time.")
-op.add_option('--input-format',dest='ifmt',action='store',default='%x %X',help="Use the given format to read -t's argument.")
-op.add_option('--output-format',dest='ofmt',action='store',default=IN_FMT,help="Use the given format to write the given or default time. Overridden by -c (--epoch).")
+op.add_option('--input-format',dest='ifmt',action='store',default='%x %X',help="Use the given format to read -t's argument. (default: %default)")
+op.add_option('--output-format',dest='ofmt',action='store',default=IN_FMT,help="Use the given format to write the given or default time. (default: %default) Overridden by -c (--epoch).")
 
 opt,args=op.parse_args()
 if opt.help_me:
