@@ -4,10 +4,9 @@ from getopt import *
 from os.path import *
 from string import *
 from sys import *
-import re,readline
+import re
 
-progname=basename(argv[0])
-history=expanduser('~/.%s.hist'%progname)
+prog=basename(argv[0])
 
 def usage(rc):
   if rc==0:
@@ -19,7 +18,7 @@ NAME
   %s - Print lines matching a Python regular expression.
   
 SYNOPSIS
-  %s [options] pattern [file ...]
+  %s [--flags={ilmsux}] [-ilnv] pattern [file ...]
 
 DESCRIPTION
   While this command may be generally useful, its primary purpose is as a
@@ -29,6 +28,17 @@ DESCRIPTION
   given pattern.  By default, the matching lines are printed.
 
 OPTIONS
+  -f FORMAT
+      Format matching (or non-matching lines if -v is also used) according
+      to the given FORMAT. FORMAT is a Python formatting string as described
+      in 7.1.3 of the Python Standard Library documentation. Briefly, all
+      brace expressions ({}) are replaced by either positional or named
+      groups within the matched regular expression. You can leave the braces
+      empty to let the formatter do the counting for you (e.g. '{} then {}'
+      is the same as '{0} then {1}'). If the matched RE uses named groups
+      (e.g. '(?P<age>\d+) (?P<lname>[%,]+),(?P<fname>.*)'), then the FORMAT
+      string can refer what those groups match my name (e.g. '{fname}
+      {lname} is {age} years of age.').
   --flags
     Use as many of the following as you'd like to set the Python regular
     expression options:
@@ -47,17 +57,11 @@ OPTIONS
 	  through the end of the line are ignored.
     Combine these flags as you'd like, e.g. --flags=ims.
 
-  -g  Show the tuple of matching groups for each matching line. (Use with
-      -M to show multiple matches per line.)
+  -g  Show the tuple of matching groups for each matching line.
 
   -G  Show the dictionary of matching named groups for each matching line.
-      (Use with -M to show multiple matches per line.)
 
   -i  Ingore case. (Same as --flags=i.)
-
-  -I  Interactive operation. In this mode, the user is prompted on standard
-      input for the regular expression to be matched to the content of the
-      files named on the command line.
 
   -l  Suppress normal output; instead print the name of each input file
       from which no output would normally have been printed. The scanning
@@ -70,16 +74,10 @@ OPTIONS
       line, while search() will scan the whole line for at match anywhere
       within it.
 
-  -M  Find multiple matches on each line. Since this only makes a difference
-      when used with -g or -G, if neither of those options is given on the
-      command line, -g is assumed.
-
   -n  Prefix each line of output with the line number within its input file.
       See -l for how it modifies -n's behavior.
 
   -v  Invert the sense of matching so that non-matching lines are selected.
-      This option makes no sense with -g or -G, those options quietly turn
-      -v off automatically.
 
 REGULAR EXPRESSION SYNTAX
 
@@ -363,7 +361,7 @@ DIAGNOSTICS
 
   Note that the -v option reverses the meanings of status codes 0 and 1.
 
-'''%(basename(argv[0]),basename(argv[0]))
+'''%(prog,prog)
   exit(rc)
 
 def grepfile(filename,r):
@@ -390,28 +388,6 @@ def grepfile(filename,r):
     linecount+=1
     if line and line[-1]=='\n':
       line=line[:-1]
-    if opt_multi:
-      m=r.search(line)
-      if m:
-	if opt_number:
-	  if opt_onefile:
-	    print '%d:%s'%(linecount,line)
-	  else:
-	    print '%s:%d:%s'%(filename,linecount,line)
-	else:
-	  if opt_onefile:
-	    print line
-	  else:
-	    print '%s:%s'%(filename,line)
-	for m in r.finditer(line):
-	  matches+=1
-	  if opt_groups and m.groups():
-            print '('+')('.join(['%s'%repr(x) for x in m.groups()])+')'
-	  if opt_groupdict and m.groupdict():
-            d=m.groupdict()
-            print ' '.join(['%s=%s'%(x,repr(d[x])) for x in d])
-	print ''  
-      continue
     if opt_match:
       m=r.match(line)
     else:
@@ -419,10 +395,26 @@ def grepfile(filename,r):
     if (m!=None) != opt_invert:
       matches+=1
       if opt_list:
-	if not opt_number:
-	  # If we're here, the first match per file is all we need to find.
-	  break
-      elif opt_number:
+	if opt_number:
+          continue
+        break
+      if opt_format:
+        try:
+
+          line=opt_format.format(line,*m.groups(),**m.groupdict())
+        except AttributeError,e:
+          print 'opt_format=%r (type=%s)'%(opt_format,type(opt_format))
+          msg=str(e)
+          stdout.flush()
+          stderr.write('%s: %s(%d): %s\n'%(prog,filename,linecount,msg))
+          raise
+          exit(2)
+        except IndexError,e:
+          msg=str(e)
+          stdout.flush()
+          stderr.write('%s: %s(%d): %s\n'%(prog,filename,linecount,msg))
+          exit(2)
+      if opt_number:
 	if opt_onefile:
 	  print '%d:%s'%(linecount,line)
 	else:
@@ -456,26 +448,27 @@ def grepfile(filename,r):
   return matches
 
 # Handle our command line.
-opt_reflags=0	      # --flag=...
-opt_interactive=False # -I
-opt_list=False	      # -l
-opt_multi=False	      # -M
-opt_number=False      # -n
-opt_invert=False      # -v
-opt_onefile=False     # True if we're scanning only one file.
-opt_groups=False      # True if we're to show matching groups.
-opt_groupdict=False   # True if we're to show matching group dictionaries.
-opt_match=False	      # True if we're to use match() rather than search().
+opt_format=None     # -f FORMAT
+opt_reflags=0	    # --flag=...
+opt_list=False	    # -l
+opt_number=False    # -n
+opt_invert=False    # -v
+opt_onefile=False   # True if we're scanning only one file.
+opt_groups=False    # True if we're to show matching groups.
+opt_groupdict=False # True if we're to show matching group dictionaries.
+opt_match=False     # True if we're to use match() rather than search().
 
 if len(argv)<2:
   usage(0)
 try:
-  opts,args=getopt(argv[1:],'GgIilMmnv','flags=')
+  opts,args=getopt(argv[1:],'f:Ggilmnv','flags=')
 except Exception,e:
   print >>stderr,'%s: %s'%(argv[0],e)
   exit(2)
 for opt,arg in opts:
-  if opt=='--flags':
+  if opt=='-f':
+    opt_format=arg
+  elif opt=='--flags':
     for f in arg:
       if f=='i':
 	opt_reflags|=re.IGNORECASE
@@ -496,14 +489,10 @@ for opt,arg in opts:
     opt_groupdict=True
   elif opt=='-g':
     opt_groups=True
-  elif opt=='-I':
-    opt_interactive=True
   elif opt=='-i':
     opt_reflags|=re.IGNORECASE
   elif opt=='-l':
     opt_list=True
-  elif opt=='-M':
-    opt_multi=True
   elif opt=='-m':
     opt_match=True
   elif opt=='-n':
@@ -511,19 +500,12 @@ for opt,arg in opts:
   elif opt=='-v':
     opt_invert=True
 
-if opt_multi and not (opt_groups or opt_groupdict):
-  opt_groups=True
-if opt_invert and (opt_groups or opt_groupdict):
-  opt_invert=False
-
-# Compile our regular expression.
-if not args:
-  if opt_interactive:
-    print >>stderr,'%s: No input files given.'%argv[0]
-  else:
+matches=0
+try:
+  # Compile our regular expression.
+  if not args:
     print >>stderr,'%s: Missing regular expression'%argv[0]
-  exit(2)
-if not opt_interactive:
+    exit(2)
   try:
     r=re.compile(args[0],opt_reflags)
   except Exception,e:
@@ -531,44 +513,18 @@ if not opt_interactive:
     exit(2)
   del args[0]
 
-# Apply special handling to interactive sessions.
-if opt_interactive:
+  # Scan the given files (or stdin) for our regular expression.
+  if not args:
+    args=['-']
   if len(args)==1:
     opt_onefile=True
-  try:
-    readline.read_history_file(history)
-  except IOError,e:
-    if e.errno!=2:
-      raise e
-  while True:
-    try:
-      exp=raw_input('pygrep> ')
-    except:
-      exit(0)
-    if not exp:
-      continue
-    readline.write_history_file(history)
-    try:
-      r=re.compile(exp,opt_reflags)
-    except Exception,e:
-      print str(e)
-      print repr(e)
-      continue
-    matches=0
-    for filename in args:
-      matches+=grepfile(filename,r)
+  for filename in args:
+    matches+=grepfile(filename,r)
 
-# Scan the given files (or stdin) for our regular expression.
-if not args:
-  args=['-']
-if len(args)==1:
-  opt_onefile=True
-matches=0
-for filename in args:
-  matches+=grepfile(filename,r)
+except IOError,e:
+  if 'broken pipe' not in str(e).lower():
+    raise
 
 # Terminate with an exit status of 0 if found a match. Otherwise, terminate
 # with an exit status of 1.
-if matches>0:
-  exit(0)
-exit(1)
+exit(int(matches<1))
