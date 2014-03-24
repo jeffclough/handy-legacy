@@ -36,7 +36,7 @@ OPTIONS
       groups within the matched regular expression. You can leave the braces
       empty to let the formatter do the counting for you (e.g. '{} then {}'
       is the same as '{0} then {1}'). If the matched RE uses named groups
-      (e.g. '(?P<age>\d+) (?P<lname>[%,]+),(?P<fname>.*)'), then the FORMAT
+      (e.g. '(?P<age>\d+) (?P<lname>[^,]+),(?P<fname>.*)'), then the FORMAT
       string can refer what those groups match my name (e.g. '{fname}
       {lname} is {age} years of age.').
   --flags
