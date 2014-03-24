@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import csv,optparse,os,sys
+import csv,optparse,os,re,sys
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Handle the command line.
@@ -15,7 +15,7 @@ help='''Accept any one of the following dialect parameters. As many -D options m
   escapechar=None
   doublequote=True
   skipinitialspace=False
-  lineterminator=\\r\\n
+  lineterminator=\\n
   quoting=QUOTE_MINIMAL''',
 dest='dialect',action='append',default=[])
 
@@ -27,7 +27,7 @@ help='''Accept any one of the following dialect parameters. As many -R options m
   escapechar=None
   doublequote=True
   skipinitialspace=False
-  lineterminator=\\r\\n
+  lineterminator=\\n
   quoting=QUOTE_MINIMAL''',
 dest='read_as',action='append',default=[])
 
@@ -39,7 +39,7 @@ help='''Accept any one of the following dialect parameters. As many -W options m
   escapechar=None
   doublequote=True
   skipinitialspace=False
-  lineterminator=\\r\\n
+  lineterminator=\\n
   quoting=QUOTE_MINIMAL''',
 dest='write_as',action='append',default=[])
 
@@ -59,6 +59,10 @@ opt_parser.add_option('-s',
 help="Strip white space from the left and/or right of each field. STRIP may be l, r, lr, or rl. If l is given, white space is be stripped from the left. If r is given, white space is stripped from the right. (Yes, it's rocket science.) By default, no white space is stripped.",
 dest='strip',action='store',default='')
 
+opt_parser.add_option('--vars',
+help="""This option produces output similar to what could be accomplished with the -o option (e.g., -o "name='%1';email='%2';labs='%3';affil='$4'"), but specifying variables this way is simpler, AND the values are safe to use with your shell's eval command. Just give the names of the variables as a list of comma- or space-separated strings, and run eval on the individual lines. (E.g. cutcsv --vars name,email,labs,affil | while read line; do eval "$line"; ... use the variables here ...; done)""",
+dest='vars',action='store',default='')
+
 class CsvDialect(object):
 
   def __init__(self,spec=None):
@@ -71,7 +75,7 @@ class CsvDialect(object):
     self.escapechar=None
     self.doublequote=True
     self.skipinitialspace=False
-    self.lineterminator='\r\n'
+    self.lineterminator='\n'
     self.quoting=csv.QUOTE_MINIMAL
 
     if spec==None:
@@ -146,6 +150,10 @@ for ch in opt.strip:
     print >>sys.stderr,'arguments to -s may include only l and r'
     sys.exit(2)
 
+# Turn any list of shell variables we have into a list of variable names.
+if opt.vars:
+  opt.vars=[var for var in re.split('\W+',opt.vars)]
+
 def parseRangeList(s):
   '''Convert string list of ranges into a list of (n,m) range tuples.'''
 
@@ -209,6 +217,10 @@ def stripfield(s,sides):
 if not args:
   args=['-']
 
+# These characters are escaped when using the --vars option.
+re_escape=re.compile(r'''([\\"`$])''')
+#re_escape=re.compile(r'''([aeiou])''')
+
 # Prepare for CSV output.
 writer=csv.writer(open('/dev/stdout','wb'),dialect=write_dialect)
 
@@ -247,5 +259,10 @@ for filename in args:
       for i in field_indices:
 	s=s.replace('%'+str(i+1),fields[i])
       print s
+    elif (opt.vars): # Output shell-executable variable assignments.
+      fields=[re_escape.sub(r'\\\1',f) for f in fields]
+      if (opt.vars)>len(fields): # Protect against initialization issues.
+        fields.extend(['']*(len(opt.vars)-len(fields)))
+      print ';'.join(['%s="%s"'%(v,f) for v,f in zip(opt.vars,fields)])
     else: # Output CSV.
       writer.writerows([fields])
