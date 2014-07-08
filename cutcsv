@@ -1,11 +1,18 @@
 #!/usr/bin/env python
 
 import csv,optparse,os,re,sys
+import xlrd
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Handle the command line.
 
-opt_parser=optparse.OptionParser()
+opt_parser=optparse.OptionParser(
+  usage="%prog [options] [filename] ...",
+  description="""
+  This program does for CSV files (or Excel files, depending on file extension) what the
+  traditional cut command does for more simply delimited data.
+  """
+)
 
 opt_parser.add_option('-D','--dialect',
 help='''Accept any one of the following dialect parameters. As many -D options may be specified as are needed.
@@ -195,6 +202,18 @@ else:
 if opt.fmt:
   opt.fmt=opt.fmt.replace(r'\r','\r').replace(r'\n','\n').replace(r'\t','\t')
 
+def xlsreader(filename,worksheet=0):
+  """This is a generator function that returns one row at a time fromt
+  the given Excel spreadsheet file. By default, the first worksteet (0)
+  is the one that's used."""
+
+  book=xlrd.open_workbook(filename)
+  sheet=book.sheet_by_index(worksheet)
+  r=0
+  while r<sheet.nrows:
+    yield [x.value for x in sheet.row(r)]
+    r+=1
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 def stripfield(s,sides):
@@ -219,7 +238,10 @@ if not args:
 
 # These characters are escaped when using the --vars option.
 re_escape=re.compile(r'''([\\"`$])''')
-#re_escape=re.compile(r'''([aeiou])''')
+
+# Any input file whose name matches this pattern in interpreted as an Excel
+# spreadsheet.
+re_excel_filename=re.compile(r'\.xls[^.]*$')
 
 # Prepare for CSV output.
 writer=csv.writer(open('/dev/stdout','wb'),dialect=write_dialect)
@@ -229,7 +251,10 @@ for filename in args:
     filename='/dev/stdin'
   else:
     filename=os.path.expanduser(filename) # Expands '~' to $HOME.
-  reader=csv.reader(open(filename,'rb'),dialect=read_dialect)
+  if re_excel_filename.search(filename):
+    reader=xlsreader(filename)
+  else:
+    reader=csv.reader(open(filename,'rb'),dialect=read_dialect)
 
   #print 'opt.fields=%r'%opt.fields
   #print 'opt.joinfields=%r'%opt.joinfields
