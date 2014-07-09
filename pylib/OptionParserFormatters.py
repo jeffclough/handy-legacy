@@ -1,4 +1,39 @@
-import optparse,textwrap
+import optparse,os,textwrap
+
+def getTerminalSize():
+  '''This function came from StackOverflow.com (wonderful site) in an
+  answer posted by Johannes WeiB (the B is really a beta symbol). He
+  didn't know the source.'''
+
+  import os
+  env = os.environ
+  def ioctl_GWINSZ(fd):
+    try:
+      import fcntl, termios, struct, os
+      cr=struct.unpack(
+        'hh',
+        fcntl.ioctl(fd,termios.TIOCGWINSZ,'1234')
+      )
+    except:
+      return
+    return cr
+  cr=ioctl_GWINSZ(0) or ioctl_GWINSZ(1) or ioctl_GWINSZ(2)
+  if not cr:
+    try:
+      fd=os.open(os.ctermid(),os.O_RDONLY)
+      cr=ioctl_GWINSZ(fd)
+      os.close(fd)
+    except:
+      pass
+  if not cr:
+    cr=(env.get('LINES',25),env.get('COLUMNS',80))
+  return int(cr[1]),int(cr[0])
+
+terminal_columns,terminal_rows=getTerminalSize()
+
+#terminal_rows,terminal_columns=[
+#  int(x) for x in os.popen('stty size','r').read().split()
+#]
 
 # Set up our command line syntax so that we can parse the command line.
 class IndentedHelpFormatterWithNL(optparse.IndentedHelpFormatter):
@@ -6,7 +41,13 @@ class IndentedHelpFormatterWithNL(optparse.IndentedHelpFormatter):
   augmented to handle epilog strings, from Tim Chase's post to
   comp.lang.python on 2007-09-30. Thanks, Tim.'''
 
-  def __init__(self,indent_increment=2,max_help_position=24,width=None,short_first=1):
+  def __init__(
+    self,
+    indent_increment=2,
+    max_help_position=24,
+    width=terminal_columns,
+    short_first=1
+  ):
     optparse.IndentedHelpFormatter.__init__(
       self,
       indent_increment,
