@@ -11,6 +11,8 @@ SCRIPTS=chronorename columnate cutcsv decode64 encode64 factors gensig/gensig \
 
 DATA=gensig/quotes gensig/*.sig
 
+PYTHON_PKGS=xlrd
+
 CC=cc
 GCC=gcc
 SYSTYPE=$(shell uname)
@@ -33,7 +35,18 @@ endif
 
 all: $(PROGS)
 
-install: $(PROGS)
+python_pkgs:
+	@for p in $(PYTHON_PKGS); do \
+	echo $$p; \
+	test -d pkgs/$$p || \
+	easy_install --build-directory pkgs --editable $$p; \
+	cd pkgs/$$p && \
+	python setup.py build && \
+	rsync -uav build/lib/$$p $(HOME)/my/lib/python && \
+	cd ../..; \
+	done
+
+install: $(PROGS) python_pkgs
 	@for p in $(PROGS); do echo cp -p $$p $(HOME)/my/bin; cp -p $$p $(HOME)/my/bin; done
 	@for p in $(SCRIPTS); do echo cp -p $$p $(HOME)/my/bin; cp -p $$p $(HOME)/my/bin; done
 	@for p in $(DATA); do echo cp -p $$p $(HOME)/my/etc; cp -p $$p $(HOME)/my/etc; done
