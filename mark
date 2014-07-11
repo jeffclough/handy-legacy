@@ -64,62 +64,62 @@ envopts=shlex.split(os.getenv('MARKOPTS','').strip())
 if envopts:
   sys.argv[1:1]=envopts
 
-usage='''Usage:
-  Form 1: %prog [options] [RE ...]
-  Form 2: %prog [options] --columns=COLUMNS
-  Form 3: %prog [options] --csv
-  Form 4: %prog [options] --fields=FIELDS
-
-Description: The %prog command is a filter (reads from standard input
-and writes to standard output) that colors its output using ANSI escape
-sequences. Because of this, %prog's output is suitable only for terminal
-display. Redirecting %prog's output to a file or to the input of another
-command (except for things like the "less" command) will likely yield
-unwanted results.
-
-Form 1 of %prog scans each line for any REs (regular expressions) given
-as arguments. Any text matching the first RE is colored by the first
-palette entry, any text matching the second RE is colored by the second,
-and so on. By default, the palette entries are red, green, yellow, bold
-blue, magenta, and cyan, all against a black background. The --palette
-option can be used to change the list of colors.
-
-By default, the number of REs used from the command line is limited to
-the number of entries in the palette. Exceeding this number of REs is
-not an error, but text matching the surplus REs will not be colored. Use
-the -w option to change this bahavior.
-
-Since %prog is written in Python, Python's regular expression extensions
-are available. Python REs are extensions of POSIX EREs, but it uses
-Perl-like character classes (e.g. \s and \w) rather than POSIX character
-classes (e.g. [:space:] and [:word:], respectively), making REs more
-concise. Use --re-help to get a brief lesson in Python REs.
-
-NOTE: Because of how %prog currently handles REs, using the (?...) RE
-forms will cause an error. This is a known bug and is on the list of
-things to fix.
-
-Forms 2-4 take no RE. They use column or field position to determine the
-color of each part of the output, the first field according to the first
-palette entry, and so forth.
-
-The MARKOPTS environment variable may be used to supply default command
-line options to %prog. Anything found in this variable is processed
-before %prog's command line options. The value of MARKOPTS is
-interpreted in a shell context, so be sure to quote or escape any white
-space. '''
+epilog='\n'
 if envopts:
-  usage+='''MARKOPTS currently contains:
+  epilog+='''MARKOPTS currently contains:
 
 '''+'\n'.join(['    %s'%x for x in envopts])
 else:
-  usage+='MARKOPTS is currently empty.'
-usage+='''
+  epilog+='MARKOPTS is currently empty.'
+epilog+='''
 
 NOTE: The context options have not yet been implemented!
 '''
 
-op=optparse.OptionParser(usage=usage)
+import OptionParserFormatters
+op=optparse.OptionParser(
+  formatter=OptionParserFormatters.IndentedHelpFormatterWithNL(2,8),
+  usage=''' Form 1: %prog [options] [RE ...]
+  Form 2: %prog [options] --columns=COLUMNS
+  Form 3: %prog [options] --csv
+  Form 4: %prog [options] --fields=FIELDS''',
+  description='''The %prog command is a filter (reads from standard input and
+writes to standard output) that colors its output using ANSI escape sequences.
+Because of this, %prog's output is suitable only for terminal display.
+Redirecting %prog's output to a file or to the input of another command (except
+for things like the "less" command) will likely yield unwanted results.
+
+Form 1 of %prog scans each line for any REs (regular expressions) given as
+arguments. Any text matching the first RE is colored by the first palette
+entry, any text matching the second RE is colored by the second, and so on. By
+default, the palette entries are red, green, yellow, bold blue, magenta, and
+cyan, all against a black background. The --palette option can be used to
+change the list of colors.
+
+By default, the number of REs used from the command line is limited to the
+number of entries in the palette. Exceeding this number of REs is not an error,
+but text matching the surplus REs will not be colored. Use the -w option to
+change this bahavior.
+
+Since %prog is written in Python, Python's regular expression extensions are
+available. Python REs are extensions of POSIX EREs, but it uses Perl-like
+character classes (e.g. \s and \w) rather than POSIX character classes (e.g.
+[:space:] and [:word:], respectively), making REs more concise. Use --re-help
+to get a brief lesson in Python REs.
+
+NOTE: Because of how %prog currently handles REs, using the (?...) RE forms
+will cause an error. This is a known bug and is on the list of things to fix.
+
+Forms 2-4 take no RE. They use column or field position to determine the color
+of each part of the output, the first field according to the first palette
+entry, and so forth.
+
+The MARKOPTS environment variable may be used to supply default command line
+options to %prog. Anything found in this variable is processed before %prog's
+command line options. The value of MARKOPTS is interpreted in a shell context,
+so be sure to quote or escape any white space.''',
+  epilog=epilog
+)
 
 op.add_option('-C',dest='comment_mode',action='store_true',default=False,
   help='''Turns on comment mode, which inserts the comment pattern (see --comment) at the start of the pattern list. This marks any line whose first non-space character is '#', which is very commonly a comment line. Use the --comment option to change the pattern used to idententify comments.''')
