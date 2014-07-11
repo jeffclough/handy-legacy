@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import optparse,os,stat,sys,time
+import optparse,os,shutil,stat,sys,time
 
 prog=os.path.basename(sys.argv[0])
 
@@ -11,6 +11,7 @@ op.add_option('-t','--time',dest='time',choices=('created','accessed','modified'
 op.add_option('--format',dest='format',action='store',default='%(filename)s.%(time)s',help="Specify a new format for a time-stamped filename. (default: %default)")
 op.add_option('--time-format',dest='time_format',action='store',default='%Y%m%d_%H%M%S',help="Specify the format for expressing a file's timestamp. (default: %default)")
 op.add_option('-n','--dry-run',dest='dry_run',action='store_true',default=False,help="Don't actually rename any files. Only output the new name of each file as it would be renamed.")
+op.add_option('--copy',dest='copy',action='store_true',default=False,help="Copy the file rather than renaming it.")
 opt,args=op.parse_args()
 
 for f in args:
@@ -27,15 +28,20 @@ for f in args:
   filename=opt.format%dict(filename=f,time=t)
   if opt.dry_run:
     # Just output the new name of the file.
-    print filename
+    print "'%s' %s> '%s'"%(f,'-='[opt.copy],filename)
   else:
     # Ensure that there's no existing file by the new filename.
     if os.path.lexists(filename):
-      os.stdout.flush()
-      sys.stderr.write('%s: already exists: %s\n'%(prog,filename))
-      os.stderr.flush()
+      sys.stdout.flush()
+      sys.stderr.write('%s: file exists: %s\n'%(prog,filename))
+      sys.stderr.flush()
       continue
     else:
-      # Rename f to filename.
-      print "'%s' -> '%s'"%(f,filename)
-      os.rename(f,filename)
+      if opt.copy:
+        # Copy f to filename.
+        print "'%s' => '%s'"%(f,filename)
+        shutil.copy2(f,filename)
+      else:
+        # Rename f to filename.
+        print "'%s' -> '%s'"%(f,filename)
+        os.rename(f,filename)
