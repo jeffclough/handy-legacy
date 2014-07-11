@@ -1,0 +1,166 @@
+#!/usr/bin/env python
+
+import optparse,os,re,sys,time
+import adhoc
+
+# Components of the current date and time are needed in lots of places
+# in this code, so I'm just making them globally available. So there.
+YYYY,MM,DD,hh,mm,ss,dummy,dummy,dst=time.localtime()
+tz=time.tzname[dst]
+
+# Our default time input format is also used several times, and it's
+# silly (and error-prone) to repeat it in all those places.
+IN_FMT='%Y-%m-%d %H:%M:%S %Z'
+
+op=optparse.OptionParser(
+  add_help_option=False,
+  prog=os.path.basename(sys.argv[0]),
+  usage='''Usage: %prog [OPTIONS] [t]
+
+Description:
+  Output the current or given (t) time in the specified or default format.
+
+Formatting (from Python's docs for its time module):
+%a  Locale's abbreviated weekday name.   
+%A  Locale's full weekday name.  
+%b  Locale's abbreviated month name.     
+%B  Locale's full month name.    
+%c  Locale's appropriate date and time representation.   
+%d  Day of the month as a decimal number [01,31].    
+%H  Hour (24-hour clock) as a decimal number [00,23].        
+%I  Hour (12-hour clock) as a decimal number [01,12].        
+%j  Day of the year as a decimal number [001,366].   
+%m  Month as a decimal number [01,12].       
+%M  Minute as a decimal number [00,59].      
+%p  Locale's equivalent of either AM or PM. (1)
+%S  Second as a decimal number [00,61]. (2)
+%U  Week number of the year (Sunday as the first day of the week) as a decimal
+    number [00,53]. All days in a new year preceding the first Sunday are
+    considered to be in week 0. (3)
+%w  Weekday as a decimal number [0(Sunday),6].       
+%W  Week number of the year (Monday as the first day of the week) as a decimal
+    number [00,53]. All days in a new year preceding the first Monday are
+    considered to be in week 0. (3)
+%x  Locale's appropriate date representation.    
+%X  Locale's appropriate time representation.    
+%y  Year without century as a decimal number [00,99].        
+%Y  Year with century as a decimal number.   
+%Z  Time zone name (no characters if no time zone exists).   
+%%  A literal '%' character.
+
+1. When used with the strptime() function, the %p directive only affects the
+   output hour field if the %I directive is used to parse the hour.
+2. The range really is 0 to 61; this accounts for leap seconds and the (very
+   rare) double leap seconds.
+3. When used with the strptime() function, %U and %W are only used in
+   calculations when the day of the week and the year are specified.
+
+''')
+op.add_option('-c','--epoch',dest='epoch',default=False,action='store_true',help="Output the number of C Epoch seconds. Overrides --output-format.")
+op.add_option('-h','--help',dest='help_me',default=False,action='store_true',help="Display this help text and exit.")
+op.add_option('-t','--time',dest='time',action='store',default=None,help="Use the given time rather than the current time.")
+op.add_option('--input-format',dest='ifmt',action='store',default='%x %X',help="Use the given format to read -t's argument.")
+op.add_option('--output-format',dest='ofmt',action='store',default=IN_FMT,help="Use the given format to write the given or default time. Overridden by -c (--epoch).")
+
+opt,args=op.parse_args()
+if opt.help_me:
+  op.print_help()
+  sys.exit(0)
+
+def timeFromSingleValue(td):
+  'Given a time expressed as a single value, return a time.struct_time for it.'
+
+  pass
+
+# Various time formats we might have to read, along with their corresponding
+# vetting functions and strptime() formats.
+# Elements of tf are (RE, (is_valid(Y,M,D,h,m,s), timeFromValue(td)), ...)
+# where the tuple of functions may be repeated.
+tf=(
+  ( # Handle some number of seconds, minutes, hours, days, or weeks since
+    # the start of the C Epoch.
+    re.compile('^(?P<sec>\d+)(?P<units>[smhdw])?$'),
+    (
+      (lambda td: True), # The matched RE is all the vetting we need.
+      timeFromSingleValue
+    )
+  ),
+  ( # Handle hour:minutes:seconds expressions.
+    re.compile('^(?P<hour>\d+)(?P<tsep>:)(?P<min>\d+)(?P=tsep)(?P<sec>\d+)$'),
+    (
+      (lambda td: td.hour>=0 and td.hour<24 and td.min>=0 and td.min<60 and td.sec>=0 and td.min<60),
+      (lambda td: time.strptime('%d-%d-%d %d:%d:%d %s'%(YYYY,MM,DD,td.hour,td.min,td.sec,tz),IN_FMT))
+    )
+  ),
+  (
+    re.compile('^(?P<d1>\d+)(?P<dsep>[-/.])(?P<d2>\d+)(?P=dsep)(?P<d3>\d+)$'),
+  ),
+  (
+    re.compile(
+      '^(?P<d1>\d+)(?P<dsep>[-/.])(?P<d2>\d+)(?P=dsep)(?P<d3>\d+)\s+'
+      '(?P<hour>\d+)(?P<tsep>[.:])(?P<min>\d+)(?P=tsep)(?P<sec>\d+)$'
+    ),
+  )
+)
+
+if args:
+  ts=args[0]  # Get the time string from the argument list.
+
+  # Match one of our timestamp input formats.
+  for pat,functions in tf:
+    m=pat.search(ts)
+    if m:
+      td=adhoc.AdHoc(**(m.groupdict('')))
+      #print ' '.join(['%s=%r'%(p,td.get(p)) for p in 'd1 d2 d3 dsep hour min sec tsep units'.split()])
+      for p in 'd1 d2 d3 hour min sec'.split(): # Integerize each part of our time string.
+        try:
+          if p in td:
+            td[p]=int(td[p])
+        except:
+          print >>sys.stderr,'%r is not an integer value.'%td[p]
+          sys.exit(1)
+      for validate,parse in functions:
+        if vet(td):
+          tstruct=parse(td)
+  if not m:
+    print >>sys.stderr,'Unrecognized time format in argument: %r'%ts
+    sys.exit(1)
+
+  # Create an epoch time from the user's time argument.
+  if 'units' in td:
+    t=td.sec
+    if td.units=='s':
+      pass
+    elif td.units=='m':
+      t*=60
+    elif td.units=='h':
+      t*=3600
+    elif td.units=='d':
+      t*=86400
+    elif td.units=='w':
+      t*=86400*7
+    else:
+      print >>sys.stderr,'Unrecognized units in %r'%ts
+      sys.exit(1)
+  else:
+    t=0
+    Y,M,D,h,m,s=time.localtime()[:6]
+    # Start with midnight on the current or given day.
+    if 'd1' not in td:
+      td.d1,td.d2,td.d3=Y,M,D
+    t=int(time.mktime((td.d1,td.d2,td.d3,0,0,0,0,1,-1)))
+    # Add seconds for the current or given hour:minute:second.
+    td.hour=td.get('hour',h)
+    td.min=td.get('min',m)
+    td.sec=td.get('sec',s)
+    # Add the time of day to t.
+    t+=td.hour*3600+td.min*60+td.sec
+else:
+  # No time argument found on command line, so use current time.
+  t=int(time.time())
+
+# Output time t in the requested or default format.
+if opt.epoch:
+  print t
+else:
+  print time.strftime(opt.ofmt,time.gmtime(t))
