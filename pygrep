@@ -40,8 +40,7 @@ def grepfile(filename,r):
         break
       if opt.format:
         try:
-
-          line=opt.format.format(line,*m.groups(),**m.groupdict())
+          line=opt.format.format(*m.groups(),**m.groupdict())
         except AttributeError,e:
           print 'opt.format=%r (type=%s)'%(opt.format,type(opt.format))
           msg=str(e)
@@ -53,6 +52,11 @@ def grepfile(filename,r):
           msg=str(e)
           sys.stdout.flush()
           sys.stderr.write('%s: %s(%d): %s\n'%(progname,filename,linecount,msg))
+          exit(2)
+        except ValueError,e:
+          msg=str(e)
+          sys.stdout.flush()
+          sys.stderr.write('%s: format value error: %s\n'%(progname,msg))
           exit(2)
       if opt.number:
 	if opt.onefile:
@@ -123,6 +127,8 @@ op.add_option('-i',dest='ignore_case',action='store_true',default=False,help="In
 
 op.add_option('-l',dest='list',action='store_true',default=False,help="Suppress normal output; instead print the name of each input file from which no output would normally have been printed. The scanning will stop on the first match. If -n is used with -l, the number of matches in each file is given after the filename, with a colon separating them.")
 
+op.add_option('-1',dest='onefile',action='store_true',default=False,help="Matching lines are normally prefixed with the filename followed by a colon when more than one filename is given on the command line. When only one filename is given, this prefix is omitted. This option tells %prog to behave as if only one file were given regardless of how many were actually given. (default: %default)")
+
 op.add_option('-m',dest='match',action='store_true',default=False,help="Use the match() function rather than the search() re class method. To over-simplify, match() only finds matches at the beginning of a line, while search() will scan the whole line for at match anywhere within it.")
 
 op.add_option('-n',dest='number',action='store_true',default=False,help="Prefix each line of output with the line number within its input file. See -l for how it modifies -n's behavior.")
@@ -168,8 +174,8 @@ try:
   # Scan the given files (or stdin) for our regular expression.
   if not args:
     args=['-']
-  if len(args)==1:
-    opt.onefile=True
+  if not opt.onefile:
+    opt.onefile=len(args)==1
   for filename in args:
     matches+=grepfile(filename,r)
 

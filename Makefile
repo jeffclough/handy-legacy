@@ -7,7 +7,7 @@ PROGS=datecycle dump freq mix numlines ph portname randword secdel \
 	timeshift
       
 SCRIPTS=chronorename columnate cutcsv decode64 encode64 factors gensig/gensig \
-	ip2host mark names pa pygrep strftime ts
+	ip2host mark names now pa pygrep strftime ts
 
 DATA=gensig/quotes gensig/*.sig
 
