@@ -47,8 +47,8 @@ python_pkgs:
 	done
 
 install: $(PROGS) python_pkgs
-	@for p in $(PROGS); do echo cp -p $$p $(HOME)/my/bin; cp -p $$p $(HOME)/my/bin; done
-	@for p in $(SCRIPTS); do echo cp -p $$p $(HOME)/my/bin; cp -p $$p $(HOME)/my/bin; done
+	@for p in $(PROGS); do chmod 755 $$p; echo cp -p $$p $(HOME)/my/bin; cp -p $$p $(HOME)/my/bin; done
+	@for p in $(SCRIPTS); do chmod 755 $$p; echo cp -p $$p $(HOME)/my/bin; cp -p $$p $(HOME)/my/bin; done
 	@for p in $(DATA); do echo cp -p $$p $(HOME)/my/etc; cp -p $$p $(HOME)/my/etc; done
 	@for p in pylib/*; do echo cp -p $$p $(HOME)/my/lib/python; cp -p $$p $(HOME)/my/lib/python; done
 
