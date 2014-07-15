@@ -4,6 +4,34 @@ import optparse,os,re,sys
 
 progname=os.path.basename(sys.argv[0])
 
+if sys.version_info<(2,6):
+  format_fieldspec=re.compile(r'{(\w*)}')
+  def format(fmt,*args,**kwargs):
+    fields=[]
+    i=0
+    for m in format_fieldspec.finditer(fmt):
+      id=m.group(1)
+      if len(id)==0:
+        id=i
+        i+=1
+      elif id.isdigit():
+        id=int(id)
+      fields.append((m.start(),m.end(),id))
+    for f in fields:
+      print repr(f)
+    for start,end,ndx in reversed(fields):
+      if isinstance(ndx,int):
+        if ndx>=0 and ndx<len(args):
+          fmt=fmt[:start]+args[ndx]+fmt[end:]
+        else:
+          fmt=fmt[:start]+fmt[end:]
+      else:
+        fmt=fmt[:start]+kwargs.get(ndx,'')+fmt[end:]
+    return fmt
+else:
+  def format(fmt,*args,**kwargs):
+    return fmt.format(*args,**kwargs)
+
 def grepfile(filename,r):
   '''Search the given file (or stdin if filename is '-') for lines that
   match the given regular expression. Return the number of matching
@@ -12,7 +40,7 @@ def grepfile(filename,r):
   # Open our input file as inf.
   if filename=='-':
     filename='(standard input)'
-    inf=stdin
+    inf=sys.stdin
   else:
     try:
       inf=open(filename)
@@ -40,7 +68,8 @@ def grepfile(filename,r):
         break
       if opt.format:
         try:
-          line=opt.format.format(*m.groups(),**m.groupdict())
+          line=format(opt.format,*m.groups(),**m.groupdict())
+          #line=opt.format.format(line,*m.groups(),**m.groupdict())
         except AttributeError,e:
           print 'opt.format=%r (type=%s)'%(opt.format,type(opt.format))
           msg=str(e)
@@ -52,11 +81,6 @@ def grepfile(filename,r):
           msg=str(e)
           sys.stdout.flush()
           sys.stderr.write('%s: %s(%d): %s\n'%(progname,filename,linecount,msg))
-          exit(2)
-        except ValueError,e:
-          msg=str(e)
-          sys.stdout.flush()
-          sys.stderr.write('%s: format value error: %s\n'%(progname,msg))
           exit(2)
       if opt.number:
 	if opt.onefile:
@@ -93,11 +117,9 @@ def grepfile(filename,r):
 
 # Handle our command line.
 import OptionParserFormatters
-op=optparse.OptionParser(
-  formatter=OptionParserFormatters.IndentedHelpFormatterWithNL(2,8),
-  usage="%prog [options] [filename] ...",
-  description="""While this command may be generally useful, its primary purpose is as a tool for experimenting with Python's regular expression syntax. Briefly, it searches the named input files (or standard input if no files are named, or the file name - is given) for lines containing a match to the given pattern. By default, the matching lines are printed. """,
-  epilog="""
+usage="%prog [options] [filename] ..."
+description="""While this command may be generally useful, its primary purpose is as a tool for experimenting with Python's regular expression syntax. Briefly, it searches the named input files (or standard input if no files are named, or the file name - is given) for lines containing a match to the given pattern. By default, the matching lines are printed. """
+epilog="""
  Exit
 Status  Comments
    0    No errors. At least one match was found.
@@ -107,7 +129,20 @@ Status  Comments
    3    There was a problem opening or reading a file.
 
 Note that the -v option reverses the meanings of status codes 0 and 1."""
-)
+
+if sys.version_info<(2,5):
+  op=optparse.OptionParser(
+    formatter=OptionParserFormatters.IndentedHelpFormatterWithNL(2,8),
+    usage=usage,
+    description=description+'\n'+epilog
+  )
+else:
+  op=optparse.OptionParser(
+    formatter=OptionParserFormatters.IndentedHelpFormatterWithNL(2,8),
+    usage=usage,
+    description=description,
+    epilog=epilog
+  )
 op.add_option('-f','--format',dest='format',action='store',default=None,help="""Format matching lines (or non-matching lines if -v is also used) according to the given FORMAT. FORMAT is a Python formatting string as described in 7.1.3 of the Python Standard Library documentation. Briefly, all brace expressions ({}) are replaced by either positional or named groups within the matched regular expression. You can leave the braces empty to let the formatter do the counting for you (e.g. '{} then {}' is the same as '{0} then {1}'). If the matched RE uses named groups (e.g. '(?P<age>\d+) (?P<lname>[^,]+),(?P<fname>.*)'), then the FORMAT string can refer to what those groups match (e.g. '{fname} {lname} is {age} years of age.').""")
 
 op.add_option('--flag',dest='flags',action='store',default=None,help="""Use as many of the following as you'd like to set the Python regular expression options:
@@ -126,8 +161,6 @@ op.add_option('-G',dest='groups',action='store_const',const='dict',default=None,
 op.add_option('-i',dest='ignore_case',action='store_true',default=False,help="Ingore case. (Same as --flag=i.)")
 
 op.add_option('-l',dest='list',action='store_true',default=False,help="Suppress normal output; instead print the name of each input file from which no output would normally have been printed. The scanning will stop on the first match. If -n is used with -l, the number of matches in each file is given after the filename, with a colon separating them.")
-
-op.add_option('-1',dest='onefile',action='store_true',default=False,help="Matching lines are normally prefixed with the filename followed by a colon when more than one filename is given on the command line. When only one filename is given, this prefix is omitted. This option tells %prog to behave as if only one file were given regardless of how many were actually given. (default: %default)")
 
 op.add_option('-m',dest='match',action='store_true',default=False,help="Use the match() function rather than the search() re class method. To over-simplify, match() only finds matches at the beginning of a line, while search() will scan the whole line for at match anywhere within it.")
 
@@ -174,8 +207,8 @@ try:
   # Scan the given files (or stdin) for our regular expression.
   if not args:
     args=['-']
-  if not opt.onefile:
-    opt.onefile=len(args)==1
+  if len(args)==1:
+    opt.onefile=True
   for filename in args:
     matches+=grepfile(filename,r)
 
@@ -185,4 +218,4 @@ except IOError,e:
 
 # Terminate with an exit status of 0 if found a match. Otherwise, terminate
 # with an exit status of 1.
-exit(int(matches<1))
+sys.exit(int(matches<1))
