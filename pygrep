@@ -4,7 +4,7 @@ import optparse,os,re,sys
 
 progname=os.path.basename(sys.argv[0])
 
-if sys.version_info<(2,6):
+if sys.version_info<(2,7):
   format_fieldspec=re.compile(r'{(\w*)}')
   def format(fmt,*args,**kwargs):
     fields=[]
@@ -17,8 +17,6 @@ if sys.version_info<(2,6):
       elif id.isdigit():
         id=int(id)
       fields.append((m.start(),m.end(),id))
-    for f in fields:
-      print repr(f)
     for start,end,ndx in reversed(fields):
       if isinstance(ndx,int):
         if ndx>=0 and ndx<len(args):
