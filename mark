@@ -60,30 +60,12 @@ following URL:
     http://docs.python.org/library/re.html#regular-expression-syntax
 '''
 
-envopts=shlex.split(os.getenv('MARKOPTS','').strip())
-if envopts:
-  sys.argv[1:1]=envopts
-
-epilog='\n'
-if envopts:
-  epilog+='''MARKOPTS currently contains:
-
-'''+'\n'.join(['    %s'%x for x in envopts])
-else:
-  epilog+='MARKOPTS is currently empty.'
-epilog+='''
-
-NOTE: The context options have not yet been implemented!
-'''
-
 import OptionParserFormatters
-op=optparse.OptionParser(
-  formatter=OptionParserFormatters.IndentedHelpFormatterWithNL(2,8),
-  usage=''' Form 1: %prog [options] [RE ...]
+usage=''' Form 1: %prog [options] [RE ...]
   Form 2: %prog [options] --columns=COLUMNS
   Form 3: %prog [options] --csv
-  Form 4: %prog [options] --fields=FIELDS''',
-  description='''The %prog command is a filter (reads from standard input and
+  Form 4: %prog [options] --fields=FIELDS'''
+description='''The %prog command is a filter (reads from standard input and
 writes to standard output) that colors its output using ANSI escape sequences.
 Because of this, %prog's output is suitable only for terminal display.
 Redirecting %prog's output to a file or to the input of another command (except
@@ -117,9 +99,37 @@ entry, and so forth.
 The MARKOPTS environment variable may be used to supply default command line
 options to %prog. Anything found in this variable is processed before %prog's
 command line options. The value of MARKOPTS is interpreted in a shell context,
-so be sure to quote or escape any white space.''',
-  epilog=epilog
-)
+so be sure to quote or escape any white space.'''
+envopts=shlex.split(os.getenv('MARKOPTS','').strip())
+if envopts:
+  sys.argv[1:1]=envopts
+
+epilog='\n'
+if envopts:
+  epilog+='''MARKOPTS currently contains:
+
+'''+'\n'.join(['    %s'%x for x in envopts])
+else:
+  epilog+='MARKOPTS is currently empty.'
+epilog+='''
+
+NOTE: The context options have not yet been implemented!
+'''
+
+if sys.version_info>=(2,5):
+  op=optparse.OptionParser(
+    formatter=OptionParserFormatters.IndentedHelpFormatterWithNL(2,8),
+    usage=usage,
+    description=description,
+    epilog=epilog
+  )
+else:
+  # Don't give OptionParser() an epilog argument if we know it can't handle it.
+  op=optparse.OptionParser(
+    formatter=OptionParserFormatters.IndentedHelpFormatterWithNL(2,8),
+    usage=usage,
+    description=description+'\n'+epilog
+  )
 
 op.add_option('-C',dest='comment_mode',action='store_true',default=False,
   help='''Turns on comment mode, which inserts the comment pattern (see --comment) at the start of the pattern list. This marks any line whose first non-space character is '#', which is very commonly a comment line. Use the --comment option to change the pattern used to idententify comments.''')
