@@ -84,10 +84,16 @@ class Error(Exception):
 
 
 class Target(object):
+  """This is the base class of all Target subclasses. In addition to
+  performing initialization that's common to all Target objects, it also
+  maintains a list of all extant Target instances in a class attribute."""
   
   instances=[] # This is a list of all Target objects.
 
   def __init__(self,filename):
+    """Remember the name of this target, mark it as yet-to-be-built, and
+    add it to the list of Target instances."""
+
     self.built=False
     self.filename=filename
     Target.instances.append(self)
@@ -98,19 +104,18 @@ class Target(object):
     Target.instances.remove(self)
 
   def build(self):
+    """Once this target has been built, it must be marked as such. This
+    mechanism is used to ensure that mutual dependencies do not cause
+    infinite recursion (so it's very important)."""
+
     self.built=True
 
 
-class Clean(object):
-  def build(self):
-    for t in Target.instances:
-      if isinstance(t,CExecutable):
-        print 'rm %s'%t.filename
-      if not opt.dryrun:
-        os.remove(t.filename)
-
-
 class DependentTarget(Target):
+  """Use this class to represent targets that are dependent on other files
+  but which are not built from source. Such targets will not be remvoed
+  by the clean() function."""
+
   def __init__(self,filename,*deps):
     "The target depends on all dependencies."
 
@@ -132,6 +137,18 @@ class DependentTarget(Target):
           if not target.built and target.filename==d:
             target.build()
     self.built=True
+
+
+class DependentTargetFromSource(DependentTarget):
+  """This class is exactly like DependentTarget, but targets built from
+  instances of this class are removed (deleted from disk) by the clean()
+  function."""
+
+  def __init__(self,filename,*deps):
+    DependentTarget.__init__(self,filename,*deps)
+
+  def build(self):
+    DependentTarget.build(self)
 
 
 class Installer(DependentTarget):
@@ -163,22 +180,33 @@ class Installer(DependentTarget):
         shutil.copy2(dep,self.dir)
 
 
-class CExecutable(DependentTarget):
+class CExecutable(DependentTargetFromSource):
+  "Objects of this class compile executables from C source files."
+
   def __init__(self,filename,source,*deps,**kwargs):
-    DependentTarget.__init__(self,filename,*deps)
+    """Specify how target should be built from source. Keyword argument
+    may be:
+
+    cc:   The name of the C compiler (default: gcc).
+    opts: A sequence of compiler options.
+    objs: A sequence of object files to be linked with the executable."""
+
+    DependentTargetFromSource.__init__(self,filename,*deps)
     self.source=source
     self.cc=kwargs.get('cc','gcc')
     self.opts=kwargs.get('opts','')
+    self.objs=kwargs.get('objs','')
 
   def build(self):
     # Build all dependencies first.
-    DependentTarget.build(self)
+    DependentTargetFromSource.build(self)
 
     # Compile this target.
     cmd=build_command(
       self.cc,
       self.opts.split(),
       self.source,
+      self.objs,
       '-o',
       self.filename
     )
@@ -188,10 +216,27 @@ class CExecutable(DependentTarget):
 
 
 class CObjectFile(CExecutable):
+  """Objects of this class compile object files from C source files. This
+  is exactly like CExecutable, but the -c compiler option forced."""
+
   def __init__(self,filename,source,*deps,**kwargs):
     CExecutable.__init__(self,filename,source,*deps,**kwargs)
     self.opts+=' -c'
 
+
+def clean():
+  "Delete all targets that are built from source."
+
+  for t in Target.instances:
+    if isinstance(t,DependentTargetFromSource):
+      if os.path.isdir(t.filename):
+        print 'rm -r %s'%t.filename
+        if not opt.dryrun:
+          os.rmtree(t.filename)
+      elif os.path.exists(t.filename):
+        print 'rm %s'%t.filename
+        if not opt.dryrun:
+          os.remove(t.filename)
 
 def make(target_name):
   """Call the build() method of all Target objects whose filename
@@ -246,7 +291,6 @@ PYTHON_PKGS=( # Build these packages with easy_install
   'xlrd',
 )
 
-#prefix=expand_all('~/my')
 prefix=expand_all('~/tmp/inst')
 
 CExecutable('datecycle','datecycle.c','ls_class.o')
@@ -266,6 +310,5 @@ Installer('install',prefix+'/bin',CPROGS,SCRIPTS)
 Installer('install',prefix+'/etc',DATA)
 Installer('install',prefix+'/lib/python','pylib/*','pkgs/*')
 
-print ' '.join([t.filename for t in Target.instances])
-
 #make('install')
+clean()
