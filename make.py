@@ -1,14 +1,21 @@
-import os,shlex,shutil,sys
+import optparse,os,shlex,shutil,sys
 from glob import glob
 
 # This script is intended to span the gap between Makefile and setup.py.
 
-opt=type('',(object,),dict(
-  dryrun=False,
-))
-
+op=optparse.OptionParser(
+  usage="%prog [OPTIONS] target ..."
+)
+op.add_option('-n','--dryrun',dest='dryrun',action='store_true',default=False,help="Go through all the usual steps, but don't actually build, install, or delete anything. (default:%default)")
+op.add_option('--prefix',dest='prefix',action='store',default='~my',help="This is the directory where things like bin, etc, lib, man, and sbin go. (default: %default)")
+opt,args=op.parse_args()
+opt.prefix=os.path.expandvars(os.path.expanduser(opt.prefix))
+if not args:
+  args=['all']
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Low-level functions.
+#
 
 def build_command(*args):
   '''Return a string containing all our arguments in a form that can be
@@ -22,10 +29,6 @@ def build_command(*args):
       parts[i]="'"+parts[i]+"'"
   # Return it all as a single string.
   return ' '.join(parts)
-
-def die(msg,status=1):
-  print msg
-  sys.exit(status)
 
 def expand_all(filename):
   "Return the filename with ~ and environment variables expanded."
@@ -59,8 +62,13 @@ def outOfDate(target,*args):
   False.)'''
 
   t=filetime(target)
-  for d in deps+[source]:
-    if filetime(d)>t:
+  for d in args:
+    if isinstance(d,list) or isinstance(d,tuple):
+      if outOfDate(target,*d):
+        return True
+    elif not os.path.exists(d) or filetime(d)>t:
+      # Return True for non-existant dependency in order to provoke an
+      # error when the dependency is not found.
       return True
   return False
 
@@ -74,6 +82,8 @@ def expand_wildcards(filespec):
   return files
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Classes for different types of targets.
+#
 
 class Error(Exception):
   def __init__(self,value):
@@ -151,6 +161,51 @@ class DependentTargetFromSource(DependentTarget):
     DependentTarget.build(self)
 
 
+class CExecutable(DependentTargetFromSource):
+  "Objects of this class compile executables from C source files."
+
+  def __init__(self,filename,source,*deps,**kwargs):
+    """Specify how target should be built from source. Keyword argument
+    may be:
+
+    cc:   The name of the C compiler (default: gcc).
+    opts: A sequence of compiler options.
+    objs: A sequence of object files to be linked with the executable."""
+
+    DependentTargetFromSource.__init__(self,filename,*deps)
+    self.source=source
+    self.cc=kwargs.get('cc','gcc')
+    self.opts=kwargs.get('opts','')
+    self.objs=kwargs.get('objs','')
+
+  def build(self):
+    # Build all dependencies first.
+    DependentTargetFromSource.build(self)
+
+    # Compile this target.
+    if outOfDate(self.filename,self.source,self.deps):
+      cmd=build_command(
+        self.cc,
+        self.opts.split(),
+        self.source,
+        self.objs,
+        '-o',
+        self.filename
+      )
+      print cmd
+      if not opt.dryrun:
+        os.system(cmd)
+
+
+class CObjectFile(CExecutable):
+  """Objects of this class compile object files from C source files. This
+  is exactly like CExecutable, but the -c compiler option forced."""
+
+  def __init__(self,filename,source,*deps,**kwargs):
+    CExecutable.__init__(self,filename,source,*deps,**kwargs)
+    self.opts+=' -c'
+
+
 class Installer(DependentTarget):
   "Copy all dependencies to installation directory."
 
@@ -180,49 +235,7 @@ class Installer(DependentTarget):
         shutil.copy2(dep,self.dir)
 
 
-class CExecutable(DependentTargetFromSource):
-  "Objects of this class compile executables from C source files."
-
-  def __init__(self,filename,source,*deps,**kwargs):
-    """Specify how target should be built from source. Keyword argument
-    may be:
-
-    cc:   The name of the C compiler (default: gcc).
-    opts: A sequence of compiler options.
-    objs: A sequence of object files to be linked with the executable."""
-
-    DependentTargetFromSource.__init__(self,filename,*deps)
-    self.source=source
-    self.cc=kwargs.get('cc','gcc')
-    self.opts=kwargs.get('opts','')
-    self.objs=kwargs.get('objs','')
-
-  def build(self):
-    # Build all dependencies first.
-    DependentTargetFromSource.build(self)
-
-    # Compile this target.
-    cmd=build_command(
-      self.cc,
-      self.opts.split(),
-      self.source,
-      self.objs,
-      '-o',
-      self.filename
-    )
-    print cmd
-    if not opt.dryrun:
-      os.system(cmd)
-
-
-class CObjectFile(CExecutable):
-  """Objects of this class compile object files from C source files. This
-  is exactly like CExecutable, but the -c compiler option forced."""
-
-  def __init__(self,filename,source,*deps,**kwargs):
-    CExecutable.__init__(self,filename,source,*deps,**kwargs)
-    self.opts+=' -c'
-
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 def clean():
   "Delete all targets that are built from source."
@@ -243,13 +256,14 @@ def make(target_name):
   matches target_name."""
 
   for target in Target.instances:
-    if target.filename==target_name:
+    if target.filename==target_name or (target_name=='all' and target.filename!='install'):
       target.build()
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-opt.dryrun=True
+# Here's where it gets specific. We use the classes above to express
+# dependencies and build instructions.
+#
 
 CPROGS=( # Compile these targets from C source files.
   'datecycle',
@@ -310,5 +324,8 @@ Installer('install',prefix+'/bin',CPROGS,SCRIPTS)
 Installer('install',prefix+'/etc',DATA)
 Installer('install',prefix+'/lib/python','pylib/*','pkgs/*')
 
-#make('install')
-clean()
+for target in args:
+  if target=='clean':
+    clean()
+  else:
+    make(target)
