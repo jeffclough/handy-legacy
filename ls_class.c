@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 /******************************************************************************
  * NAME
@@ -417,7 +418,7 @@ int main(int argc,char **argv) {
 	char s[1024];
 	strftime(s,sizeof(s),"%Y-%m-%d %H:%M:%S",
 	    localtime(&LS_MTIME(list,i)));
-	printf("%10d  %s  %s\n",
+	printf("%10lli  %s  %s\n",
 	    LS_SIZE(list,i),s,LS_FILENAME(list,i));
       }
       putchar('\n');

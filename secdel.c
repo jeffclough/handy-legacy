@@ -2,9 +2,12 @@
 #include <fcntl.h>
 #include <libgen.h> /* for basename() */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
 
 /*
  * ELEMENTS(a), assuming that a is an array, evaluates to the number of

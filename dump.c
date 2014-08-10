@@ -41,6 +41,7 @@ to represent addresses and bytes in various bases.
 
 ******************************************************************************/
 
+#include <ctype.h>
 #include <fcntl.h>
 #ifdef __GNUC__
 #include <unistd.h>
@@ -143,10 +144,10 @@ int dump(int fd) {
 	memset(text,0,opt_columns+1);
       /* Write the address of this row of our dump. */
       switch(opt_abase) {
-      case 8:printf("%0*o",addrw,bo+i);break;
-      case 10:printf("%0*u",addrw,bo+i);break;
+      case 8:printf("%0*lo",addrw,bo+i);break;
+      case 10:printf("%0*lu",addrw,bo+i);break;
       case 16:
-      default:printf("%0*x",addrw,bo+i);
+      default:printf("%0*lx",addrw,bo+i);
       }
 
       /*
@@ -279,7 +280,7 @@ int main(int argc,char **argv) {
     case 'a':
       printf("DBG: optarg=\"%s\"\n",optarg);
       opt_abase=0;
-      if (sscanf(optarg,"%c",&opt_abase)!=1) {
+      if (sscanf(optarg,"%d",&opt_abase)!=1) {
 	fprintf(stderr,"%s: Cannot address base value: %s\n",opt_prog,optarg);
 	return 1;
       }
@@ -294,7 +295,7 @@ int main(int argc,char **argv) {
       }
       break;
     case 'c':
-      if (sscanf(optarg,"%li",&opt_columns)!=1) {
+      if (sscanf(optarg,"%i",&opt_columns)!=1) {
 	fprintf(stderr,"%s: Cannot parse column number: %s\n",opt_prog,optarg);
 	return 1;
       }

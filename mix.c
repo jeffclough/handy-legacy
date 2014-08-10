@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 int main(void) {
   char *cp,buf[16384]; /* These hold and manage a line of text. */

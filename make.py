@@ -1,17 +1,56 @@
-import optparse,os,shlex,shutil,sys
+#!/usr/bin/env python
+import optparse,os,platform,shlex,shutil,sys
 from glob import glob
 
-# This script is intended to span the gap between Makefile and setup.py.
+"""
+This module is intended to span the gap between Makefile and setup.py,
+bringing the power and versatility of Python to the basic functionality
+of make.
+
+"""
+
+# Get some system parameters
+OS_NAME,HOST,KERNEL,PLATFORM,MACHINE,PROCESSOR=platform.uname()
+if OS_NAME=='Darwin':
+  OS_VER=platform.mac_ver()[0]
+else:
+  OS_VER=KERNEL
+
+DISTRO_NAME,DISTRO_VER,dummy=('','','')
+if OS_NAME=='Linux':
+  if 'linux_distribution' in platform.__dict__:
+    DISTRO_NAME,DISTRO_VER,dummy=platform.linux_distribution()
+  elif 'dist' in platform.__dict__:
+    DISTRO_NAME,DISTRO_VER,dummy=platform.dist()
+del dummy
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Command line set-up.
 
 op=optparse.OptionParser(
   usage="%prog [OPTIONS] target ..."
 )
+op.add_option('--cc',dest='cc',action='store',default=os.environ.get('CC','cc'),help="Specify what C compiler to use. (default: %default)")
 op.add_option('-n','--dryrun',dest='dryrun',action='store_true',default=False,help="Go through all the usual steps, but don't actually build, install, or delete anything. (default:%default)")
 op.add_option('--prefix',dest='prefix',action='store',default='~my',help="This is the directory where things like bin, etc, lib, man, and sbin go. (default: %default)")
+op.add_option('--sysinfo',dest='sysinfo',action='store_true',default=False,help="Show system information values and terminate.")
+op.add_option('-v',dest='verbosity',action='count',default=0,help="Give the user a peek behind the curtain. Pull the curtain back a little farther for each -v option given.")
 opt,args=op.parse_args()
+
 opt.prefix=os.path.expandvars(os.path.expanduser(opt.prefix))
 if not args:
   args=['all']
+
+if opt.sysinfo:
+  for var in sorted("OS_NAME HOST KERNEL PLATFORM MACHINE PROCESSOR OS_VER DISTRO_NAME DISTRO_VER".split()):
+    print '%s=%r'%(var,eval(var))
+  sys.exit(0)
+
+# These are our verbosity levels. The values incidate the number of -v options
+# that turn on that level of verbosity.
+V_DEPS=1
+
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Low-level functions.
@@ -26,9 +65,14 @@ def build_command(*args):
   # Quote any parts that contain a space character.
   for i in range(len(parts)):
     if ' ' in parts[i]:
-      parts[i]="'"+parts[i]+"'"
+      if '\'' in parts[i]:
+        parts[i]='"'+parts[i]+'"'
+      else:
+        parts[i]="'"+parts[i]+"'"
   # Return it all as a single string.
-  return ' '.join(parts)
+  cmd=' '.join(parts)
+  print cmd
+  return cmd
 
 def expand_all(filename):
   "Return the filename with ~ and environment variables expanded."
@@ -61,14 +105,25 @@ def outOfDate(target,*args):
   file with a later modification time than target. (Otherwise, return
   False.)'''
 
-  t=filetime(target)
+  if os.path.exists(target):
+    t=filetime(target)
+  else:
+    if opt.verbosity>=V_DEPS:
+      print '%s is out of date because it\'s missing'%target
+    return True
   for d in args:
     if isinstance(d,list) or isinstance(d,tuple):
       if outOfDate(target,*d):
         return True
-    elif not os.path.exists(d) or filetime(d)>t:
+    elif not os.path.exists(d):
       # Return True for non-existant dependency in order to provoke an
       # error when the dependency is not found.
+      if opt.verbosity>=V_DEPS:
+        print '%s depends on %s, which has a later file time'%(target,d)
+      return True
+    elif filetime(d)>t:
+      if opt.verbosity>=V_DEPS:
+        print '%s depends on %s, which doesn\'t exist'%(target,d)
       return True
   return False
 
@@ -86,11 +141,7 @@ def expand_wildcards(filespec):
 #
 
 class Error(Exception):
-  def __init__(self,value):
-    self.value=value
-
-  def __str__(self):
-    return repr(self.value)
+  pass
 
 
 class Target(object):
@@ -140,6 +191,8 @@ class DependentTarget(Target):
   def build(self):
     "Build all out-of-date dependencies."
 
+    if opt.verbosity>=V_DEPS:
+      print '%s depends on %s'%(self.filename,' '.join(self.deps))
     t=filetime(self.filename,0)
     for d in self.deps:
       if t<filetime(d,1):
@@ -157,9 +210,6 @@ class DependentTargetFromSource(DependentTarget):
   def __init__(self,filename,*deps):
     DependentTarget.__init__(self,filename,*deps)
 
-  def build(self):
-    DependentTarget.build(self)
-
 
 class CExecutable(DependentTargetFromSource):
   "Objects of this class compile executables from C source files."
@@ -168,38 +218,41 @@ class CExecutable(DependentTargetFromSource):
     """Specify how target should be built from source. Keyword argument
     may be:
 
-    cc:   The name of the C compiler (default: gcc).
+    cc:   The name of the C compiler (default: cc).
     opts: A sequence of compiler options.
     objs: A sequence of object files to be linked with the executable."""
 
     DependentTargetFromSource.__init__(self,filename,*deps)
     self.source=source
-    self.cc=kwargs.get('cc','gcc')
+    self.cc=opt.cc
     self.opts=kwargs.get('opts','')
     self.objs=kwargs.get('objs','')
 
   def build(self):
-    # Build all dependencies first.
+    # Build all dependencies first (including our object files).
+    if self.objs:
+      self.deps.append(self.objs)
     DependentTargetFromSource.build(self)
 
     # Compile this target.
     if outOfDate(self.filename,self.source,self.deps):
+      print '\n%s:'%self.filename
       cmd=build_command(
         self.cc,
+        COPTS,
         self.opts.split(),
         self.source,
         self.objs,
         '-o',
         self.filename
       )
-      print cmd
       if not opt.dryrun:
         os.system(cmd)
 
 
 class CObjectFile(CExecutable):
   """Objects of this class compile object files from C source files. This
-  is exactly like CExecutable, but the -c compiler option forced."""
+  is exactly like CExecutable, but the -c compiler option is forced."""
 
   def __init__(self,filename,source,*deps,**kwargs):
     CExecutable.__init__(self,filename,source,*deps,**kwargs)
@@ -214,15 +267,17 @@ class Installer(DependentTarget):
     self.dir=dir
 
   def build(self):
-    # Build all dependencies (what are what this class installs).
+    # Build all dependencies (which are what this class installs).
     DependentTarget.build(self)
 
     # Create the target directory if necessary.
     if not os.path.exists(self.dir):
       print 'mkdir %s'%self.dir
+      sys.stdout.flush()
       if not opt.dryrun:
         os.makedirs(self.dir)
       print 'chmod 755 %s'%self.dir
+      sys.stdout.flush()
       if not opt.dryrun:
         os.chmod(self.dir,0755)
     elif not os.path.isdir(self.dir):
@@ -231,6 +286,7 @@ class Installer(DependentTarget):
     # Copy each dependency to the given directory.
     for dep in self.deps:
       print '%s ==> %s'%(dep,self.dir)
+      sys.stdout.flush()
       if not opt.dryrun:
         shutil.copy2(dep,self.dir)
 
@@ -244,10 +300,12 @@ def clean():
     if isinstance(t,DependentTargetFromSource):
       if os.path.isdir(t.filename):
         print 'rm -r %s'%t.filename
+        sys.stdout.flush()
         if not opt.dryrun:
           os.rmtree(t.filename)
       elif os.path.exists(t.filename):
         print 'rm %s'%t.filename
+        sys.stdout.flush()
         if not opt.dryrun:
           os.remove(t.filename)
 
@@ -264,6 +322,12 @@ def make(target_name):
 # Here's where it gets specific. We use the classes above to express
 # dependencies and build instructions.
 #
+COPTS=(
+  # Suppress complaints about missing braces in if...else statements from Apple LLVM.
+  '-Wno-dangling-else',
+  # Crank up the verbosity to show linker invocation.
+  #'-v',
+)
 
 CPROGS=( # Compile these targets from C source files.
   'datecycle',
@@ -305,9 +369,10 @@ PYTHON_PKGS=( # Build these packages with easy_install
   'xlrd',
 )
 
+# DEBUGGING:
 prefix=expand_all('~/tmp/inst')
 
-CExecutable('datecycle','datecycle.c','ls_class.o')
+CExecutable('datecycle','datecycle.c',objs='ls_class.o')
 CExecutable('dump','dump.c',opts='-lm')
 CObjectFile('ls_class.o','ls_class.c','ls_class.h')
 CObjectFile('ls_class_test','ls_class.c','ls_class.h',opts='-DTEST')
@@ -320,6 +385,7 @@ CExecutable('randword','randword.c')
 CExecutable('secdel','secdel.c')
 CExecutable('timeshift','timeshift.c')
 
+# We need one installer for each target directory.
 Installer('install',prefix+'/bin',CPROGS,SCRIPTS)
 Installer('install',prefix+'/etc',DATA)
 Installer('install',prefix+'/lib/python','pylib/*','pkgs/*')

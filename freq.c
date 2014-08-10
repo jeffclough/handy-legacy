@@ -49,8 +49,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 /*
  * On systems that do not define O_LARGEFILE, set this value to 0 so that
