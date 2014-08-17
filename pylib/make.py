@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import optparse,os,platform,shlex,shutil,sys
+import optparse,os,platform,shlex,shutil,sys,time
 from glob import glob
 
 """
@@ -50,6 +50,7 @@ if opt.sysinfo:
 # These are our verbosity levels. The values incidate the number of -v options
 # that turn on that level of verbosity.
 V_DEPS=1
+V_TIME=2
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -86,7 +87,15 @@ def filetime(filename,default=0):
     default=os.path.getmtime(filename)
   except:
     pass
+  if opt.verbosity>=V_TIME:
+    print '  %s:\t%s'%(filename,time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(default)))
   return default
+
+def isnewer(src,dst):
+  """Return true if src names a file that is newer than the file dst
+  names (or if dst doesn't exist)."""
+
+  return filetime(src,1)>filetime(dst)
 
 def flatten(*args):
   '''Return a list of all arguments, breaking out elements of any tuples
@@ -109,7 +118,7 @@ def outOfDate(target,*args):
     t=filetime(target)
   else:
     if opt.verbosity>=V_DEPS:
-      print '%s is out of date because it\'s missing'%target
+      print '  %s is out of date because it\'s missing'%target
     return True
   for d in args:
     if isinstance(d,list) or isinstance(d,tuple):
@@ -119,11 +128,11 @@ def outOfDate(target,*args):
       # Return True for non-existant dependency in order to provoke an
       # error when the dependency is not found.
       if opt.verbosity>=V_DEPS:
-        print '%s depends on %s, which has a later file time'%(target,d)
+        print '  %s depends on %s, which doesn\'t exist'%(target,d)
       return True
     elif filetime(d)>t:
       if opt.verbosity>=V_DEPS:
-        print '%s depends on %s, which doesn\'t exist'%(target,d)
+        print '  %s depends on %s, which is newer'%(target,d)
       return True
   return False
 
@@ -183,23 +192,26 @@ class DependentTarget(Target):
     Target.__init__(self,filename)
     self.deps=[]
     if deps:
-      #print 'DEBUG: deps=%s'%repr(deps)
-      #print 'DEBUG: flatten(*deps)=%s'%repr(flatten(*deps))
       for d in flatten(*deps):
         self.deps.extend(expand_wildcards(d))
 
   def build(self):
     "Build all out-of-date dependencies."
 
-    if opt.verbosity>=V_DEPS:
-      print '%s depends on %s'%(self.filename,' '.join(self.deps))
-    t=filetime(self.filename,0)
-    for d in self.deps:
-      if t<filetime(d,1):
-        for target in Target.instances:
-          if not target.built and target.filename==d:
-            target.build()
-    self.built=True
+    if not self.built:
+      if opt.verbosity>=V_DEPS:
+        if self.deps:
+          print '  %s depends on %s'%(self.filename,' '.join(self.deps))
+        else:
+          print '  %s depends on nothing'%(self.filename)
+      if self.deps:
+        t=filetime(self.filename,0)
+        for d in self.deps:
+          if t<filetime(d,1):
+            for target in Target.instances:
+              if not target.built and target.filename==d:
+                target.build()
+      self.built=True
 
 
 class DependentTargetFromSource(DependentTarget):
@@ -223,31 +235,33 @@ class CExecutable(DependentTargetFromSource):
     objs: A sequence of object files to be linked with the executable."""
 
     DependentTargetFromSource.__init__(self,filename,*deps)
+    self.deps=[source]+list(deps)
     self.source=source
     self.cc=opt.cc
     self.opts=kwargs.get('opts','')
     self.objs=kwargs.get('objs','')
 
   def build(self):
-    # Build all dependencies first (including our object files).
-    if self.objs:
-      self.deps.append(self.objs)
-    DependentTargetFromSource.build(self)
+    if not self.built:
+      # Build all dependencies first (including our object files).
+      if self.objs:
+        self.deps.append(self.objs)
+      DependentTargetFromSource.build(self)
 
-    # Compile this target.
-    if outOfDate(self.filename,self.source,self.deps):
-      print '\n%s:'%self.filename
-      cmd=build_command(
-        self.cc,
-        COPTS,
-        self.opts.split(),
-        self.source,
-        self.objs,
-        '-o',
-        self.filename
-      )
-      if not opt.dryrun:
-        os.system(cmd)
+      # Compile this target.
+      if outOfDate(self.filename,self.source,self.deps):
+        print '\n%s:'%self.filename
+        cmd=build_command(
+          self.cc,
+          COPTS,
+          self.opts.split(),
+          self.source,
+          self.objs,
+          '-o',
+          self.filename
+        )
+        if not opt.dryrun:
+          os.system(cmd)
 
 
 class CObjectFile(CExecutable):
@@ -285,10 +299,31 @@ class Installer(DependentTarget):
 
     # Copy each dependency to the given directory.
     for dep in self.deps:
-      print '%s ==> %s'%(dep,self.dir)
-      sys.stdout.flush()
+      if isnewer(dep,os.path.join(self.dir,dep)):
+        print '%s ==> %s'%(dep,self.dir)
+        sys.stdout.flush()
+        if not opt.dryrun:
+          shutil.copy2(dep,self.dir)
+
+
+class EasyInstall(Target):
+  '''Run easy_install to install the package to the given directory, but
+  only if it's not already installed.'''
+
+  def __init__(self,package,dir):
+    filename=os.path.join(dir,package)
+    Target.__init__(self,filename)
+    self.package=package
+    self.dir=dir
+
+  def build(self):
+    if opt.verbosity>=V_DEPS:
+      print '  Python package %s depends on %s*'%(self.package,self.filename)
+    if not glob(self.filename+'*'):
+      print '\n:%s:'%self.package
+      cmd=build_command('easy_install','--install-dir',self.dir,self.package)
       if not opt.dryrun:
-        shutil.copy2(dep,self.dir)
+        os.system(cmd)
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -316,4 +351,8 @@ def make(target_name):
   for target in Target.instances:
     if target.filename==target_name or (target_name=='all' and target.filename!='install'):
       target.build()
+
+# I'd like to be able to call make.path() rather than os.path.join() ...
+# so here you go.
+path=os.path.join
 

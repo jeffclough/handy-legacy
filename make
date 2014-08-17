@@ -61,7 +61,7 @@ make.CExecutable('portname','portname.c')
 make.CExecutable('randword','randword.c')
 make.CExecutable('secdel','secdel.c')
 make.CExecutable('timeshift','timeshift.c')
-make.PythonCommand('cutcsv','xlrd')
+make.DependentTarget('cutcsv','xlrd')
 make.EasyInstall('xlrd',PYTHON_LIB_DIR)
 
 # We need one installer for each target directory.
@@ -71,7 +71,6 @@ make.Installer(
   'install',
   make.path(prefix,'lib','python'),
   make.path('pylib','*'),
-  make.path('pkgs','*')
 )
 
 for target in make.args:
