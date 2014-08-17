@@ -39,16 +39,15 @@ SCRIPTS=( # These targets are simply copied during installation.
   'ts',
 )
 
-DATA=( # Copy these data files to opt.prefix/etc.
+DATA=( # Copy these data files to make.opt.prefix/etc.
   'gensig/quotes',
   'gensig/*.sig',
 )
 
+# Both home-grown and modules and PyPi packages are installed here.
 PYTHON_LIB_DIR=make.expand_all('~/my/lib/python')
 
-# DEBUGGING:
-prefix=make.expand_all('~/tmp/inst')
-
+# Define some targets of different types and their dependencies.
 make.CExecutable('datecycle','datecycle.c',objs='ls_class.o')
 make.CExecutable('dump','dump.c',opts='-lm')
 make.CObjectFile('ls_class.o','ls_class.c','ls_class.h')
@@ -65,11 +64,11 @@ make.DependentTarget('cutcsv','xlrd')
 make.EasyInstall('xlrd',PYTHON_LIB_DIR)
 
 # We need one installer for each target directory.
-make.Installer('install',make.path(prefix,'bin'),CPROGS,SCRIPTS)
-make.Installer('install',make.path(prefix,'etc'),DATA)
+make.Installer('install',make.path(make.opt.prefix,'bin'),CPROGS,SCRIPTS)
+make.Installer('install',make.path(make.opt.prefix,'etc'),DATA)
 make.Installer(
   'install',
-  make.path(prefix,'lib','python'),
+  make.path(make.opt.prefix,'lib','python'),
   make.path('pylib','*'),
 )
 

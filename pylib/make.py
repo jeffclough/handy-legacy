@@ -282,7 +282,9 @@ class Installer(DependentTarget):
 
   def build(self):
     # Build all dependencies (which are what this class installs).
+    #print 'DEBUG: building dependencies for %s'%self.dir
     DependentTarget.build(self)
+    #print 'DEBUG: finished building dependencies for %s'%self.dir
 
     # Create the target directory if necessary.
     if not os.path.exists(self.dir):
@@ -299,11 +301,13 @@ class Installer(DependentTarget):
 
     # Copy each dependency to the given directory.
     for dep in self.deps:
-      if isnewer(dep,os.path.join(self.dir,dep)):
+      dest=os.path.join(self.dir,os.path.basename(dep))
+      #print 'DEBUG: self.dir=%r dep=%r dest=%r'%(self.dir,dep,dest)
+      if isnewer(dep,dest):
         print '%s ==> %s'%(dep,self.dir)
         sys.stdout.flush()
         if not opt.dryrun:
-          shutil.copy2(dep,self.dir)
+          shutil.copy2(dep,dest)
 
 
 class EasyInstall(Target):
