@@ -1,12 +1,19 @@
 #!/usr/bin/env python
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Generic Boiler-plate code for using the make module.
 import make
+if make.opt.prefix==None:
+  make.opt.prefix='~/my'
+make.opt.prefix=make.expand_all(make.opt.prefix)
+# End of Boiler-plate code.
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-make.COPTS=(
+make.COPTS=[]
+if make.OS_NAME=='Darwin':
   # Suppress complaints about missing braces in if...else statements.
-  '-Wno-dangling-else',
-  # Crank up the verbosity to show linker invocation.
-  #'-v',
-)
+  make.COPTS.append('-Wno-dangling-else')
 
 CPROGS=( # Compile these targets from C source files.
   'datecycle',
@@ -45,7 +52,7 @@ DATA=( # Copy these data files to make.opt.prefix/etc.
 )
 
 # Both home-grown and modules and PyPi packages are installed here.
-PYTHON_LIB_DIR=make.expand_all('~/my/lib/python')
+PYTHON_LIB_DIR=make.expand_all('$HOME/my/lib/python')
 
 # Define some targets of different types and their dependencies.
 make.CExecutable('datecycle','datecycle.c',objs='ls_class.o')

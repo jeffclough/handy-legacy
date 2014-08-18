@@ -33,12 +33,11 @@ op=optparse.OptionParser(
 )
 op.add_option('--cc',dest='cc',action='store',default=os.environ.get('CC','cc'),help="Specify what C compiler to use. (default: %default)")
 op.add_option('-n','--dryrun',dest='dryrun',action='store_true',default=False,help="Go through all the usual steps, but don't actually build, install, or delete anything. (default:%default)")
-op.add_option('--prefix',dest='prefix',action='store',default='~my',help="This is the directory where things like bin, etc, lib, man, and sbin go. (default: %default)")
+op.add_option('--prefix',dest='prefix',action='store',default=None,help="This is the directory where things like bin, etc, lib, man, and sbin go. (default: %default)")
 op.add_option('--sysinfo',dest='sysinfo',action='store_true',default=False,help="Show system information values and terminate.")
 op.add_option('-v',dest='verbosity',action='count',default=0,help="Give the user a peek behind the curtain. Pull the curtain back a little farther for each -v option given.")
 opt,args=op.parse_args()
 
-opt.prefix=os.path.expandvars(os.path.expanduser(opt.prefix))
 if not args:
   args=['all']
 
@@ -51,7 +50,6 @@ if opt.sysinfo:
 # that turn on that level of verbosity.
 V_DEPS=1
 V_TIME=2
-
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Low-level functions.
