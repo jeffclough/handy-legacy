@@ -176,8 +176,10 @@ class Target(object):
     mechanism is used to ensure that mutual dependencies do not cause
     infinite recursion (so it's very important)."""
 
-    self.built=True
-
+    if self.__class__.__name__=='Target':
+      # Mark this target as "built," but only if not called from a subclass.
+      # This logic is needed in order to make calling super(...).build() safe.
+      self.built=True
 
 class DependentTarget(Target):
   """Use this class to represent targets that are dependent on other files
@@ -196,29 +198,47 @@ class DependentTarget(Target):
   def build(self):
     "Build all out-of-date dependencies."
 
-    if not self.built:
-      if opt.verbosity>=V_DEPS:
-        if self.deps:
-          print '  %s depends on %s'%(self.filename,' '.join(self.deps))
-        else:
-          print '  %s depends on nothing'%(self.filename)
+    if self.built:
+      return
+    if opt.verbosity>=V_DEPS:
       if self.deps:
-        t=filetime(self.filename,0)
-        for d in self.deps:
-          if t<filetime(d,1):
-            for target in Target.instances:
-              if not target.built and target.filename==d:
-                target.build()
+        print '  %s depends on %s'%(self.filename,' '.join(self.deps))
+      else:
+        print '  %s depends on nothing'%(self.filename)
+    if self.deps:
+      t=filetime(self.filename,0)
+      for d in self.deps:
+        tlist=getTargetsByName(d)
+        if tlist:
+          for t in tlist:
+            t.build()
+        elif t<filetime(d,1):
+          for target in Target.instances:
+            if not target.built and target.filename==d:
+              target.build()
+    if self.__class__.__name__=='DependentTarget':
+      # Mark this target as "built," but only if not called from a subclass.
+      # This logic is needed in order to make calling super(...).build() safe.
       self.built=True
 
 
 class DependentTargetFromSource(DependentTarget):
   """This class is exactly like DependentTarget, but targets built from
-  instances of this class are removed (deleted from disk) by the clean()
-  function."""
+  instances of this class are removed (deleted from disk) by the this
+  module's clean() function."""
 
   def __init__(self,filename,*deps):
     DependentTarget.__init__(self,filename,*deps)
+
+  def build(self):
+    "Build all out-of-date dependencies."
+
+    # Call our Parent's build() method.
+    super(DependentTargetFromSource,self).build()
+    if self.__class__.__name__=='DependentTargetFromSource':
+      # Mark this target as "built," but only if not called from a subclass.
+      # This logic is needed in order to make calling super(...).build() safe.
+      self.built=True
 
 
 class CExecutable(DependentTargetFromSource):
@@ -240,26 +260,32 @@ class CExecutable(DependentTargetFromSource):
     self.objs=kwargs.get('objs','')
 
   def build(self):
-    if not self.built:
-      # Build all dependencies first (including our object files).
-      if self.objs:
-        self.deps.append(self.objs)
-      DependentTargetFromSource.build(self)
+    if self.built:
+      return
+    # Build all dependencies first (including our object files).
+    if self.objs:
+      self.deps.append(self.objs)
+    # Call the build() method of our parent class.
+    super(CExecutable,self).build()
 
-      # Compile this target.
-      if outOfDate(self.filename,self.source,self.deps):
-        print '\n%s:'%self.filename
-        cmd=build_command(
-          self.cc,
-          COPTS,
-          self.opts.split(),
-          self.source,
-          self.objs,
-          '-o',
-          self.filename
-        )
-        if not opt.dryrun:
-          os.system(cmd)
+    # Compile this target.
+    if outOfDate(self.filename,self.source,self.deps):
+      print '\n%s:'%self.filename
+      cmd=build_command(
+        self.cc,
+        COPTS,
+        self.opts.split(),
+        self.source,
+        self.objs,
+        '-o',
+        self.filename
+      )
+      if not opt.dryrun:
+        os.system(cmd)
+    if self.__class__.__name__=='CExecutable':
+      # Mark this target as "built," but only if not called from a subclass.
+      # This logic is needed in order to make calling super(...).build() safe.
+      self.built=True
 
 
 class CObjectFile(CExecutable):
@@ -269,6 +295,16 @@ class CObjectFile(CExecutable):
   def __init__(self,filename,source,*deps,**kwargs):
     CExecutable.__init__(self,filename,source,*deps,**kwargs)
     self.opts+=' -c'
+
+  def build(self):
+    "Build all out-of-date dependencies."
+
+    # Call our Parent's build() method.
+    super(CObjectFile,self).build()
+    if self.__class__.__name__=='CObjectFile':
+      # Mark this target as "built," but only if not called from a subclass.
+      # This logic is needed in order to make calling super(...).build() safe.
+      self.built=True
 
 
 class Installer(DependentTarget):
@@ -281,7 +317,7 @@ class Installer(DependentTarget):
   def build(self):
     # Build all dependencies (which are what this class installs).
     #print 'DEBUG: building dependencies for %s'%self.dir
-    DependentTarget.build(self)
+    super(Installer,self).build()
     #print 'DEBUG: finished building dependencies for %s'%self.dir
 
     # Create the target directory if necessary.
@@ -306,6 +342,10 @@ class Installer(DependentTarget):
         sys.stdout.flush()
         if not opt.dryrun:
           shutil.copy2(dep,dest)
+    if self.__class__.__name__=='Installer':
+      # Mark this target as "built," but only if not called from a subclass.
+      # This logic is needed in order to make calling super(...).build() safe.
+      self.built=True
 
 
 class EasyInstall(Target):
@@ -319,13 +359,24 @@ class EasyInstall(Target):
     self.dir=dir
 
   def build(self):
+    if self.built:
+      return
     if opt.verbosity>=V_DEPS:
       print '  Python package %s depends on %s*'%(self.package,self.filename)
-    if not glob(self.filename+'*'):
-      print '\n:%s:'%self.package
+    try:
+      # If we're already able to load the module, we don't need to install it.
+      mod=__import__(self.package)
+      del mod
+    except ImportError:
+      # OK. So we need to install it.
+      print '\n%s:'%self.package
       cmd=build_command('easy_install','--install-dir',self.dir,self.package)
       if not opt.dryrun:
         os.system(cmd)
+    if self.__class__.__name__=='EasyInstall':
+      # Mark this target as "built," but only if not called from a subclass.
+      # This logic is needed in order to make calling super(...).build() safe.
+      self.built=True
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -346,13 +397,21 @@ def clean():
         if not opt.dryrun:
           os.remove(t.filename)
 
+def getTargetsByName(name):
+  """Return a list of all Targets instances matching the given name."""
+
+  if name=='all':
+    tlist=list(Target.instances)
+  else:
+    tlist=[t for t in Target.instances if t.filename==name]
+  return tlist
+
 def make(target_name):
   """Call the build() method of all Target objects whose filename
   matches target_name."""
 
-  for target in Target.instances:
-    if target.filename==target_name or (target_name=='all' and target.filename!='install'):
-      target.build()
+  for target in getTargetsByName(target_name):
+    target.build()
 
 # I'd like to be able to call make.path() rather than os.path.join() ...
 # so here you go.
