@@ -2,10 +2,19 @@
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Generic Boiler-plate code for using the make module.
+
+# Prefer the python modules in our pylib directory.
+import sys
+sys.path.insert(1,'pylib')
+
+# Import make (which will handle the command line).
 import make
+
+# Provide a default installation prefix directory.
 if make.opt.prefix==None:
   make.opt.prefix='~/my'
 make.opt.prefix=make.expand_all(make.opt.prefix)
+
 # End of Boiler-plate code.
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
