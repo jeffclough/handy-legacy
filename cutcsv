@@ -10,6 +10,16 @@ except:
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Handle the command line.
 
+default_dialect=dict(
+  delimiter=',',
+  quotechar='"',
+  escapechar=None,
+  doublequote=True,
+  skipinitialspace=False,
+  lineterminator='\n',
+  quoting=csv.QUOTE_MINIMAL,
+)
+
 import OptionParserFormatters
 progname=os.path.basename(sys.argv[0])
 op=optparse.OptionParser(
@@ -73,74 +83,6 @@ op.add_option('--worksheet',dest='worksheet',action='store',default=0,
 help="""Set the number or 
 """)
 
-class CsvDialect(object):
-
-  def __init__(self,spec=None):
-    '''spec is another CsvDialect object or a list of "param=value" strings.'''
-
-    # Set up some default values, just to create a list of valid
-    # dialect parameters.
-    self.delimiter=','
-    self.quotechar='"'
-    self.escapechar=None
-    self.doublequote=True
-    self.skipinitialspace=False
-    self.lineterminator='\n'
-    self.quoting=csv.QUOTE_MINIMAL
-
-    if spec==None:
-      spec=[]
-    if isinstance(spec,type(self)):
-      # Make this CsvDialect a copy of the specified CsvDialect object.
-      for attr in [x for x in dir(self) if self.isParam(x)]:
-        setattr(self,attr,getattr(spec,attr))
-    else:
-      # Update our current (default) parameters with those specfied.
-      for param in spec:
-        self.modify(param)
-
-  def isParam(self,p):
-    '''Return True iff p is the name of a valid dialect parameter.'''
-    
-    if hasattr(self,p):
-      a=getattr(self,p)
-      return not(p.startswith('_') or ('%s'%type(a)).endswith("method'>"))
-    return False
-
-  def modify(self,param):
-    '''Given a 'parameter=value' string, make it so in this object.'''
-
-    try:
-      var,val=param.split('=')
-    except:
-      print >>sys.stderr,'%s: %r is not formatted as "parameter=value".'%(progname,param)
-      sys.exit(1)
-    var=var.strip()
-    if self.isParam(var):
-      if var in ('delimiter','quotechar','lineterminator'):
-        val=repr(val)
-      elif var=='escapechar':
-        if val.lower()=='none':
-          val='None'
-        else:
-          val=repr(val)
-      elif var in ('doublequote','skipinitialspace'):
-        val=val.title()
-        if val not in ('False','True'):
-          print >>sys.stderr,'%s: %s must be either True or False.'%(progname,var)
-          sys.exit(1)
-      elif var=='quoting':
-        val='csv.'+val
-      setattr(self,var,eval(val.replace(r'\r','\r').replace(r'\n','\n').replace(r'\t','\t')))
-    else:
-      print >>sys.stderr,'%s: %r is not a valid dialectic parameter.'%(progname,var)
-      sys.exit(1)
-
-  def __str__(self):
-    alist=[x for x in dir(self) if self.isParam(x)]
-    alist.sort()
-    return ' '.join(['%s=%r'%(attr,getattr(self,attr)) for attr in alist])
-
 try:
   opt,args=op.parse_args()
 except Exception,e:
@@ -148,11 +90,14 @@ except Exception,e:
   sys.exit(2)
 
 # Set up our dialects.
-default_dialect=CsvDialect(opt.dialect)
-read_dialect=CsvDialect(default_dialect)
-write_dialect=CsvDialect(default_dialect)
-for x in opt.read_as: read_dialect.modify(x)
-for x in opt.write_as: write_dialect.modify(x)
+read_dialect=dict(default_dialect)
+read_dialect.update(dict(
+  [([x.strip() for x in spec.split('=',1)]) for spec in opt.read_as]
+))
+write_dialect=dict(default_dialect)
+write_dialect.update(dict(
+  [([x.strip() for x in spec.split('=',1)]) for spec in opt.write_as]
+))
  
 # Validate our field stripping specification.
 for ch in opt.strip:
@@ -262,7 +207,7 @@ re_escape=re.compile(r'''([\\"`$])''')
 re_excel_filename=re.compile(r'\.xls[^.]*$')
 
 # Prepare for CSV output.
-writer=csv.writer(open('/dev/stdout','wb'),dialect=write_dialect)
+writer=csv.writer(open('/dev/stdout','wb'),**write_dialect)
 
 for filename in args:
   if filename=='-':
@@ -277,7 +222,7 @@ for filename in args:
       sys.exit(1)
       
   else:
-    reader=csv.reader(open(filename,'rb'),dialect=read_dialect)
+    reader=csv.reader(open(filename,'rb'),**read_dialect)
 
   #print 'opt.fields=%r'%opt.fields
   #print 'opt.joinfields=%r'%opt.joinfields
