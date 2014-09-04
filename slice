@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import glob,optparse,os,sys
+import glob,optparse,os,re,sys
 
 op=optparse.OptionParser(
   usage="""
@@ -14,9 +14,111 @@ Forms 1 and 2 can be mixed, so FILESPEC[:[FIRSTLINE][:[ENDPAT]]] and FILESPEC[:[
 """,
 )
 op.add_option('-l',dest='include_last',action='store_false',default=True,help="Do not include the LASTLINEth line of the file, or the line matching ENDPAT, in the output.")
-opt,args=op.parse_options()
+op.add_option('-d',dest='delimeter',action='store',default=':',help="Set the delimiter that separates the components of each command line argument. (default: %default)")
+op.add_option('--test',dest='test',action='store_true',default=False,help="This runs a self-test and is intended for debugging this program. (No output means everything worked correctly.)")
+opt,args=op.parse_args()
+
+def die(msg,rc=0):
+  sys.stderr.write('%s: %s\n'%(sys.argv[0],msg))
+  sys.exit(rc)
+
+#TODO: Replace colons with opt.delimiter, which defaults to a colon.
+re_arg=re.compile(r'(?P<fs>[^:]+)(:(?P<first>[^:]+)?(:(?P<last>[^:]+)?)?)?');
 
 def parse_arg(arg):
-  """Return a (filespec,start,end) tuple from the given command line
+  """Return a (filespec,start,end,relative) tuple from the given command line
   argument. The filespec may contain wildcards, and start and end may
-  be integers, regular expressions, or None.
+  be integers, regular expressions, or None. If end is an integer that
+  was preceded by a plus sign in the argument, the last element of the tuple
+  will be True.
+
+  >>> m=re_arg.match('testing')
+  >>> m==None
+  False
+  >>> m.group('fs','first','last')
+  ('testing', None, None)
+  >>> m=re_arg.match('testing:')
+  >>> m==None
+  False
+  >>> m.group('fs','first','last')
+  ('testing', None, None)
+  >>> m=re_arg.match('testing::')
+  >>> m==None
+  False
+  >>> m.group('fs','first','last')
+  ('testing', None, None)
+  >>> m=re_arg.match('testing:5')
+  >>> m==None
+  False
+  >>> m.group('fs','first','last')
+  ('testing', '5', None)
+  >>> m=re_arg.match('testing:5:')
+  >>> m==None
+  False
+  >>> m.group('fs','first','last')
+  ('testing', '5', None)
+  >>> m=re_arg.match('testing:5:10')
+  >>> m==None
+  False
+  >>> m.group('fs','first','last')
+  ('testing', '5', '10')
+  >>> m=re_arg.match('testing::10')
+  >>> m==None
+  False
+  >>> m.group('fs','first','last')
+  ('testing', None, '10')
+  >>> parse_arg('testing')
+  ('testing', 1, 0, False)
+  >>> parse_arg('testing:')
+  ('testing', 1, 0, False)
+  >>> parse_arg('testing::')
+  ('testing', 1, 0, False)
+  >>> parse_arg('testing:5:')
+  ('testing', 5, 0, False)
+  >>> parse_arg('testing:5:10')
+  ('testing', 5, 10, False)
+  >>> parse_arg('testing::10')
+  ('testing', 1, 10, False)
+  >>> parse_arg('testing::+10')
+  ('testing', 1, 10, True)
+  """
+
+  # Parse the filespec, first, and last components from this argument.
+  m=re_arg.match(arg)
+  if not m:
+    die('Bad argument: %r'%arg)
+  fs,first,last=m.group('fs','first','last')
+  relative=False
+  if first==None:
+    first=1
+  elif first.isdigit():
+    first=int(first)
+  else:
+    try:
+      first=re.compile(first)
+    except:
+      die('Bad regular expression: %s'%first)
+  if last==None:
+    last=0
+  elif last.startswith('+') or last.isdigit():
+    if last[0]=='+':
+      relative=True
+      last=last[1:]
+    if not last.isdigit():
+      die('Bad relative number: %s%s'%(('','+')[relative],last))
+    last=int(last)
+  else:
+    try:
+      last=re.compile(last)
+    except:
+      die('Bad regular expression: %s'%last)
+  return fs,first,last,relative
+
+if opt.test:
+  import doctest
+  failed,tested=doctest.testmod()
+  if failed:
+    sys.exit(1)
+  sys.exit(0)
+
+
