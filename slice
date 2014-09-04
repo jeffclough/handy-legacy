@@ -1,0 +1,22 @@
+#!/usr/bin/env python
+import glob,optparse,os,sys
+
+op=optparse.OptionParser(
+  usage="""
+Form 1: %prog FILESPEC[:[FIRSTLINE][:[LASTLINE]]]
+Form 2: %prog FILESPEC[:[STARTPAT][:[ENDPAT]]]
+
+FIRSTLINE is the number (starting from 1) of the first line to be output. LASTLINE is the number of the last line to be output. If LASTLINE has a plus sign (+) in front of it, it is the number of lines to be output, beginning with FIRSTLINE. If no FIRSTLINE is given, it defaults to 1. If no LASTLINE is given, output continues to the end of the input file.
+
+STARTPAT is a regular expression that, when matched in the input file, starts output. ENDPAT, when matched, ends output. By default, the line matching ENDPAT is included in the output.
+
+Forms 1 and 2 can be mixed, so FILESPEC[:[FIRSTLINE][:[ENDPAT]]] and FILESPEC[:[STARTPAT][:[LASTLINE]]] are also valid arguments. In the latter case, the user is advised to employe relative numbering for LASTLINE by prefixing it with a plus sign (+), though this is not required.
+""",
+)
+op.add_option('-l',dest='include_last',action='store_false',default=True,help="Do not include the LASTLINEth line of the file, or the line matching ENDPAT, in the output.")
+opt,args=op.parse_options()
+
+def parse_arg(arg):
+  """Return a (filespec,start,end) tuple from the given command line
+  argument. The filespec may contain wildcards, and start and end may
+  be integers, regular expressions, or None.
