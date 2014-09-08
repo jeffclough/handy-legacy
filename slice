@@ -1,21 +1,22 @@
 #!/usr/bin/env python
 import optparse,os,re,sys
 from glob import glob
+import OptionParserFormatters
 
 op=optparse.OptionParser(
   usage="""
 Form 1: %prog FILESPEC[:[FIRSTLINE][:[LASTLINE]]]
-Form 2: %prog FILESPEC[:[STARTPAT][:[ENDPAT]]]
-
+Form 2: %prog FILESPEC[:[STARTPAT][:[ENDPAT]]]""",
+  description="""Description:
 FIRSTLINE is the number (starting from 1) of the first line to be output. LASTLINE is the number of the last line to be output. If LASTLINE has a plus sign (+) in front of it, it is the number of lines to be output, beginning with FIRSTLINE. If no FIRSTLINE is given, it defaults to 1. If no LASTLINE is given, output continues to the end of the input file.
 
 STARTPAT is a regular expression that, when matched in the input file, starts output. ENDPAT, when matched, ends output. By default, the line matching ENDPAT is included in the output.
 
 Forms 1 and 2 can be mixed, so FILESPEC[:[FIRSTLINE][:[ENDPAT]]] and FILESPEC[:[STARTPAT][:[LASTLINE]]] are also valid arguments. In the latter case, the user is advised to employe relative numbering for LASTLINE by prefixing it with a plus sign (+), though this is not required.
 """,
+  formatter=OptionParserFormatters.IndentedHelpFormatterWithNL()
 )
-op.add_option('-l',dest='include_last',action='store_false',default=True,help="Do not include the LASTLINEth line of the file, or the line matching ENDPAT, in the output.")
-op.add_option('-d',dest='delimeter',action='store',default=':',help="Set the delimiter that separates the components of each command line argument. (default: %default)")
+op.add_option('-d',dest='delimeter',action='store',default=':',help="Set the delimiter that separates the components of each command line argument. (default: colon (:))")
 op.add_option('--test',dest='test',action='store_true',default=False,help="This runs a self-test and is intended for debugging this program. (No output means everything worked correctly.)")
 op.add_option('--multi',dest='multi',action='store_true',default=False,help="Output more than one slice per file. Only the first slice is output by default. (This only makes sense if STARTPAT is used.")
 opt,args=op.parse_args()
@@ -24,8 +25,7 @@ def die(msg,rc=0):
   sys.stderr.write('%s: %s\n'%(sys.argv[0],msg))
   sys.exit(rc)
 
-#TODO: Replace colons with opt.delimiter, which defaults to a colon.
-re_arg=re.compile(r'(?P<fs>[^:]+)(:(?P<first>[^:]+)?(:(?P<last>[^:]+)?)?)?');
+re_arg=re.compile(r'(?P<fs>[^%(delimeter)s]+)(%(delimeter)s(?P<first>[^%(delimeter)s]+)?(%(delimeter)s(?P<last>[^%(delimeter)s]+)?)?)?'%opt.__dict__);
 
 def parse_arg(arg):
   """Return a (filespec,start,end,relative) tuple from the given command line
@@ -127,41 +127,52 @@ def slice(filename,first,last,relative):
 
   n=0
   f=open(filename)
+  eof=False
 
-  #TODO: Implement opt.multi.
+  while not eof: # In case opt.multi is True.
+    # Skip lines until the first line of the slice.
+    if isinstance(first,int):
+      for line in f:
+        n+=1
+        if n>=first:
+          break
+      else:
+        eof=True
+    else:
+      for line in f:
+        n+=1
+        if first.search(line):
+          break
+      else:
+        eof=True
+    if eof:
+      break
 
-  # Skip lines until the first line of the slice.
-  if isinstance(first,int):
-    for line in f:
-      n+=1
-      if n>=first:
-        break
-  else:
-    for line in f:
-      n+=1
-      if first.search(line):
-        break
-
-  # Output lines until the end of the slice.
-  m=n
-  sys.stdout.write(line)
-  if isinstance(last,int):
-    stop=last
-    if relative:
-      stop+=n
-    for line in f:
-      m+=1
-      if last!=0 and m>stop:
-        break
-      sys.stdout.write(line)
-  else:
-    for line in f:
-      m+=1
-      #TODO: Correct this logic. If last matches the line that first matched,
-      # only that line should be output.
-      sys.stdout.write(line)
-      if last.search(line):
-        break
+    # Output lines until the end of the slice.
+    m=n
+    sys.stdout.write(line)
+    if isinstance(last,int):
+      stop=last
+      if relative:
+        stop+=n-1
+      for line in f:
+        m+=1
+        if last!=0 and m>stop:
+          break
+        sys.stdout.write(line)
+      else:
+        eof=True
+    else:
+      if not last.search(line):
+        for line in f:
+          m+=1
+          sys.stdout.write(line)
+          if last.search(line):
+            break
+        else:
+          eof=True
+    if not opt.multi:
+      break
 
 # If the --test option was given, run our internal tests and quit.
 if opt.test:
