@@ -17,15 +17,20 @@ Forms 1 and 2 can be mixed, so FILESPEC[:[FIRSTLINE][:[ENDPAT]]] and FILESPEC[:[
   formatter=OptionParserFormatters.IndentedHelpFormatterWithNL()
 )
 op.add_option('-d',dest='delimeter',action='store',default=':',help="Set the delimiter that separates the components of each command line argument. (default: colon (:))")
-op.add_option('--test',dest='test',action='store_true',default=False,help="This runs a self-test and is intended for debugging this program. (No output means everything worked correctly.)")
+op.add_option('-i',dest='case',action='store_false',default=True,help="Ignore case when scanning for regular expressions.")
+op.add_option('-l',dest='filenames',action='store_false',default=True,help="Suppress normal output of filename before slices of that file when more than one file is given.")
 op.add_option('--multi',dest='multi',action='store_true',default=False,help="Output more than one slice per file. Only the first slice is output by default. (This only makes sense if STARTPAT is used.")
+op.add_option('--test',dest='test',action='store_true',default=False,help="This runs a self-test and is intended for debugging this program. (No output means everything worked correctly.)")
 opt,args=op.parse_args()
 
 def die(msg,rc=0):
   sys.stderr.write('%s: %s\n'%(sys.argv[0],msg))
   sys.exit(rc)
 
-re_arg=re.compile(r'(?P<fs>[^%(delimeter)s]+)(%(delimeter)s(?P<first>[^%(delimeter)s]+)?(%(delimeter)s(?P<last>[^%(delimeter)s]+)?)?)?'%opt.__dict__);
+opt.re_flags=0
+if not opt.case:
+  opt.re_flags|=re.IGNORECASE
+re_arg=re.compile(r'(?P<fs>[^%(delimeter)s]+)(%(delimeter)s(?P<first>[^%(delimeter)s]+)?(%(delimeter)s(?P<last>[^%(delimeter)s]+)?)?)?'%opt.__dict__)
 
 def parse_arg(arg):
   """Return a (filespec,start,end,relative) tuple from the given command line
@@ -103,7 +108,7 @@ def parse_arg(arg):
     first=int(first)
   else:
     try:
-      first=re.compile(first)
+      first=re.compile(first,opt.re_flags)
     except:
       die('Bad regular expression: %s'%first)
   if last==None:
@@ -117,7 +122,7 @@ def parse_arg(arg):
     last=int(last)
   else:
     try:
-      last=re.compile(last)
+      last=re.compile(last,opt.re_flags)
     except:
       die('Bad regular expression: %s'%last)
   return fs,first,last,relative
@@ -187,8 +192,11 @@ if opt.test:
 # Step through our command line arguments:
 for arg in args:
   fs,first,last,relative=parse_arg(arg)
-  flist=glob(fs)
+  if fs=='-':
+    flist=['/dev/stdin']
+  else:
+    flist=glob(fs)
   for fn in flist:
-    if len(args)>1 or len(flist)>1:
+    if opt.filenames and (len(args)>1 or len(flist)>1):
       print '\n%s:'%fn
     slice(fn,first,last,relative)
