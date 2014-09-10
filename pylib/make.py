@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import optparse,os,platform,shlex,shutil,sys,time
 from glob import glob
+from fnmatch import fnmatch
 
 """
 This module is intended to span the gap between Makefile and setup.py,
@@ -25,6 +26,8 @@ if OS_NAME=='Linux':
 del dummy
 
 PYTHON_VERSION=sys.version_info[:3]
+
+IGNORE=['*.pyc']
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Command line set-up.
@@ -55,6 +58,19 @@ V_TIME=2
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Low-level functions.
 #
+
+if PYTHON_VERSION<(2,5):
+  # Import some functions from the future.
+
+  def all(it):
+    for i in it:
+      if not i: return False
+    return True
+
+  def any(it):
+    for i in it:
+      if i: return True
+    return False
 
 def build_command(*args):
   '''Return a string containing all our arguments in a form that can be
@@ -338,7 +354,7 @@ class Installer(DependentTarget):
     for dep in self.deps:
       dest=os.path.join(self.dir,os.path.basename(dep))
       #print 'DEBUG: self.dir=%r dep=%r dest=%r'%(self.dir,dep,dest)
-      if isnewer(dep,dest):
+      if isnewer(dep,dest) and not any([fnmatch(dep,pat) for pat in IGNORE]):
         print '%s ==> %s'%(dep,self.dir)
         sys.stdout.flush()
         if not opt.dryrun:
