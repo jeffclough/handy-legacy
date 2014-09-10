@@ -78,7 +78,7 @@ make.CExecutable('randword','randword.c')
 make.CExecutable('secdel','secdel.c')
 make.CExecutable('timeshift','timeshift.c')
 make.DependentTarget('cutcsv','xlrd')
-make.EasyInstall('xlrd',PYTHON_LIB_DIR)
+make.EasyInstall('xlrd',PYTHON_LIB_DIR,minver='2.6')
 
 # We need one installer for each target directory.
 make.Installer('install',make.path(make.opt.prefix,'bin'),CPROGS,SCRIPTS)

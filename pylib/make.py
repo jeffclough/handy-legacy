@@ -24,6 +24,7 @@ if OS_NAME=='Linux':
     DISTRO_NAME,DISTRO_VER,dummy=platform.dist()
 del dummy
 
+PYTHON_VERSION=sys.version_info[:3]
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Command line set-up.
@@ -352,14 +353,52 @@ class EasyInstall(Target):
   '''Run easy_install to install the package to the given directory, but
   only if it's not already installed.'''
 
-  def __init__(self,package,dir):
+  def __init__(self,package,dir,minver=None,maxver=None):
     filename=os.path.join(dir,package)
     Target.__init__(self,filename)
     self.package=package
     self.dir=dir
+    self.minver=self.getVersionTuple(minver)
+    self.maxver=self.getVersionTuple(maxver)
+
+  def getVersionString(self,version=None):
+    if version==None:
+      version=PYTHON_VERSION
+    return '.'.join([str(x) for x in version])
+
+  def getVersionTuple(self,ver):
+    """Accept a version represented either as a string ('2.3.1'),
+    float (2.3), integer (3), or a tuple (2,3,1), and return the
+    corresponding tuple suitable for comparison with the first three
+    elements of sys.version_info. If none of these types is given,
+    return None."""
+
+    if isinstance(ver,str) or isinstance(ver,unicode):
+      ver=tuple([int(x) for x in ver.split('.')])
+    elif isinstance(ver,float):
+      ver=tuple(int(ver),int(('%0.3f'%(ver%1)).split('.')[1].split('0',1)[0]))
+    elif isinstance(ver,int):
+      ver=(ver,)
+    else:
+      ver=None
+    return ver
 
   def build(self):
     if self.built:
+      return
+    if self.minver and PYTHON_VERSION<self.minver:
+      print 'WARNING: Python package %s requires minimum Python version of %s'%(
+        self.package,
+        self.getVersionString(self.minver)
+      )
+      self.built=True
+      return
+    if self.maxver and PYTHON_VERSION>self.maxver:
+      print 'WARNING: Python package %s requires maximum Python version of %s'%(
+        self.package,
+        self.getVersionString(self.maxver)
+      )
+      self.built=True
       return
     if opt.verbosity>=V_DEPS:
       print '  Python package %s depends on %s*'%(self.package,self.filename)
