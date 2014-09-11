@@ -2,6 +2,18 @@
 
 import optparse,os,re,sys
 
+if sys.version_info<(2,4):
+  # We'll need to supply our own reversed() function.
+
+  def reversed(seq):
+    """Return a reversed copy of the given sequence as a list. This
+    isn't an exact replacement for version 2.4's reversed() built-in
+    function, but it's just fine for the needs of this script."""
+
+    l=list(seq)
+    l.reverse()
+    return l
+
 progname=os.path.basename(sys.argv[0])
 
 format_fieldspec=re.compile(r'{([0-9A-Za-z_]*)}')
