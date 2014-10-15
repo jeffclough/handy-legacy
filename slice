@@ -17,6 +17,8 @@ Forms 1 and 2 can be mixed, so FILESPEC[:[FIRSTLINE][:[ENDPAT]]] and FILESPEC[:[
   formatter=OptionParserFormatters.IndentedHelpFormatterWithNL()
 )
 op.add_option('-d',dest='delimeter',action='store',default=':',help="Set the delimiter that separates the components of each command line argument. (default: colon (:))")
+#TODO: Implement the -f option.
+op.add_option('-f','--follow',dest='follow',action='store_true',default=False,help="Monitor the input file for further content if the LASTLINE or ENDPAT is not found. This is similar to the -f option of tail. (NOT YET IMPLEMENTED!)")
 op.add_option('-i',dest='case',action='store_false',default=True,help="Ignore case when scanning for regular expressions.")
 op.add_option('-l',dest='filenames',action='store_false',default=True,help="Suppress normal output of filename before slices of that file when more than one file is given.")
 op.add_option('--multi',dest='multi',action='store_true',default=False,help="Output more than one slice per file. Only the first slice is output by default. (This only makes sense if STARTPAT is used.")
