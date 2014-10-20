@@ -21,6 +21,7 @@ op.add_option('-d',dest='delimeter',action='store',default=':',help="Set the del
 op.add_option('-f','--follow',dest='follow',action='store_true',default=False,help="Monitor the input file for further content if the LASTLINE or ENDPAT is not found. This is similar to the -f option of tail. (NOT YET IMPLEMENTED!)")
 op.add_option('-i',dest='case',action='store_false',default=True,help="Ignore case when scanning for regular expressions.")
 op.add_option('-l',dest='filenames',action='store_false',default=True,help="Suppress normal output of filename before slices of that file when more than one file is given.")
+op.add_option('-n','--next',dest='next',action='store_true',default=False,help="Keeps ENDPAT from matching the same line STARTPAT matched. This also, and necessarily if you think about it, requires that the line matching ENDPAT no be output and remain available to be matched by STARTPAT. (This option has no effect if LASTLINE is use rather than ENDPATH, and it makes no sense if FIRSTLINE is used rather than STARTPAT.)")
 op.add_option('--multi',dest='multi',action='store_true',default=False,help="Output more than one slice per file. Only the first slice is output by default. (This only makes sense if STARTPAT is used.")
 op.add_option('--test',dest='test',action='store_true',default=False,help="This runs a self-test and is intended for debugging this program. (No output means everything worked correctly.)")
 opt,args=op.parse_args()
@@ -129,11 +130,52 @@ def parse_arg(arg):
       die('Bad regular expression: %s'%last)
   return fs,first,last,relative
 
+class File(file):
+  """The File class is just like the native file class, but it adds a
+  readfrom instance value that holds the file location from which the
+  most recent data was read. This supports rewinding the file to read
+  the same line again when necessary."""
+
+  def __init__(self,name,mode='r',buffering=-1):
+    super(File,self).__init__(name,mode,buffering)
+    self.readfrom=self.tell()
+
+  def next(self):
+    return 
+
+  def read(self,size=-1):
+    self.readfrom=self.tell()
+    return super(File,self).read(size)
+
+  def readline(self,size=-1):
+    self.readfrom=self.tell()
+    return super(File,self).readline(size)
+
+  def readlines(self,size=None):
+    self.readfrom=self.tell()
+    return super(File,self).readlines(size)
+
+  def seek(self,offset,whence=0):
+    super(File,self).seek(offset,whence)
+    self.readfrom=self.tell()
+
+  def rewind(self):
+    """Set the file location to where the most recent read operation was
+    performed."""
+
+    super(File,self).seek(self.readfrom)
+
+
 def slice(filename,first,last,relative):
   "Read the given file, and output the section from first to last."
 
   n=0
-  f=open(filename)
+  f=File(filename)
+  if opt.next():
+    try:
+      f.rewind() # This has no practical effect on a newly created File object.
+    except:
+      die("Cannot use the -n (--next) option with \"%s\" because it can't be rewound."%filename)
   eof=False
 
   while not eof: # In case opt.multi is True.
@@ -170,14 +212,21 @@ def slice(filename,first,last,relative):
       else:
         eof=True
     else:
-      if not last.search(line):
+      if opt.next:
+        found=None
+      else:
+        found=last.search(line)
+      while not found:
         for line in f:
           m+=1
-          sys.stdout.write(line)
-          if last.search(line):
-            break
+          found=last.search(line)
+          if found and opt.next:
+            f.rewind() # Set up to re-read the last line we read.
+          else:
+            sys.stdout.write(line)
         else:
           eof=True
+    n=m
     if not opt.multi:
       break
 
