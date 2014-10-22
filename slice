@@ -141,7 +141,11 @@ class File(file):
     self.readfrom=self.tell()
 
   def next(self):
-    return 
+    line=self.readline()
+    if not line:
+      return StopIteration
+    else:
+      return line
 
   def read(self,size=-1):
     self.readfrom=self.tell()
@@ -166,12 +170,18 @@ class File(file):
     super(File,self).seek(self.readfrom)
 
 
-def slice(filename,first,last,relative):
-  "Read the given file, and output the section from first to last."
+def slice(filename,first,last,relative=False):
+  """Read the given file, and output the section from first to last.
+  The relative argument is true if last is numeric and expresses
+  the number of lines to be returned rather than the ending line number.
+
+  >>> repr(slice(sys.argv[0],1,1))
+  '#!/usr/bin/env python'
+  """
 
   n=0
   f=File(filename)
-  if opt.next():
+  if opt.next:
     try:
       f.rewind() # This has no practical effect on a newly created File object.
     except:
@@ -220,6 +230,7 @@ def slice(filename,first,last,relative):
         for line in f:
           m+=1
           found=last.search(line)
+          print 'DEBUG: line=%r found=%r'%(line,found)
           if found and opt.next:
             f.rewind() # Set up to re-read the last line we read.
           else:
@@ -251,3 +262,19 @@ for arg in args:
     if opt.filenames and (len(args)>1 or len(flist)>1):
       print '\n%s:'%fn
     slice(fn,first,last,relative)
+
+
+
+"""
+THIS IS TEST DATA, USED BY THE THIS FUNCTION'S DOCTESTS.
+
+aaa
+bbb
+ccc
+ddd
+
+aaa
+bbb
+ccc
+ddd
+"""
