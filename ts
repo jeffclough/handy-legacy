@@ -6,9 +6,11 @@ prog=os.path.basename(sys.argv[0])
 
 op=optparse.OptionParser(
   usage='Usage: %prog [OPTIONS] filename ...',
-  description='''This command renames the given file(s) to include the date and time of
-each respective file. It renames filename to filename.YYYYMMDD_HHMMSS.
-If -c (--copy) is given, the file is copied rather than renamed.'''
+  description='''This command renames the given file(s) to include the date and
+time of each respective file. It renames filename to filename.YYYYMMDD_HHMMSS.
+If -c (--copy) is given, the file is copied rather than renamed. If no
+argument is given, the current (or offset) time is simply written to
+standard output.'''
 )
 op.add_option('-t','--time',dest='time',choices=('created','accessed','modified'),default='modified',help="Choose which time to use for the timestamp. The choices are 'created', 'accessed', or 'modified'. (default: %default)")
 op.add_option('--format',dest='format',action='store',default='%(filename)s.%(time)s',help="Specify a new format for a time-stamped filename. (default: %default)")
