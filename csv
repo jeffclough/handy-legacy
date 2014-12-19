@@ -1,0 +1,19 @@
+#!/usr/bin/env python
+
+import csv,optparse,os,shlex,sys
+
+op=optparse.OptionParser(
+  usage="usage: %prog [column-1 ... column-n]",
+  description="Use this program to output properly quoted CSV data from non-CSV sources. If command line arguments are given, they are written as the first line of CSV output, one argument per column. If standard input is being redirected, each line is parsed and written to standard output as CSV. Standard shell quoting rules are applied to data read from standard input."
+)
+opt,args=op.parse_args()
+
+writer=csv.writer(sys.stdout)
+if args:
+  writer.writerow(args)
+
+if not sys.stdin.isatty():
+  for line in sys.stdin:
+    args=shlex.split(line)
+    if args:
+      writer.writerow(args)
