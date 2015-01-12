@@ -230,11 +230,11 @@ def slice(filename,first,last,relative=False):
         for line in f:
           m+=1
           found=last.search(line)
-          print 'DEBUG: line=%r found=%r'%(line,found)
-          if found and opt.next:
-            f.rewind() # Set up to re-read the last line we read.
-          else:
-            sys.stdout.write(line)
+          sys.stdout.write(line)
+          if found:
+            if opt.next:
+              f.rewind() # Set up to re-read the last line we read.
+            break
         else:
           eof=True
     n=m
