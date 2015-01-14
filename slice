@@ -3,6 +3,23 @@ import optparse,os,re,sys
 from glob import glob
 import OptionParserFormatters
 
+# Ensure that we're running at least version 2.5 of Python.
+req=(2,5)
+vi=sys.version_info
+if vi<req:
+  v=7
+  while v>=req[1]:
+    cmd='python2.%d'%v
+    rc=os.spawnv(os.P_WAIT,cmd,sys.argv)
+    print 'os.spawnv(os.P_WAIT,%r,%r) returns %d'%(cmd,sys.argv,rc)
+    if rc!=127:
+      sys.exit(rc)
+    v-=1
+  print >>sys.stderr,'%s: Requires python version >= %d.%d, but found ownly %d.%d'%(
+    sys.argv[0],req[0],req[1],vi[0],vi[1]
+  )
+  sys.exit(rc)
+
 op=optparse.OptionParser(
   usage="""
 Form 1: %prog FILESPEC[:[FIRSTLINE][:[LASTLINE]]]
