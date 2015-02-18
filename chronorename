@@ -161,7 +161,7 @@ op=optparse.OptionParser(
   formatter=IndentedHelpFormatterWithNL(max_help_position=8),
   usage="%prog [options] filename ...",
   description="""Description:
-Digital cameras are great, but they're not very creative about what they name the images they create, not to mention that they generally use all upper case in the filename. The filename "IMG_0052.JPG" doesn't tell me where, when, or on what occasion the picture was taken. Sure, there's EXIF data embedded in the file, but that doesn't do me any good from the command line ... until now.
+Digital cameras are great, but they're not very creative about what they name the images you create with them, not to mention that they generally use all upper case in the filename. The filename "IMG_0052.JPG" doesn't tell me where, when, or on what occasion the picture was taken. Sure, there's EXIF data embedded in the file, but that doesn't do me any good from the command line ... until now.
 
 This command renames a file according to when it was taken (see the -t option). The time may be formatted in any number of ways.
 
@@ -169,7 +169,7 @@ A series name may also be given with the -s option. Any series name is placed af
 
   chronorename -s "my vacation" *.JPG
 
-which renames the *.JPG files in the current directory to "YYMMDD_hhmmss-my vacation.jpg" where "YYYYMMDD_hhmmss" is replaced by the time when the picture was taken. By default, the file extension is lower-cased when the file is renamed, but you can change this with the -f option.
+which renames the *.JPG files in the current directory to "YYYYMMDD_hhmmss-my vacation.jpg" where "YYYYMMDD_hhmmss" is replaced by the time when the picture was taken. By default, the file extension is lower-cased when the file is renamed, but you can change this with the -f option.
 
 You can use the CHRONORENAME_OPT environment variable to store your own default options for %prog.""",
 epilog="""
