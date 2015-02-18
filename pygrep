@@ -163,7 +163,7 @@ op.add_option('-1',dest='onefile',action='store_true',default=False,help="Matchi
 
 op.add_option('--flag',dest='flags',action='store',default=None,help="""Use as many of the following as you'd like to set the Python regular expression options:
   i - Ignore case. (Same as -i option.)
-  l- Make \w, \W, \\b, \B, \s, and \S dependent on current locale.
+  l - Make \w, \W, \\b, \B, \s, and \S dependent on current locale.
   m - Operate in multiline mode. ^ and $ recognize embedded newlines.
   s - Make the . special character recognize newlines as well as other white space.
   u - Make \w, \W, \\b, \B, \s, and \S respect the Unicode properties database.

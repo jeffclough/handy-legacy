@@ -40,6 +40,7 @@ CPROGS=( # Compile these targets from C source files.
 SCRIPTS=( # These targets are simply copied during installation.
   'chronorename',
   'columnate',
+  'csv',
   'cutcsv',
   'decode64',
   'encode64',
