@@ -1030,6 +1030,30 @@ if opt.dictionary:
   lightbox robbie stake cocktail outlets swaziland varieties arbor mediawiki
   configurations poison""".split() if len(w)>=5]
 
+# Supply an all(seq) function if we don't have one.
+try:
+  all
+except NameError:
+  def all(seq):
+    "Return False iff any element of seq is not True."
+
+    for x in seq:
+      if not x:
+        return False
+    return True
+
+# Supply an any(seq) function if we don't have one.
+try:
+  any
+except NameError:
+  def any(seq):
+    "Return True iff any element of seq is True."
+
+    for x in seq:
+      if x:
+        return True
+    return False
+
 # Cook up some character class data based on the user's options.
 class_n='0123456789'
 class_l='abcdefghijklmnopqrstuvwxyz'
