@@ -4,16 +4,104 @@ import csv,optparse,os,shlex,sys
 
 op=optparse.OptionParser(
   usage="usage: %prog [column-1 ... column-n]",
-  description="Use this program to output properly quoted CSV data from non-CSV sources. If command line arguments are given, they are written as the first line of CSV output, one argument per column. If standard input is being redirected, each line is parsed and written to standard output as CSV. Standard shell quoting rules are applied to data read from standard input."
+  description="Use this program to output properly quoted CSV data from non-CSV sources. If command line arguments are given, they are written as the first line of CSV output, one argument per column. If standard input is being redirected, each line is parsed according to the usual shell argument quoting rules and written to standard output as CSV. The CSV dialect (default is Excel) can be customized using options."
 )
+op.add_option('--delimiter',dest='delimiter',action='store',default=',',help="One character to use to separate values. (default: %default)")
+op.add_option('--escape-with',dest='escapechar',action='store',default='\\',help="One character to output immediately before an embedded deliter or quote character when --quote-none is used. (default: %default)")
+op.add_option('--line-term',dest='lineterminator',action='store',default='\n',help="String to end each line with. (default: '\\n')")
+op.add_option('--quote-all',dest='quoting',action='store_const',const=csv.QUOTE_ALL,help="Quotes are always placed around values.")
+op.add_option('--quote-min',dest='quoting',action='store_const',const=csv.QUOTE_MINIMAL,help="Quotes are placed around values only when they contain a quote or delimiter character. (This is the default.)")
+op.add_option('--quote-none',dest='quoting',action='store_const',const=csv.QUOTE_NONE,help="Quotes are never placed around values.")
+op.add_option('--quote-non-numeric',dest='quoting',action='store_const',const=csv.QUOTE_NONNUMERIC,help="Quotes are always placed around values that don't look like integers or real numbers.")
+op.add_option('--quote-char',dest='quotechar',action='store',default='"',help="The character to use for quoting values when called for. (default: %default)")
+op.add_option('--single-quote',dest='doublequote',action='store_false',default=True,help="An embedded quote in a value is normally output as two consecutive quotes. Use this option to suppress that behavior.")
+op.add_option('--test',dest='test',action='store_true',default=False,help="Run internal tests (for debugging purposes only).")
 opt,args=op.parse_args()
+if opt.quoting==None:
+  opt.quoting=csv.QUOTE_MINIMAL
+if len(opt.delimiter)!=1:
+  op.error("--delimiter must have an arguement of EXACTLY one character.")
+if len(opt.escapechar)!=1:
+  op.error("--escape-with must have an arguement of EXACTLY one character.")
 
-writer=csv.writer(sys.stdout)
+dialect=type('',(),dict(
+  delimiter=opt.delimiter,
+  doublequote=opt.doublequote,
+  escapechar=opt.escapechar,
+  lineterminator=opt.lineterminator,
+  quotechar=opt.quotechar,
+  quoting=opt.quoting,
+  # This last value isn't used for CSV writers. It's only here for completeness.
+  skipinitialspace=True,
+))
+
+def numeric(x):
+  """Return the numeric value of x if x can be interpreted as either
+  integer or float. Otherwise, return the original value of x.
+  
+  >>> numeric('4')
+  4
+  >>> numeric('3.25')
+  3.25
+  >>> numeric('testing')
+  'testing'
+  """
+
+  y=str(x)
+  try:
+    return int(y)
+  except:
+    pass
+  try:
+    return float(y)
+  except:
+    pass
+  return x
+
+def write_output(writer,line):
+  """Given a line of input, parse it according to shell argument parsing
+  rules, and write the resulting values as a CSV-formatted line to
+  standard output.
+
+  >>> import StringIO
+  >>> buf=StringIO.StringIO()
+  >>> w=csv.writer(buf)
+  >>> write_output(w,'''"trailing  " "  leading" 'quo"tes' delim,iters normal 1 2.25''')
+  >>> print buf.getvalue().strip()
+  trailing  ,  leading,"quo""tes","delim,iters",normal,1,2.25
+
+  >>> buf=StringIO.StringIO()
+  >>> opt.quoting=csv.QUOTE_NONNUMERIC
+  >>> w=csv.writer(buf,quoting=opt.quoting)
+  >>> write_output(w,'''"trailing  " "  leading" 'quo"tes' delim,iters normal 1 2.25''')
+  >>> print buf.getvalue().strip()
+  "trailing  ","  leading","quo""tes","delim,iters","normal",1,2.25
+  """
+
+  if opt.quoting==csv.QUOTE_NONNUMERIC:
+    args=[numeric(val) for val in shlex.split(line)]
+  else:
+    args=shlex.split(line)
+  if args:
+    writer.writerow(args)
+
+
+# This is where unit testing is implemented.
+if opt.test:
+  import doctest,StringIO
+  failed,total=doctest.testmod()
+  if failed:
+    sys.exit(1)
+
+# Prepare a CSV writer.
+writer=csv.writer(sys.stdout,dialect=dialect)
+
+# Output the CSV for our command line arguments, if any.
 if args:
   writer.writerow(args)
 
+# Read standard input, if any, parsing each line for values as a shell would,
+# and then writing each line's values as a line of CSV-formatted values.
 if not sys.stdin.isatty():
   for line in sys.stdin:
-    args=shlex.split(line)
-    if args:
-      writer.writerow(args)
+    write_output(writer,line)
