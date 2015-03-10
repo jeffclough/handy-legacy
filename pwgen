@@ -1035,7 +1035,7 @@ try:
   all
 except NameError:
   def all(seq):
-    "Return False iff any element of seq is not True."
+    "Implement the all() built-in function intruduced in Python 2.5."
 
     for x in seq:
       if not x:
@@ -1047,12 +1047,43 @@ try:
   any
 except NameError:
   def any(seq):
-    "Return True iff any element of seq is True."
+    "Implement the any() built-in function intruduced in Python 2.5."
 
     for x in seq:
       if x:
         return True
     return False
+
+try:
+  set
+except NameError:
+  class Set(object):
+    """This is a very partial replacement for the set type introduced in
+    Python 2.3"""
+
+    def __init__(self,seq):
+      "Initialize this set with the items in the given sequence."
+
+      self.d={} # We'll fake a set with the keys of a dict.
+      for val in seq:
+        self.d[val]=None
+
+    def __len__(self):
+      "Return the number of items in this set."
+
+      return len(self.d)
+
+    def add(self,val):
+      "Add the value to our set."
+
+      self.d[val]=None
+
+  def set(seq):
+    "Return a new set containing the elements of the given sequence."
+
+    s=Set(seq)
+    return s
+
 
 # Cook up some character class data based on the user's options.
 class_n='0123456789'
