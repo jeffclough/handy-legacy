@@ -49,6 +49,7 @@ SCRIPTS=( # These targets are simply copied during installation.
   'ip2host',
   'mark',
   'names',
+  'not',
   'now',
   'pa',
   'pwgen',
