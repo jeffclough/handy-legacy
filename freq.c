@@ -20,6 +20,9 @@
  * TODO-2: It might be nice to be able to specify the precision of the
  * percent mode output either by multiple -p options or by an argument to -p.
  *
+ * TODO-3: Add a -g (for "graph") to change the output from a tabular format
+ * to a histogram (one line per character value).
+ *
  * ABSTRACT:
  * Freq's purpose in life is to do a sort of frequency analys on the
  * characters in a file. It reads only from standard input and writes its
@@ -55,7 +58,7 @@
 
 /*
  * On systems that do not define O_LARGEFILE, set this value to 0 so that
- * it will not affect the value of the flage sent to open().
+ * it will not affect the value of the flag sent to open().
  */
 #ifndef O_LARGEFILE
 #define O_LARGEFILE 0
@@ -202,7 +205,7 @@ int usage(int rc) {
       "-a agregates all input files into one output table.\n"
       "-h outputs counts in hexadecimal rather than decimal.\n"
       "-p outputs counts in percentages rather than as raw counts. -p takes\n"
-      "   precedence over -h, regardless of their occurance.\n"
+      "   precedence over -h.\n"
       "-v displays an ASCII chart above the normal output.\n"
       "-z replaces zero counts with \".\" entries for the sake of visual\n"
       "   clarity.\n"
