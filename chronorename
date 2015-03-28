@@ -390,6 +390,8 @@ def getFilenameParts(fn):
   # of the full pathname in filename.
   dir,filename=os.path.split(fn)
   filename,ext=os.path.splitext(filename)
+  if dir:
+    dir+=os.sep
 
   # Compose the time stamp string we are to use for this file.
   ts=None
