@@ -1,0 +1,372 @@
+#!/usr/bin/env python
+
+import optparse,os,re,stat,sys,time
+from datetime import datetime,timedelta,tzinfo
+
+now=datetime.today()
+
+class TimeZone(tzinfo):
+  "Make creating tzinfo objects simple and easy."
+
+  def __init__(self,std_name,std_minutes=None,dst_name=None,dst_minutes=60):
+    """Build a TimeZone object, which is also a tzinfo object.
+    
+    std_name:    Name of the time zone during the non-DST interval. If
+                 std_itme is "local", the local time zone will be used,
+                 and no further arguments are needed (and will be
+                 ignored).
+
+    std_minutes: Offset in minutes from UTC, positive for westward
+                 offsets and negative for eastward.
+
+    dst_name:    Name of the time zone during the DST interval. If not
+                 given, it will be the same as std_name.
+
+    dst_minutes: Offset in minutes from standard time to DST for this
+                 time zone. This value is nearly always 60 (to "spring
+                 forward one hour"), so it defaults to that value."""
+
+
+    if std_name=='local':
+      if len(time.tzname)>0:
+        self.std_name=time.tzname[0]
+      else:
+        self.std_name=None
+      if len(time.tzname)>1:
+        self.dst_name=time.tzname[1]
+      else:
+        self.dst_name=self.std_name
+      self.std_offset=timedelta(seconds=-time.timezone)
+      if time.daylight:
+        self.dst_offset=timedelta(seconds=-time.altzone)
+      else:
+        self.dst_offset=std_offset
+    else:
+      self.std_name=std_name
+      self.std_offset=timedelta(minutes=std_minutes)
+      self.dst_name=dst_name
+      self.dst_offset=timedelta(minutes=std_minutes+dst_minutes)
+
+  def __repr__(self):
+    return 'TimeZone(%r,%r,%r,%r)'%(
+      self.std_name,int(self.std_offset.total_seconds()/60),
+      self.dst_name,int((self.dst_offset-self.std_offset).total_seconds()/60)
+    )
+
+  def __str__(self):
+    if self.std_name==self.dst_name:
+      return self.std_name
+    return '%s%d%s'%(self.std_name,-self.std_offset.total_seconds()/3600,self.dst_name)
+
+  def utcoffset(self,dt):
+    if self.isDst(dt):
+      return self.dst_offset
+    return self.std_offset
+
+  def tzname(self,dt):
+    if self.isDst(dt):
+      return self.dst_name
+    return self.std_name
+
+  def dst(self,dt):
+    if self.isDst(dt):
+      return self.dst_offset-self.std_offset
+    return timedelta(0)
+
+  def isDst(self,dt):
+    """Return True if dt is in a DST interval. Let datetime and time do
+    the heavy lifting."""
+
+    # Compute the true UTC epoch seconds of dt.
+    es=(dt.toordinal()-datetime.utcfromtimestamp(0).toordinal())*86400+dt.hour*3600+dt.minute*60+dt.second
+    # Offset this for dt's timezone, and get the answer from localtime().
+    return time.localtime(es-self.std_offset.total_seconds()).tm_isdst==1
+
+tz_utc=TimeZone('UTC',0,'UTC',0)
+    
+# Make a list of time zones we recognize, including whatever the local time
+# zone is. (Yes, I know UTC is not a time zone.)
+# THE FIRST TIME ZONE IN THIS ARRAY IS USED AS THE DEFAULT TIME ZONE WHEN
+# NONE IS GIVEN IN A STRING THAT'S BEING PARSED. BECAUSE OF THIS, MAKE SURE
+# THAT THE "local" TIME ZONE IS LISTED FIRST!
+time_zones=[
+  TimeZone('local'), # This creates EST/DST for US Eastern time, and so forth.
+  tz_utc,
+  TimeZone('GMT',0,'BST'),
+  TimeZone('EST',-5*60,'EDT'),
+  TimeZone('CST',-6*60,'CDT'),
+  TimeZone('MST',-7*60,'MDT'),
+  TimeZone('PST',-8*60,'PDT'),
+]
+tz_default=time_zones[0]
+
+# Make a dictionary of time zone names that map to the corresponding time zone.
+zones_by_name={}
+for z in time_zones:
+  zones_by_name[z.std_name]=z
+  zones_by_name[z.dst_name]=z
+
+# Make a list of 
+epochs=dict(
+  microsoft=datetime(1,1,1,0,0,0,0,tz_utc),
+  ad=datetime(1601,1,1,0,0,0,0,tz_utc),
+  cobol=datetime(1601,1,1,0,0,0,0,tz_utc),
+  ntfs=datetime(1601,1,1,0,0,0,0,tz_utc),
+  vms=datetime(1858,11,17,0,0,0,0,tz_utc),
+  ntp=datetime(1900,1,1,0,0,0,0,tz_utc),
+  excel=datetime(1900,1,1,0,0,0,0,tz_utc),
+  unix=datetime(1970,1,1,0,0,0,0,tz_utc),
+)
+epoch_names=sorted(epochs.keys())
+
+op=optparse.OptionParser(
+  usage="%prog [OPTIONS] arguments expressing date and time"
+)
+op.add_option('--age',metavar='UNITS',dest='age',choices=('seconds','minutes','hours','days','time'),help="Request the age of the given date and time, and give the desired units (days, hours, minutes, or seconds). The 'time' units value gives an output format of '[-][DAYSd ]%HH:%MM:%SS'. Only integer values are returned, and there is no rounding. Future times return a negative age.")
+op.add_option('--epoch',dest='epoch',choices=epoch_names,help="Output the number of seconds elapsed from the beginning of given epoch to the given time. Negative values are given for times that predate the epoch. Epoch choices: %s"%(', '.join(epoch_names)))
+op.add_option('-f',dest='format',action='store',default='%Y-%m-%d %H:%M:%S %Z',help="Set the output format. See 'man strptime' for the format syntax. (default: %default)")
+op.add_option('--where',dest='where',type='choice',choices=('beginning','start','whole','end'),default='start',help="""Say where to allow the date and time to appear in the given text. This can be any one of "start", "beginning", "whole", or "end". "start" and "beginning" are synonymous, and "whole" means that ONLY the date and time may appear in the given text.""")
+op.add_option('--debug',dest='debug',action='store_true',help="Presents output only a developer could love.")
+opt,args=op.parse_args()
+
+if opt.epoch!=None:
+  opt.epoch=epochs[opt.epoch]
+  if opt.age==None:
+    # Because the --age logic is going to do most of --epoch's work.
+    opt.age='seconds'
+
+def die(msg,rc=1):
+  sys.stderr.write(os.path.basename(sys.argv[0])+': '+msg+'\n')
+  sys.exit(rc)
+
+months=(
+  'january',
+  'february',
+  'march',
+  'april',
+  'may',
+  'june',
+  'july',
+  'august',
+  'september'
+  'october',
+  'november',
+  'december'
+)
+
+def get_month_by_name(month_name):
+  """Return a number from 1 to 12 corresponding to the given month name,
+  or return None for an unrecognized month name. To make the caller's
+  life easier, any string containing a number from 1 to 12 is also
+  returned as the corresponding integer."""
+
+  try:
+    n=int(month_name)
+    if n>=1 and n<=12:
+      return n
+    else:
+      return none
+  except:
+    pass
+  n=len(month_name)
+  if n<3:
+    return None
+  m=month_name.lower()
+
+  for i in range(len(months)):
+    if m==months[i][:n]:
+      return i+1
+  return None
+
+class ParserBase(object):
+  """This is the base class of all other time parsers. Treat it as an
+  abstract base class."""
+
+  # This is the name of the format this parser parses.
+  name=''
+
+  # This is a sequence of compiled REs. This parser can parse only strings
+  # that match one of these REs in their entirety.
+  patterns=(
+  )
+
+  # Parse the given string and return an object representing that time. If
+  # the string cannot be parsed, return None.
+  def parse(time_string):
+    return None
+
+class DateTimeParser(ParserBase):
+  name="Full Date and Time"
+  patterns=(
+    # YYYY-mm-dd HH:MM:SS
+    r'(?P<year>\d+)[-/]'
+    r'(?P<month>\d+)[-/]'
+    r'(?P<day>\d+)\s+'
+    r'(?P<hour>\d+):'
+    r'(?P<minute>\d+):'
+    r'(?P<second>\d+)'
+    r'(?P<tz>\b)',
+    # [dow] mmm dd hh:mm:ss [tz] yyyy
+    r'((?P<dow>\w+)\s+)?'
+    r'(?P<month>\w+)\s'
+    r'(?P<day>\d+)\s+'
+    r'(?P<hour>\d+):'
+    r'(?P<minute>\d+):'
+    r'(?P<second>\d+)\s+'
+    r'((?P<tz>\w+)\s+)?'
+    r'(?P<year>\d+)',
+  )
+  if opt.where in ('whole','end'):
+    patterns=[p+'$' for p in patterns]
+  if opt.where in ('beginning','start','whole'):
+    patterns=['^'+p for p in patterns]
+  patterns=[re.compile(p) for p in patterns]
+
+  def parse(self,time_string):
+    for p in self.patterns:
+      m=p.search(time_string)
+      if m:
+        # Load our time components into an untyped object as attributes.
+        d=type('',(),m.groupdict())
+
+        # Get current time for default time components.
+        if d.tz:
+          tz=d.tz.upper()
+          if tz in zones_by_name:
+            d.tz=zones_by_name[tz]
+          else:
+            die('Unrecognized time zone: %r'%d.tz)
+        else:
+          d.tz=tz_default
+        now=datetime.now(d.tz)
+
+        if not d.year:
+          d.year=now.year
+        else:
+          d.year=int(d.year)
+
+        if not d.month:
+          d.month=now.month
+        else:
+          d.month=get_month_by_name(d.month)
+          if d.month<1:
+            die('Bad month in "%s", parsed by "%s": %s'%(time_string,p.pattern,str(e)))
+
+        if not d.day:
+          d.day=now.day
+        else:
+          d.day=int(d.day)
+
+        if not d.hour:
+          d.hour=now.hour
+        else:
+          d.hour=int(d.hour)
+
+        if not d.minute:
+          d.minute=now.minute
+        else:
+          d.minute=int(d.minute)
+
+        if not d.second:
+          d.second=now.second
+        else:
+          d.second=int(d.second)
+
+
+        try:
+          dt=datetime(d.year,d.month,d.day,d.hour,d.minute,d.second,0,d.tz)
+          return dt
+        except ValueError,e:
+          die('Error in "%s", parsed by "%s": %s'%(time_string,p.pattern,str(e)))
+    return None
+
+parsers=(
+  DateTimeParser(),
+)
+
+# Handle --debug.
+if opt.debug:
+  from pprint import pprint
+  def debug(msg):
+    print 'D: '+msg
+
+  def show(var):
+    debug("%s=%r"%(var,globals()[var]))
+
+  pprint(zones_by_name)
+  sys.exit(0)
+
+def parse_time(time_string):
+  for p in parsers:
+    dt=p.parse(time_string)
+    if dt!=None:
+      break
+  return  dt
+
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+def get_input():
+  """This is a generator function that returns the string of
+  concatenated command line arguments. Failing that, it returns each
+  line of standard input (one at a time). Failing that, it returns the
+  current time in "YYYY-mm-dd HH:MM:SS TZ" format. Only reading from
+  stndard input can ever yield more than one input string."""
+
+  if args:
+    # Use command line arguments if available.
+    yield ' '.join(args)
+  else:
+    # If no args, maybe there's something on stdin.
+    mode=os.fstat(sys.stdin.fileno()).st_mode
+    if stat.S_ISFIFO(mode) or stat.S_ISREG(mode):
+      for time_string in sys.stdin:
+        yield time_string
+    else:
+      # Use the current time if none is given.
+      yield datetime.today().strftime('%Y-%m-%d %H:%M:%S %Z')
+
+
+for time_string in get_input():
+  dt=parse_time(time_string)
+  if dt:
+    if opt.epoch==None:
+      delta=None
+    else:
+      ##
+      ## Handle --epoch, which is really just some pre-processing for --age.
+      ##
+      delta=int((dt-opt.epoch).total_seconds())
+    if opt.age!=None:
+      ##
+      ## Handle --age.
+      ##
+      if delta==None:
+        delta=int((datetime.now(dt.tzinfo)-dt).total_seconds())
+      if delta<0:
+        output='-'
+        delta=-delta
+      else:
+        output=''
+      if opt.age=='seconds':
+        output+=str(delta)
+      elif opt.age=='minutes':
+        output+=str(delta/60)
+      elif opt.age=='hours':
+        output+=str(delta/3600)
+      elif opt.age=='days':
+        output+=str(delta/86400)
+      else:
+        if delta>=86400:
+          output+='%dd '%(delta/86400)
+          delta%=86400
+        output+='%02d:%02d:%02d'%(delta/3600,(delta%3600)/60,delta%60)
+      print output
+    else:
+      ##
+      ## Output the reformated time that we've parsed.
+      ##
+      print dt.strftime(opt.format)
+  else:    
+    print 'UNRECOGNIZED DATE/TIME: %r'%time_string

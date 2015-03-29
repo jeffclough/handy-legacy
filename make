@@ -56,6 +56,7 @@ SCRIPTS=( # These targets are simply copied during installation.
   'pygrep',
   'slice',
   'strftime',
+  'tread',
   'ts',
 )
 

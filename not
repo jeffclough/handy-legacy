@@ -12,11 +12,11 @@ op=optparse.OptionParser(
   usage='%prog [OPTIONS] FILENAME ...',
   description="Output all filenames not matching either the -f or -r arguments. At least one -f or -r argument MUST be given."
 )
-op.add_option('-b',dest='base',action='store_true',default=False,help="Compare FS or RE pattersn only against the basename of each filename, ignoring any directory prefixing it.")
+op.add_option('-b',dest='base',action='store_true',default=False,help="Compare FS or RE patterns only against the basename of each filename, ignoring any path prefixing it.")
 op.add_option('-f',dest='fs',action='append',default=[],help="Unix-style filespec matching filenames to exclude. Use -f once for each such filespec.")
 op.add_option('-i',dest='ignore_case',action='store_const',const=re.IGNORECASE,default=0,help="Ignore case when matching filenames.")
 op.add_option('-r',dest='re',action='append',default=[],help="Regular expression matching filenames to exclude. Use -r once for each such filespec.")
-op.add_option('-v',dest='invert',action='store_true',default=False,help="Invert the exclusion function so that only the \"excluded\" files are reported.")
+op.add_option('-v',dest='invert',action='store_true',default=False,help="Invert the exclusion function so that only the files that would be excluded are reported.")
 opt,args=op.parse_args()
 
 # Translate any -f arguments into -r arguments.
