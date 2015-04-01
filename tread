@@ -1,5 +1,10 @@
 #!/usr/bin/env python
 
+# Turn on "true" division, the default in 3.0+, for /. Use the // operator
+# to force "floor" divsion, which is classical integer division. But be
+# aware that 1.0//2 == 0.0 under "true" division.
+from __future__ import division
+
 import optparse,os,re,stat,sys,time
 from datetime import datetime,timedelta,tzinfo
 
@@ -85,6 +90,15 @@ def get_month_by_name(month_name):
       return i+1
   return None
 
+# Make sure we can get total_seconds() for a timedelta object, even if we're
+# running on a pre-2.7 version of Python.
+if sys.version_info<(2,7):
+  def total_seconds(td):
+    return (td.microseconds+(td.seconds+td.days*24*3600)*10**6)/10**6
+else:
+  def total_seconds(td):
+    return td.total_seconds()
+
 class TimeZone(tzinfo):
   "Make creating tzinfo objects simple and easy."
 
@@ -105,7 +119,6 @@ class TimeZone(tzinfo):
     dst_minutes: Offset in minutes from standard time to DST for this
                  time zone. This value is nearly always 60 (to "spring
                  forward one hour"), so it defaults to that value."""
-
 
     if std_name=='local':
       if len(time.tzname)>0:
@@ -129,14 +142,14 @@ class TimeZone(tzinfo):
 
   def __repr__(self):
     return 'TimeZone(%r,%r,%r,%r)'%(
-      self.std_name,int(self.std_offset.total_seconds()/60),
-      self.dst_name,int((self.dst_offset-self.std_offset).total_seconds()/60)
+      self.std_name,int(total_seconds(self.std_offset)//60),
+      self.dst_name,int(total_seconds(self.dst_offset-self.std_offset)//60)
     )
 
   def __str__(self):
     if self.std_name==self.dst_name:
       return self.std_name
-    return '%s%d%s'%(self.std_name,-self.std_offset.total_seconds()/3600,self.dst_name)
+    return '%s%d%s'%(self.std_name,-total_seconds(self.std_offset)//3600,self.dst_name)
 
   def utcoffset(self,dt):
     if self.isDst(dt):
@@ -160,7 +173,7 @@ class TimeZone(tzinfo):
     # Compute the true UTC epoch seconds of dt.
     es=(dt.toordinal()-datetime.utcfromtimestamp(0).toordinal())*86400+dt.hour*3600+dt.minute*60+dt.second
     # Offset this for dt's timezone, and get the answer from localtime().
-    return time.localtime(es-self.std_offset.total_seconds()).tm_isdst==1
+    return time.localtime(es-total_seconds(self.std_offset)).tm_isdst==1
 
 tz_utc=TimeZone('UTC',0,'UTC',0)
     
@@ -376,7 +389,7 @@ class DateTimeParser(ParserBase):
               now.microsecond,now.tzinfo
             )
             dt=datetime(
-              dt.year+((now.year/1000)*1000)-100,dt.month,dt.day,dt.hour,dt.minute,dt.second,
+              dt.year+((now.year//1000)*1000)-100,dt.month,dt.day,dt.hour,dt.minute,dt.second,
               dt.microsecond,dt.tzinfo
             )
             if dt<divider:
@@ -433,27 +446,27 @@ for time_string in get_input():
       ##
       ## Handle --epoch, which is really just some pre-processing for --age.
       ##
-      delta=int((dt-opt.epoch).total_seconds())
+      delta=int(total_seconds(dt-opt.epoch))
     if opt.age!=None:
       ##
       ## Handle --age.
       ##
       if delta==None:
-        delta=int((datetime.now(dt.tzinfo)-dt).total_seconds())
+        delta=int(total_seconds(datetime.now(dt.tzinfo)-dt))
       if delta<0:
         output='-'
         delta=-delta
       else:
         output=''
       if opt.age=='seconds': output+=str(delta)
-      elif opt.age=='minutes': output+=str(delta/60)
-      elif opt.age=='hours': output+=str(delta/3600)
-      elif opt.age=='days': output+=str(delta/86400)
+      elif opt.age=='minutes': output+=str(delta//60)
+      elif opt.age=='hours': output+=str(delta//3600)
+      elif opt.age=='days': output+=str(delta//86400)
       else:
         if delta>=86400:
-          output+='%dd '%(delta/86400)
+          output+='%dd '%(delta//86400)
           delta%=86400
-        output+='%02d:%02d:%02d'%(delta/3600,(delta%3600)/60,delta%60)
+        output+='%02d:%02d:%02d'%(delta//3600,(delta%3600)//60,delta%60)
       print output
     else:
       ##
