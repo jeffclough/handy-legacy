@@ -12,6 +12,7 @@ If -c (--copy) is given, the file is copied rather than renamed. If no
 argument is given, the current (or offset) time is simply written to
 standard output.'''
 )
+op.add_option('--age',dest='age',action='store_true',default=False,help="Report the age of the file in seconds. No copying or renaming is performed.")
 op.add_option('-t','--time',dest='time',choices=('created','accessed','modified'),default='modified',help="Choose which time to use for the timestamp. The choices are 'created', 'accessed', or 'modified'. (default: %default)")
 op.add_option('--format',dest='format',action='store',default='%(filename)s.%(time)s',help="Specify a new format for a time-stamped filename. (default: %default)")
 op.add_option('--time-format',dest='time_format',action='store',default='%Y%m%d_%H%M%S',help="Specify the format for expressing a file's timestamp. (default: %default)")
@@ -47,6 +48,9 @@ if args:
       t=os.stat(f).st_mtime
     # Apply any offset
     t+=opt.offset
+    if opt.age:
+      print int(time.time()-t)
+      continue
     # Format the time as a string.
     t=time.strftime(opt.time_format,time.localtime(t))
     # Create the new filename.
@@ -72,4 +76,7 @@ if args:
           os.rename(f,filename)
 else:
   # We're just outputting the current (or offset) time.
-  print time.strftime(opt.time_format,time.localtime(time.time()+opt.offset))
+  if opt.age:
+    print int(time.time())+opt.offset
+  else:
+    print time.strftime(opt.time_format,time.localtime(time.time()+opt.offset))
