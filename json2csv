@@ -1,0 +1,211 @@
+#!/usr/bin/env python
+
+import csv,json,optparse,os,sys
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Handle the command line.
+
+default_dialect=dict(
+  delimiter=',',
+  quotechar='"',
+  escapechar=None,
+  doublequote=True,
+  skipinitialspace=False,
+  lineterminator='\n',
+  quoting=csv.QUOTE_MINIMAL,
+)
+
+import OptionParserFormatters
+progname=os.path.basename(sys.argv[0])
+op=optparse.OptionParser(
+  formatter=OptionParserFormatters.IndentedHelpFormatterWithNL(2,8),
+  usage="%prog [options] ROOT [filename] ...",
+  description="""This program reads json, beginning at ROOT, and writes csv. ROOT can be any point in the data, but the value at ROOT should be a list of the same type of item."""
+)
+
+op.add_option('-D','--dialect',dest='dialect',action='append',default=[],
+help='''Accept any one of the following dialect parameters. As many -D options may be specified as are needed.
+
+  delimiter=,
+  quotechar="
+  escapechar=None
+  doublequote=True
+  skipinitialspace=False
+  lineterminator=\\n
+  quoting=QUOTE_MINIMAL''')
+
+op.add_option('--columns',dest='columns',action='store',default='',help="Output only the columns in this comma-separates list of column names.")
+
+op.add_option('--show-headings',dest='show_headings',action='store_true',default=False,help="The first line of output will be column headings.")
+
+op.add_option('--show-structure',dest='structure',action='store_true',default=False,help="Show the structure beginning at ROOT as an indented heirarchy of labels.")
+
+op.add_option('--strip',dest='strip',action='store',default='',
+help="Strip white space from the left and/or right of each field. STRIP may be l, r, lr, or rl. If l is given, white space is be stripped from the left. If r is given, white space is stripped from the right. (Yes, it's rocket science.) By default, no white space is stripped.")
+
+try:
+  opt,args=op.parse_args()
+except Exception,e:
+  print >>sys.stderr,str(e)
+  sys.exit(2)
+
+# Get our list of columns to output if one was given.
+if opt.columns:
+  opt.columns=[y for y in [x.strip() for x in opt.columns.split(',')] if y]
+
+# Get the JSON path to our data.
+if not args:
+  print >>sys.stderr,'%s: No ROOT path given on command line.'%progname
+  sys.exit(2)
+root=[x for x in args.pop(0).split('/') if x]
+
+# Read from standard input if no filename argument was on the command line.
+if not args:
+  args=['-']
+
+# Set up our dialects.
+dialect=dict(default_dialect)
+dialect.update(dict(
+  [([x.strip() for x in spec.split('=',1)]) for spec in opt.dialect]
+))
+ 
+# Validate our field stripping specification.
+for ch in opt.strip:
+  if ch not in 'lr':
+    print >>sys.stderr,'%s: arguments to -s may include only l and r'%progname
+    sys.exit(2)
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+def strip_field(s,sides):
+  '''Return s stripped of left and/or right white space depending on
+  whether sides includes l and/or r.'''
+
+  if type(s) in (str,unicode):
+    l='l' in sides
+    r='r' in sides
+    if l and r:
+      s=s.strip()
+    elif l:
+      s=s.lstrip()
+    elif r:
+      s=s.rstrip()
+  return s
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+norm_color='\033[0m'
+
+def type_description(value):
+  "Return a (color,name) tuple representing the type of the given value."
+
+  c='\033['
+  t=type(value)
+  if t==dict:
+    c+='32' # Green
+    t='dictionary of %d keys'%len(d.keys())
+  elif t==list:
+    c+='36' # Cyan
+    t='list of %d items'%len(value)
+  elif t in (str,unicode):
+    c+='33' # Yellow
+    t='string of %d characters'%len(value)
+  elif t==int:
+    c+='1;34' # Bright blue
+    t='integer = %d = 0x%x'%(value,value)
+  elif t==float:
+    c+='35' # Magenta
+    t='float = %f'%value
+  elif t==bool:
+    c+='1;34' # Bright blue
+    t='boolean = %s'%value
+  elif value==None:
+    c+='31' # Red
+    t='NULL'
+  else:
+    c+='0'
+    t=str(t)
+  return (c+'m',t)
+
+def show_structure(d,indent=0):
+  """Show the scructure of the given dictionary as an indented heirarchy."""
+
+  if indent==0:
+    c,t=type_description(d)
+    print '%s/%s (%s)'%(c,norm_color,t)
+    indent+=2
+
+  if not (isinstance(d,dict) or isinstance(d,list)):
+    return
+
+  if type(d)==dict:
+    for k in sorted(d.keys()):
+      c,t=type_description(d[k])
+      print '%*s%s%s%s (%s)'%(indent,'',c,k,norm_color,t)
+      show_structure(d[k],indent+2)
+  elif isinstance(d,list):
+    if len(d):
+      show_structure(d[0],indent+2)
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+# Prepare for CSV output.
+writer=csv.writer(open('/dev/stdout','wb'),**dialect)
+
+headings=set([])
+data=[]
+
+for filename in args:
+  if filename=='-':
+    filename='/dev/stdin'
+  else:
+    filename=os.path.expanduser(filename) # Expands '~' to $HOME.
+
+  # Get this JSON data.
+  f=open(filename)
+  d=json.load(f)
+  f.close()
+
+  # Find the root of the data we should start from.
+  built_root=''
+  for k in root:
+    built_root+='/'+k
+    if k in d:
+      d=d[k]
+    else:
+      print >>sys.stderr,'%s: %s: data path not found: %s'%(progname,filename,built_root)
+      sys.exit(1)
+
+  if opt.structure:
+    show_structure(d)
+  else:
+    if type(d)!=list:
+      print >>sys.stderr,'%s: %s: data at %s is not a list'%(progname,filename,built_root)
+      sys.exit(1)
+
+    # Get a list of column headings if needed (and possible).
+    if not opt.columns and not headings and len(d)>0 and type(d[0])==dict:
+      for row in d:
+        headings|=set(row.keys())
+      opt.columns=sorted(list(headings))
+
+    # Get the values from each row so we can output them as CSV.
+    for row in d:
+      if type(row)==dict:
+        try:
+          row=[row[k] for k in opt.columns]
+        except KeyError,e:
+          print >>sys.stderr,'Column %s not found.\nTry running this against the same data to find valid column names:\n    %s --show-structure %s'%(e,progname,built_root)
+          sys.exit(1)
+      else:
+        row=[row]
+      if opt.strip:
+        row=[strip_field(x,opt.strip) for x in row]
+      data.append(row)
+
+    if opt.show_headings and opt.columns:
+      writer.writerow(opt.columns)
+      opt.show_headings=False
+    if data:
+      writer.writerows(data)
+

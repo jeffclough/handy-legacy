@@ -1,0 +1,19 @@
+#!/usr/bin/env python
+
+import json,optparse,sys
+
+op=optparse.OptionParser(
+  usage="%prog [OPTIONS] [filename] ...",
+  description="Read JSON data from the given file(s) or from standard input, and write it in an indented format to make it easier to read. The output is still valid JSON."
+)
+op.add_option('--indent',dest='indent',action='store',type='int',default=2,help="Give the number of speces to indent each level of the data by. (default: %default)")
+opt,args=op.parse_args()
+
+if not sys.stdin.isatty():
+  json.dump(json.load(sys.stdin),sys.stdout,indent=opt.indent)
+  print ''
+for filename in args:
+  f=open(filename)
+  json.dump(json.load(f),sys.stdout,indent=opt.indent)
+  print ''
+  f.close()
