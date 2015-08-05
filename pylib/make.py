@@ -36,6 +36,7 @@ op=optparse.OptionParser(
   usage="%prog [OPTIONS] target ..."
 )
 op.add_option('--cc',dest='cc',action='store',default=os.environ.get('CC','cc'),help="Specify what C compiler to use. (default: %default)")
+op.add_option('--force',dest='force',action='store_true',default=False,help="Force updating targets, even if they are up to date.")
 op.add_option('-n','--dryrun',dest='dryrun',action='store_true',default=False,help="Go through all the usual steps, but don't actually build, install, or delete anything. (default:%default)")
 op.add_option('--prefix',dest='prefix',action='store',default=None,help="This is the directory where things like bin, etc, lib, man, and sbin go. (default: %default)")
 op.add_option('--sysinfo',dest='sysinfo',action='store_true',default=False,help="Show system information values and terminate.")
@@ -110,7 +111,7 @@ def isnewer(src,dst):
   """Return true if src names a file that is newer than the file dst
   names (or if dst doesn't exist)."""
 
-  return filetime(src,1)>filetime(dst)
+  return opt.force or filetime(src,1)>filetime(dst)
 
 def flatten(*args):
   '''Return a list of all arguments, breaking out elements of any tuples
@@ -129,11 +130,14 @@ def outOfDate(target,*args):
   file with a later modification time than target. (Otherwise, return
   False.)'''
 
-  if os.path.exists(target):
+  if not opt.force and os.path.exists(target):
     t=filetime(target)
   else:
     if opt.verbosity>=V_DEPS:
-      print '  %s is out of date because it\'s missing'%target
+      if opt.force:
+        print '  %s is treated as out of date because of --force'%target
+      else:
+        print '  %s is out of date because it\'s missing'%target
     return True
   for d in args:
     if isinstance(d,list) or isinstance(d,tuple):
@@ -302,6 +306,7 @@ class CExecutable(DependentTargetFromSource):
     if self.__class__.__name__=='CExecutable':
       # Mark this target as "built," but only if not called from a subclass.
       # This logic is needed in order to make calling super(...).build() safe.
+      os.chmod(self.filename,0755)
       self.built=True
 
 
