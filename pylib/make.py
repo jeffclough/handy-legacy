@@ -55,6 +55,7 @@ if opt.sysinfo:
 # that turn on that level of verbosity.
 V_DEPS=1
 V_TIME=2
+V_DEBUG=3
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Low-level functions.
@@ -332,15 +333,13 @@ class CObjectFile(CExecutable):
 class Installer(DependentTarget):
   "Copy all dependencies to installation directory."
 
-  def __init__(self,filename,dir,*deps):
+  def __init__(self,filename,dstdir,*deps):
     DependentTarget.__init__(self,filename,*deps)
-    self.dir=dir
+    self.dir=dstdir
 
   def build(self):
     # Build all dependencies (which are what this class installs).
-    #print 'DEBUG: building dependencies for %s'%self.dir
     super(Installer,self).build()
-    #print 'DEBUG: finished building dependencies for %s'%self.dir
 
     # Create the target directory if necessary.
     if not os.path.exists(self.dir):
@@ -357,13 +356,13 @@ class Installer(DependentTarget):
 
     # Copy each dependency to the given directory.
     for dep in self.deps:
+      dep=os.path.realpath(dep)
       dest=os.path.join(self.dir,os.path.basename(dep))
-      #print 'DEBUG: self.dir=%r dep=%r dest=%r'%(self.dir,dep,dest)
       if isnewer(dep,dest) and not any([fnmatch(dep,pat) for pat in IGNORE]):
         print '%s ==> %s'%(dep,self.dir)
         sys.stdout.flush()
         if not opt.dryrun:
-          shutil.copy2(dep,dest)
+          copy(dep,dest,copy_metadata=True,follow_links=True)
     if self.__class__.__name__=='Installer':
       # Mark this target as "built," but only if not called from a subclass.
       # This logic is needed in order to make calling super(...).build() safe.
@@ -456,6 +455,54 @@ def clean():
         sys.stdout.flush()
         if not opt.dryrun:
           os.remove(t.filename)
+
+def copy(src,dst,**kwargs):
+  """Copy src to dst.
+
+  Parameters:
+    src is the source file or directory.
+
+    dst is the target file or directory to be updated or created.
+
+    copy_metadata (optional, default=False) tells this function to
+    preserve permissions, file times, and flags of src in dst.
+
+    follow_links (optional, default=False) tells this function to copy
+    what src points to (if it is a symbolic link) rather than the link
+    itself. If src points to a directory, the whole directory will be
+    copied, but any symlinks within it will be copied as symlinks to the
+    target directory."""
+
+  # Get our keyword arguments, which default to False.
+  copy_metadata=bool(kwargs.get('copy_metadata'))
+  follow_links=bool(kwargs.get('follow_links'))
+
+  # Copy src to dst.
+  if follow_links:
+    src=os.path.realpath(src)
+  if opt.verbosity>=V_DEBUG:
+    print 'copy(%r,%r,copy_metadata=%r,follow_links=%r)'%(src,dst,copy_metadata,follow_links)
+  if os.path.isfile(src) or os.path.islink(src):
+    # We're just copying a single file (or symlink).
+    shutil.copyfile(src,dst)
+  else:
+    # We're copying a directory, so we'll allow for recursion. Note that we
+    # very deliberately do not follow symlinks INSIDE our ORIGINAL src
+    # directory, even if follow_links was set by the outer caller to this
+    # function.
+    if not os.path.isdir(dst):
+      os.mkdir(dst)
+      if copy_metadata:
+        shutil.copystat(src,dst)
+    for entry in os.listdir(src):
+      copy(
+        os.path.join(src,entry),
+        os.path.join(dst,entry),
+        copy_metadata=copy_metadata
+      )
+  if copy_metadata:
+    # In either case, copy src's metadata to dst if requested.
+    shutil.copystat(src,dst)
 
 def getTargetsByName(name):
   """Return a list of all Targets instances matching the given name."""
