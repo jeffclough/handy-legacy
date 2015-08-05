@@ -459,19 +459,20 @@ def clean():
 def copy(src,dst,**kwargs):
   """Copy src to dst.
 
+  copy(src, dst [,copy_metadata=False] [,follow_links=False])
+
   Parameters:
     src is the source file or directory.
 
     dst is the target file or directory to be updated or created.
 
-    copy_metadata (optional, default=False) tells this function to
-    preserve permissions, file times, and flags of src in dst.
+    copy_metadata tells this function to preserve permissions, file
+    times, and flags of src in dst.
 
-    follow_links (optional, default=False) tells this function to copy
-    what src points to (if it is a symbolic link) rather than the link
-    itself. If src points to a directory, the whole directory will be
-    copied, but any symlinks within it will be copied as symlinks to the
-    target directory."""
+    follow_links tells this function to copy what src points to (if it
+    is a symbolic link) rather than the link itself. If src points to a
+    directory, the whole directory will be copied, but any symlinks
+    within it will be copied as symlinks to the target directory."""
 
   # Get our keyword arguments, which default to False.
   copy_metadata=bool(kwargs.get('copy_metadata'))
