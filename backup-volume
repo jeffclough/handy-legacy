@@ -1,0 +1,63 @@
+#!/bin/bash
+
+# This is the directory where all snapshots are created.
+backup_to=/Volumes/WorkTM/backups
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+
+# We won't be using PATH.
+unset PATH
+export BASENAME=/usr/bin/basename
+export DATE=/bin/date
+export DIRNAME=/usr/bin/dirname
+export EGREP=/usr/bin/egrep
+export HEAD=/usr/bin/head
+export ID=/usr/bin/id
+export LS=/bin/ls
+export RSYNC=/usr/bin/rsync
+
+# Return the real, canonical name of the given path.
+realpath() {
+  if [ -d "$1" ]; then
+    # This is a directory.
+    echo "$(cd "$1"; pwd -P)"
+  else
+    d="$($DIRNAME "$1")"
+    b="$($BASENAME "$1")"
+    echo $(cd "$d"; echo "$(pwd -P)/$b")
+  fi
+}
+
+progname=$(realpath "${BASH_SOURCE[0]}")
+
+# Terminate with an error message.
+die() {
+  echo "$progname: Error: $*" >/dev/stderr
+  exit 1
+}
+
+#
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+[ $($ID -u) -eq 0 ] || die "You must be root in order to run this script."
+[ -d "$backup_to" ] || die "Backup target not mounted: '$backup_to'"
+
+# Figure out what to back up and what to call the snapshot.
+src="$1"
+volname=$($BASENAME "$src")
+dst="$backup_to/$volname.$($DATE '+%Y%m%d_%H%M%S')"
+
+rsync_opts="-av --delete --delete-excluded"
+
+# Exclude from backup anything matching the exclude file if one is found.
+xfile="$src/.exclude-from-backup"
+[ -f "$xfile" ] && rsync_opts="$rsync_opts --exclude-from $xfile"
+
+# Make hard links to the previous snapshot if one is found.
+cmp="$($LS -dt "$backup_to/$volname".* | $EGREP '[0-9]{8}_[0-9]{6}$' | $HEAD -1)"
+[ -n "$cmp" -a -d "$cmp" ] && rsync_opts="$rsync_opts --link-dest $cmp"
+
+# Perform the backup.
+echo "$RSYNC $rsync_opts \"$src/\" \"$dst/\""
+$RSYNC $rsync_opts "$src/" "$dst/"
