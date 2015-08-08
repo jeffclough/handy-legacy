@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import optparse,os,re,sys
+import optparse,os,pipes,re,sys
 
 if sys.version_info<(2,4):
   # We'll need to supply our own reversed() function.
@@ -76,9 +76,41 @@ def grepfile(filename,r):
 	if opt.number:
           continue
         break
-      if opt.format:
+
+      # Get our groups ready for their massage, in case they're scheduled for one.
+      if m:
+        groups=m.groups()
+        groupdict=m.groupdict()
+      else:
+        groups=()
+        groupdict={}
+
+      if opt.strip:
+        # Remove leading and trailing white space from the values of all groups.
+        l=[]
+        for val in groups:
+          if val!=None:
+            val=val.strip()
+          l.append(val)
+        groups=tuple(l)
+        # Remove leading and trailing white space from the values of named groups.
+        l=[]
+        for key in groupdict:
+          val=groupdict[key]
+          if val!=None:
+            val=val.strip()
+          l.append((key,val))
+        groupdict=dict(l)
+
+      # Handle any of our special (or general) formatting options.
+      if opt.shell:
+        d=groupdict
+        line= '; '.join(['%s=%s'%(x,shell_value(d[x])) for x in d])
+      elif opt.dictionary:
+        line=repr(groupdict)
+      elif opt.format:
         try:
-          line=format(opt.format,*((m.group(),)+m.groups()),**m.groupdict())
+          line=format(opt.format,*((m.group(),)+groups),**groupdict)
         except AttributeError,e:
           print 'opt.format=%r (type=%s)'%(opt.format,type(opt.format))
           msg=str(e)
@@ -96,38 +128,40 @@ def grepfile(filename,r):
           sys.stdout.flush()
           sys.stderr.write('%s: %s(%d): %s\n'%(progname,filename,linecount,msg))
           exit(2)
-      if opt.number:
-	if opt.onefile:
-	  print '%d:%s'%(linecount,line)
-	else:
-	  print '%s:%d:%s'%(filename,linecount,line)
-        if m:
-          if opt.groups and m.groups():
-            print '('+')('.join(['%s'%repr(x) for x in m.groups()])+')'
-          if opt.groups=='dict' and m.groupdict():
-            d=m.groupdict()
-            print ' '.join(['%s=%s'%(x,repr(d[x])) for x in d])
-          if opt.groups:
-            print ''
+
+      # Handle prefixing of filename and/or line number.
+      prefix=''
+      if opt.onefile:
+        if opt.number:
+          prefix='%d:'%linecount
+      elif opt.number:
+        prefix='%s:%d:'%(filename,linecount)
       else:
-	if opt.onefile:
-	  print line
-	else:
-	  print '%s:%s'%(filename,line)
-        if m:
-          if opt.groups and m.groups():
-            print '('+')('.join(['%s'%repr(x) for x in m.groups()])+')'
-          if opt.groups=='dict' and m.groupdict():
-            d=m.groupdict()
-            print ' '.join(['%s=%s'%(x,repr(d[x])) for x in d])
-          if opt.groups:
-            print ''
+        prefix='%s:'%filename
+
+      # These are the regular formats for when we're not numbering lines.
+      print prefix+line
+      if m:
+        if opt.groups=='tuple' and groups:
+          print '('+')('.join(['%s'%repr(x) for x in groups])+')'
+        if opt.groups=='dict' and groupdict:
+          d=groupdict
+          print ' '.join(['%s=%s'%(x,repr(d[x])) for x in d])
+        if opt.groups:
+          print ''
   if opt.list and matches>0:
     if opt.number:
       print '%s:%d'%(filename,matches)
     else:
       print filename
   return matches
+
+def shell_value(v):
+  """Return the given value in a string that a Unix shell will parse
+  correctly."""
+
+  if v==None: v=''
+  return pipes.quote(v)
 
 # Handle our command line.
 import OptionParserFormatters
@@ -161,6 +195,8 @@ op.add_option('-f','--format',dest='format',action='store',default=None,help="""
 
 op.add_option('-1',dest='onefile',action='store_true',default=False,help="Matching lines are normally prefixed with the filename followed by a colon when more than one filename is given on the command line. When only one filename is given, this prefix is omitted. This option tells %prog to behave as if only one file were given regardless of how many were actually given. (default: %default)")
 
+op.add_option('--dictionary',dest='dictionary',action='store_true',default=False,help="Output a python dictionary of named groups in the RE. (This is mostly for debugging, but use it for your own purposes if you'd like.)")
+
 op.add_option('--flag',dest='flags',action='store',default=None,help="""Use as many of the following as you'd like to set the Python regular expression options:
   i - Ignore case. (Same as -i option.)
   l - Make \w, \W, \\b, \B, \s, and \S dependent on current locale.
@@ -181,6 +217,10 @@ op.add_option('-l',dest='list',action='store_true',default=False,help="Suppress 
 op.add_option('-m',dest='match',action='store_true',default=False,help="Use the match() function rather than the search() re class method. To over-simplify, match() only finds matches at the beginning of a line, while search() will scan the whole line for at match anywhere within it.")
 
 op.add_option('-n',dest='number',action='store_true',default=False,help="Prefix each line of output with the line number within its input file. See -l for how it modifies -n's behavior.")
+
+op.add_option('--shell',dest='shell',action='store_true',default=False,help="Useful only if named groups (e.g. '(?P<user>\w+)\s+(?P<dbname>\w+)') are used, this option outputs shell-executable code to assign matched values to the given names (e.g. 'user=rsmith337; dbname=employees'). All required escape characters are applied to make this save and reliable to use with the shell's eval command.")
+
+op.add_option('--strip',dest='strip',action='store_true',default=False,help="Remove any whitespace characters from the beginning and ending of each matched group's value.")
 
 op.add_option('-v',dest='invert',action='store_true',default=False,help="Invert the sense of matching so that non-matching lines are selected.")
 
