@@ -26,10 +26,35 @@ Western Union.'''
 )
 op.add_option('-d','--dialect',choices=phonetics.dialect.keys(),default='nato',help='Specify one of: %s'%phonetics.dialects)
 op.add_option('-i','--ignore-case',action='store_true',default=False,help='Ignore the case of the input. By default, F ==> FOXTROT while f ==> Foxtrot, for example.')
+op.add_option('-l','--list',action='store_true',default=False,help='Just list the default or given phonetic dialect.')
+op.add_option('-L','--list-all',action='store_true',default=False,help='List words from all available dialects in tabular form.')
 opt,args=op.parse_args()
 if opt.dialect not in phonetics.dialects:
   print >>sys.stderr,'%s: Unknown dialect %s'%(prog,opt.dialect)
   sys.exit(1)
+
+if opt.list_all:
+  # List all dialects in tabular form.
+  colsep='  '
+  pd=phonetics.dialect
+  # Get a list of dialect names.
+  dialects=sorted(pd.keys())
+  # Compute the width needed for each dialect column.
+  wid=[0]*len(dialects)
+  for i in range(len(wid)):
+    wid[i]=max([len(w) for w in pd[dialects[i]].values()+[dialects[i]]])
+  # Output the table of phonetic dialects.
+  print '   %s'%(colsep.join(['%-*s'%(wid[i],dialects[i]) for i in range(len(dialects))]))
+  print '   %s'%(colsep.join(['%s'%('-'*wid[i]) for i in range(len(dialects))]))
+  for ch in sorted(pd[dialects[0]].keys()):
+    print '%s: %s'%(ch,colsep.join(['%-*s'%(wid[i],pd[dialects[i]][ch]) for i in range(len(dialects))]))
+  sys.exit(0)
+elif opt.list:
+  # Print the default or specified dialect.
+  d=phonetics.dialect[opt.dialect]
+  for ch in sorted(d.keys()):
+    print '%s: %s'%(ch,d[ch])
+  sys.exit(0)
 
 if args:
   print phonetics.wordify(
