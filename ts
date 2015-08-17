@@ -88,4 +88,4 @@ else:
   if opt.age:
     print int(time.time())+opt.offset+utc_offset
   else:
-    print time.strftime(opt.time_format,time.localtime(time.time()+opt.offset))
+    print time.strftime(opt.time_format,time.localtime(time.time()+opt.offset+utc_offset))
