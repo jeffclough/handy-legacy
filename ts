@@ -19,6 +19,7 @@ op.add_option('--time-format',dest='time_format',action='store',default='%Y%m%d_
 op.add_option('-n','--dry-run',dest='dry_run',action='store_true',default=False,help="Don't actually rename any files. Only output the new name of each file as it would be renamed.")
 op.add_option('--offset',dest='offset',action='store',default=None,help="Formatted as '[+|-]H:M' or '[+|-]S', where H is hours, M is minutes, and S is seconds, apply the given offset to the time.")
 op.add_option('-c','--copy',dest='copy',action='store_true',default=False,help="Copy the file rather than renaming it.")
+op.add_option('--utc',dest='utc',action='store_true',default=False,help="Express all times as UTC (no time zone at all).")
 opt,args=op.parse_args()
 if opt.offset:
   # Convert our --offset argument to positive or negative seconds.
@@ -36,6 +37,13 @@ if opt.offset:
 else:
   opt.offset=0
 
+if opt.utc:
+  # Compute how far, in seconds, local time is from UTC.
+  t=time.mktime(time.localtime()) # Make sure we're all rounding floats the same way.
+  utc_offset=int(time.mktime(time.gmtime(t))-t)
+else:
+  utc_offset=0
+
 if args:
   # This is the usual mode of renaming files according to their time.
   for f in args:
@@ -47,9 +55,10 @@ if args:
     else:
       t=os.stat(f).st_mtime
     # Apply any offset
+    t+=utc_offset
     t+=opt.offset
     if opt.age:
-      print int(time.time()-t)
+      print int(time.time()-t+utc_offset)
       continue
     # Format the time as a string.
     t=time.strftime(opt.time_format,time.localtime(t))
@@ -77,6 +86,6 @@ if args:
 else:
   # We're just outputting the current (or offset) time.
   if opt.age:
-    print int(time.time())+opt.offset
+    print int(time.time())+opt.offset+utc_offset
   else:
     print time.strftime(opt.time_format,time.localtime(time.time()+opt.offset))
