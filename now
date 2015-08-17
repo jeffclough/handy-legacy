@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
 import optparse,os,re,sys,time
-import adhoc
+import adhoc,pprint
+from addict import Dict
 
 # Components of the current date and time are needed in lots of places
 # in this code, so I'm just making them globally available. So there.
@@ -67,10 +68,19 @@ if opt.help_me:
   op.print_help()
   sys.exit(0)
 
-def timeFromSingleValue(td):
+def timeFromInteger(td):
   'Given a time expressed as a single value, return a time.struct_time for it.'
 
-  pass
+  t=int(td.secs)
+  if td.units=='w':t*=7*86400
+  elif td.units=='d':t*=86400
+  elif td.units=='h':t*=3600
+  elif td.units=='m':t*=60
+  return time.localtime(t)
+
+def timeFromHMS(td):
+  'Given hours, minutes, and seconds return a time.time_struct for it.'
+
 
 # Various time formats we might have to read, along with their corresponding
 # vetting functions and strptime() formats.
@@ -82,14 +92,15 @@ tf=(
     re.compile('^(?P<sec>\d+)(?P<units>[smhdw])?$'),
     (
       (lambda td: True), # The matched RE is all the vetting we need.
-      timeFromSingleValue
+      timeFromInteger
     )
   ),
   ( # Handle hour:minutes:seconds expressions.
     re.compile('^(?P<hour>\d+)(?P<tsep>:)(?P<min>\d+)(?P=tsep)(?P<sec>\d+)$'),
     (
       (lambda td: td.hour>=0 and td.hour<24 and td.min>=0 and td.min<60 and td.sec>=0 and td.min<60),
-      (lambda td: time.strptime('%d-%d-%d %d:%d:%d %s'%(YYYY,MM,DD,td.hour,td.min,td.sec,tz),IN_FMT))
+      #(lambda td: time.strptime('%d-%d-%d %d:%d:%d %s'%(YYYY,MM,DD,td.hour,td.min,td.sec,tz),IN_FMT))
+      (lambda td: time.localtime((YYYY,MM,DD,td.hour,td.min,td.sec,tz)))
     )
   ),
   (
@@ -100,6 +111,10 @@ tf=(
       '^(?P<d1>\d+)(?P<dsep>[-/.])(?P<d2>\d+)(?P=dsep)(?P<d3>\d+)\s+'
       '(?P<hour>\d+)(?P<tsep>[.:])(?P<min>\d+)(?P=tsep)(?P<sec>\d+)$'
     ),
+    (
+      (lambda td: td.hour>=0 and td.hour<24 and td.min>=0 and td.min<60 and td.sec>=0 and td.min<60),
+      timeFromHMS
+    )
   )
 )
 
@@ -107,24 +122,21 @@ if args:
   ts=args[0]  # Get the time string from the argument list.
 
   # Match one of our timestamp input formats.
+  pprint.pprint(tf)
   for pat,functions in tf:
     m=pat.search(ts)
     if m:
-      td=adhoc.AdHoc(**(m.groupdict('')))
-      #print ' '.join(['%s=%r'%(p,td.get(p)) for p in 'd1 d2 d3 dsep hour min sec tsep units'.split()])
-      for p in 'd1 d2 d3 hour min sec'.split(): # Integerize each part of our time string.
-        try:
-          if p in td:
-            td[p]=int(td[p])
-        except:
-          print >>sys.stderr,'%r is not an integer value.'%td[p]
-          sys.exit(1)
+      #td=Dict(**(m.groupdict('')))
+      td=adhoc.adhoc(**(m.groupdict('')))
+      # Figure out what sort of time expression this is.
       for validate,parse in functions:
         if vet(td):
           tstruct=parse(td)
   if not m:
     print >>sys.stderr,'Unrecognized time format in argument: %r'%ts
     sys.exit(1)
+
+  print ' '.join(['%s=%r'%(p,td.get(p)) for p in 'd1 d2 d3 dsep hour min sec tsep units'.split()])
 
   # Create an epoch time from the user's time argument.
   if 'units' in td:
