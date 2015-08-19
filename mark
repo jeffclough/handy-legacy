@@ -1,37 +1,7 @@
 #!/usr/bin/env python
 
 import csv,optparse,os,re,shlex,string,sys
-
-# ANSI color escape sequences:
-attr=dict(
-  normal='0',
-  bold='1',
-  italics='2',
-  understore='3',
-  reverse='7',
-  strikethrough='9',
-)
-foreground=dict(
-  black='30',
-  red='31',
-  green='32',
-  yellow='33',
-  blue='34',
-  magenta='35',
-  cyan='36',
-  white='37',
-)
-background=dict(
-  black='40',
-  red='41',
-  green='42',
-  yellow='43',
-  blue='44',
-  magenta='45',
-  cyan='46',
-  white='47',
-)
-norm_color='\033['+attr['normal']+'m'
+import ansi
 
 progname=os.path.basename(sys.argv[0])
 def die(msg='',rc=1):
@@ -277,79 +247,6 @@ if pat:
 elif not (opt.columns or opt.fields):
   die('No RE arguments given. Nothing to do.')
 
-def complete(word,wordlist):
-  'Return a list of words from wordlist that begin with word.'
-
-  return [x for x in wordlist if x.startswith(word)]
-
-def parseColorsFromSpec(spec):
-  'Return the (attr,foreground,background) components from the colorspec.'
-
-  # Set up defaults, and lower-case our colorspec.
-  a=f=b=None
-  spec=spec.lower()
-
-  # Separate the attribute and foreground from the background.
-  l=spec.strip().split('on')
-  if len(l)>2:
-    die('bad colorspec "%s"'%spec)
-  if len(l)>1:
-    f,b=[x.strip() for x in l]
-  else:
-    f=l[0]
-
-  # Separate the attribute and foreground.
-  l=f.split()
-  if len(l)>2:
-    die('bad colorspec "%s"'%spec)
-  if len(l)>1:
-    a,f=l
-  elif len(l)==1:
-    f=l[0]
-  else:
-    f=None
-
-  # Complete any partial attribute or color names.
-  if a!=None:
-    l=complete(a,attr.keys())
-    if len(l)<1: die('unknown attribute "%s"'%a)
-    if len(l)>1: die('ambiguous attribute "%s"'%a)
-    a=l[0]
-  if f!=None:
-    l=complete(f,foreground.keys())
-    if len(l)<1:
-      if a==None:
-        a,f=f,None
-        l=complete(a,attr.keys())
-        if len(l)<1:
-          die('unknown attribute or foreground color "%s"'%a)
-        if len(l)>1:
-          die('ambiguous attribute "%s"'%a)
-        a=l[0]
-      else:
-        die('bad colorspec "%s"'%spec)
-    elif len(l)>1:
-      die('ambiguous foreground color "%s"'%f)
-    else:
-      f=l[0]
-  if b!=None:
-    l=complete(b,background.keys())
-    if len(l)<1: die('unknown background color "%s"'%b)
-    if len(l)>1: die('ambiguous foreground color "%s"'%b)
-    b=l[0]
-
-  # Return our triplet of tokens.
-  return (a,f,b)
-
-def colorOf(i):
-  'Return the ANSI sequence for color of the ith pattern.'
-
-  if opt.wrap:
-    i%=len(opt.palette)
-  elif i>=len(opt.palette):
-    i=-1
-  return opt.palette[i]
-
 def parseRangeList(s):
   '''Convert string list of ranges into a list of (n,m) range tuples.'''
 
@@ -419,34 +316,16 @@ def get_input_lines(f=sys.stdin):
       yield s
     s=sys.stdin.readline()
 
-# Convert opt.palette into a list of ANSI escape sequences.
-if opt.palette=='dark':
-  opt.palette='norm red on black,green,yellow,bold blue,norm magenta,cyan'
-elif opt.palette=='light':
-  opt.palette='norm red on white,norm blue,magenta'
-l=[]
-pa,pf,pb='normal','white','black' # Set up defaults for previous values.
-for cs in opt.palette.split(','):
-  # Get the components of this colorspec, using default from previous spec.
-  a,f,b=parseColorsFromSpec(cs)
-  if not a: a=pa
-  if not f: f=pf
-  if not b: b=pb
-
-  # Get the ASCII sequence for this colorspec.
-  try:
-    l.append('\x1b[%s;%s;%sm'%(attr[a],foreground[f],background[b]))
-  except:
-    print 'a=%r, f=%r, b=%r'%(a,f,b)
-    raise
-
-  # Set up default values for the next colorspec.
-  pa,pf,pb=a,f,b
-opt.palette=l
+# Convert opt.palette into a list of ansi.Color objects.
+opt.palette=ansi.Palette(opt.palette)
+print 'DEBUG: opt.palette=%r'%opt.palette
 
 if opt.fields:
   if opt.delim:
     opt.delim=re.compile(opt.delim)
+
+def colorOf(index):
+  return str(opt.palette(i))
 
 if opt.columns:
   # Color each field of our fixed field width data.
@@ -454,7 +333,7 @@ if opt.columns:
   opt.columns.append(None)
   for s in get_input_lines():
     try:
-      s=(''.join([colorOf(i)+s[opt.columns[i]:opt.columns[i+1]] for i in r])).replace('\n',norm_color)
+      s=(''.join([colorOf(i)+s[opt.columns[i]:opt.columns[i+1]] for i in r])).replace('\n',str(ansi.norm))
       print s
       sys.stdout.flush()
     except:
@@ -481,7 +360,7 @@ elif opt.stanzas:
           sys.stdout.write(colorOf(i))
       sys.stdout.write(s)
       sys.stdout.flush()
-    sys.stdout.write(norm_color)
+    sys.stdout.write(str(ansi.norm))
     sys.stdout.flush()
   else:
     # Alternate between first two palette entries every time RE is matched.
@@ -493,7 +372,7 @@ elif opt.stanzas:
         sys.stdout.write(colorOf(i))
       sys.stdout.write(s)
       sys.stdout.flush()
-    sys.stdout.write(norm_color)
+    sys.stdout.write(str(ansi.norm))
     sys.stdout.flush()
 elif opt.fields:
   # Highlight fields based on position.
@@ -507,7 +386,7 @@ elif opt.fields:
 	j,k=opt.fields[i]
 	for f in range(j,[k,len(flist)][k==None]):
 	  if f<len(flist):
-	    flist[f][0]=colorOf(i)+flist[f][0]+norm_color
+	    flist[f][0]=colorOf(i)+flist[f][0]+str(ansi.norm)
       print ''.join([f+d for f,d in flist])
       sys.stdout.flush()
   else:
@@ -519,7 +398,7 @@ elif opt.fields:
 	j,k=opt.fields[i]
 	for f in range(j,[k,len(flist)][k==None]):
 	  if f<len(flist):
-	    flist[f]=colorOf(i)+flist[f]+norm_color
+	    flist[f]=colorOf(i)+flist[f]+str(ansi.norm)
       writer.writerow(flist)
       sys.stdout.flush()
 elif opt.log_mode:
@@ -556,7 +435,7 @@ else:
           highlight=colorOf(i)
         j,k=m.span()
         #print 'j=%d k=%d match=%r'%(j,k,g[i])
-        s=s[:j]+highlight+s[j:k]+norm_color+s[k:]
-        m=pat.search(s,k+len(highlight)+len(norm_color))
+        s=s[:j]+highlight+s[j:k]+str(ansi.norm)+s[k:]
+        m=pat.search(s,k+len(highlight)+len(str(ansi.norm)))
       sys.stdout.write(s)
       sys.stdout.flush()

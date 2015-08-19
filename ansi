@@ -3,9 +3,8 @@ import ansi,sys
 
 # Set up whatever ANSI attribute-foreground-background combo the suer wants.
 if len(sys.argv)>1:
-  a,f,b=parseColor(' '.join(sys.argv[1:]))
-  c=color(a,f,b)
-  sys.stdout.write(c)
+  c=ansi.Color(' '.join(sys.argv[1:]))
+  sys.stdout.write(str(c))
 
 # Write stdin to stdout if stdin a file or a pipe.
 if not sys.stdin.isatty():
@@ -14,4 +13,4 @@ if not sys.stdin.isatty():
 
 # Be sure to normalize the terminal if we messed with it at the start.
 if len(sys.argv)>1:
-  sys.stdout.write(norm)
+  sys.stdout.write(str(ansi.norm))
