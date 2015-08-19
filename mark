@@ -180,7 +180,7 @@ if opt.context!=None:
   if opt.before!=None: opt.before=opt.context
   if opt.after!=None: opt.after=opt.context
 if opt.reverse:
-  foreground,background=background,foreground
+  ansi.foreground,ansi.background=ansi.background,ansi.foreground
 if opt.columns:
   opt.columns=[int(x)-1 for x in re_number.findall(opt.columns)]
   if [x for x in opt.columns if x<0]:
