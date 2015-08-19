@@ -318,7 +318,6 @@ def get_input_lines(f=sys.stdin):
 
 # Convert opt.palette into a list of ansi.Color objects.
 opt.palette=ansi.Palette(opt.palette)
-print 'DEBUG: opt.palette=%r'%opt.palette
 
 if opt.fields:
   if opt.delim:
