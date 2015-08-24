@@ -100,7 +100,7 @@ class Grep(object):
 
   def __call__(self,input,**kwargs):
     '''An iterator that returns all matches from the input iterable.
-    Tuples returned look like (line,index_array).
+    Tuples returned look like (line,line_number,index_array).
     
     Keyword arguments:
       invert
@@ -111,26 +111,41 @@ class Grep(object):
     match_all=kwargs.get('match_all',False)
   
     r=range(len(self.pats))
+    n=0
     for line in input:
+      n+=1
       results=[Match(p.search(line)) for p in self.pats]
       matches=[i for i in r if results[i].match]
       if bool(matches)==bool(invert):
         continue
-      yield (line,results)
+      yield (line,n,results)
 
 if __name__=='__main__':
-  import sys
+  import optparse,sys
+
+  op=optparse.OptionParser()
+  op.add_option('--match-all',dest='match_all',action='store_true',default=False,help="Matching lines must match all paterns rather than simply any pattern.")
+  op.add_option('-n',dest='line_numbers',action='store_true',default=False,help="Each output line is preceded by its line number, starting at 1.")
+  op.add_option('-v',dest='invert',action='store_true',default=False,help="Output non-matching lines rather than matching ones.")
+  opt,args=op.parse_args()
 
   # Figure out what the user put on the command line.
-  if len(sys.argv)>1 and not sys.stdin.isatty():
+  if len(args)>0 and not sys.stdin.isatty():
     f=sys.stdin
-  elif len(sys.argv)>2:
-    f=open(sys.argv[1])
-    del sys.argv[1]
+  elif len(args)>1:
+    f=open(args[0])
+    del args[0]
   else:
     print 'usage: %s [filename] regular_expression ...'
     sys.exit(1)
 
   # Work that grep magic.
-  for line,results in Grep(sys.argv[1:])(f):
-    sys.stdout.write(line)
+  grep_options=dict(
+    match_all=opt.match_all,
+    invert=opt.invert,
+  )
+  for line,n,results in Grep(args)(f,**grep_options):
+    if opt.line_numbers:
+      sys.stdout.write(str(n)+': '+line)
+    else:
+      sys.stdout.write(line)
