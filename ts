@@ -2,111 +2,26 @@
 
 import optparse,os,re,shutil,stat,sys,time
 
-extset=set('''
-  .ani
-  .anim
-  .xbm
-  .cdf
-  .djvu
-  .3fr
-  .ar
-  .arc
-  .ari
-  .arw
-  .bay
-  .bmp
-  .c
-  .c++
-  .cgm
-  .class
-  .com
-  .cpp
-  .cr2
-  .crw
-  .csv
-  .db
-  .dcr
-  .dcs
-  .dng
-  .drf
-  .eip
-  .eps
-  .epub
-  .erf
-  .exe
-  .exif
-  .fff
-  .gif
-  .git
-  .gz
-  .h
-  .hdr
-  .hpp
-  .iiq
-  .inc
-  .java
-  .jfif
-  .jpeg
-  .jpg
-  .jps
-  .k25
-  .kdc
-  .key
-  .log
-  .m4a
-  .mdc
-  .mef
-  .mos
-  .mov
-  .mp3
-  .mp4
-  .mpo
-  .mrw
-  .nef
-  .nrw
-  .obm
-  .orf
-  .pbm
-  .pdf
-  .pef
-  .pgm
-  .php
-  .pict
-  .png
-  .pnm
-  .pns
-  .postscript
-  .ppm
-  .psd
-  .ptx
-  .pxn
-  .py
-  .pyc
-  .r3d
-  .raf
-  .raw
-  .rif
-  .rw2
-  .rwl
-  .rwz
-  .sql
-  .sr2
-  .srf
-  .srw
-  .svg
-  .svn
-  .swf
-  .tif
-  .tiff
-  .txt
-  .uue
-  .webp
-  .x3f
-  .xaml
-  .xml
-  .z
-  .zip
-'''.split())
+# By defalt, files with any of these extensions keep their extension when
+# they are renamed with a timestamp.
+extensions=set('''
+  .3ctype .3fr .a .ac .aiff .ani .anim .ar .arc .ari .arw .asc .asm .awk .bay
+  .bin .bmp .bom .book .bsd .c .c++ .cache .cc .cdf .cfg .cgm .cix .class .cmd
+  .coffee .collection .com .conf .config .cpp .cr2 .crl .crw .css .csv .cvf .d
+  .data .db .dcr .dcs .djvu .dll .dng .doc .docx .drf .dtml .dylib .egg .eip
+  .el .eot .eps .epub .erf .exe .exif .fff .gif .git .gnu .gpg .gz .h .hdr
+  .help .hpp .htm .html .hts .ico .iiq .inc .info .ini .jar .java .jfif .jpeg
+  .jpg .jps .js .jshint .jsm .json .k25 .kdc .key .keystore .kml .l .ldb .lij
+  .lnk .lock .log .lrtemplate .lua .m4 .m4a .machelp .makefile .map .markdown
+  .mbox .mcl .md .mdc .mef .model .mos .mov .mp3 .mp4 .mpo .mrw .mustache .nef
+  .net .nib .node .nrw .o .oab .obm .odg .opts .orf .org .otf .pack .pak .pal
+  .pbm .pcf .pdf .pef .pem .pgm .php .pict .pimx .pkg .pl .plist .pm .png .pnm
+  .pns .postscript .ppm .prefs .psd .psp .psw .ptx .pub .pxn .py .pyc .pyd .qyp
+  .r3d .raf .raw .rb .ref .rif .rpm .rtv .rw2 .rwl .rwz .scpt .scss .settings
+  .sh .sig .so .sql .sqlite .sqlite3 .sqlitedb .sr2 .srf .srw .sst
+  .sublime-keymap .sublime-menu .svg .svn .swf .tab .tar .tcl .tgz .tif .tiff
+  .todo .tsv .ttf .txt .url .uue .vdi .war .watchr .webm .webp .x3f .xaml .xbm
+  .xls .xml .xsd .yaml .z .zip'''.split())
 
 prog=os.path.basename(sys.argv[0])
 
@@ -142,6 +57,11 @@ if opt.offset:
   opt.offset=d['sign']*(d['hours']*3600+d['minutes']*60+d['seconds'])
 else:
   opt.offset=0
+
+def new_filename(filename,timestamp):
+  """Return the new filename of the timestamped file."""
+
+  return
 
 if opt.utc:
   # Compute how far, in seconds, local time is from UTC.
