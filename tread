@@ -13,7 +13,8 @@ def die(msg,rc=1):
   sys.exit(rc)
 
 def debug(msg):
-  pass
+  if opt.debug:
+    sys.stderr.write(os.path.basename(sys.argv[0])+' D: '+msg+'\n')
 
 if sys.version_info>=(2,6):
   # Use the built-in str.format() method for formatting.
@@ -58,7 +59,7 @@ months=(
   'june',
   'july',
   'august',
-  'september'
+  'september',
   'october',
   'november',
   'december'
@@ -343,7 +344,7 @@ class DateTimeParser(ParserBase):
         else:
           d.month=get_month_by_name(d.month)
           if d.month<1:
-            die('Bad month in "%s", parsed by "%s": %s'%(time_string,p.pattern,str(e)))
+            die('Bad month in "%s", parsed by "%s"'%(time_string,p.pattern))
 
         if not d.day:
           d.day=now.day
