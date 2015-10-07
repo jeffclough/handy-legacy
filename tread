@@ -5,7 +5,8 @@
 # aware that 1.0//2 == 0.0 under "true" division.
 from __future__ import division
 
-import optparse,os,re,stat,sys,time
+import copy,optparse,os,re,stat,sys,time
+from OptionParserFormatters import IndentedHelpFormatterWithNL
 from datetime import datetime,timedelta,tzinfo
 
 def die(msg,rc=1):
@@ -22,6 +23,7 @@ if sys.version_info>=(2,6):
     return fmt.format(*args,**kwargs)
 else:
   # Define a format(fmt,*args,**kwargs) for Python version < 2.6.
+  debug('Defining our own format() function for Python %d.%d'%sys.version_info[:2])
   format_fieldspec=re.compile(r'{([0-9A-Za-z_]*)}')
   def format(fmt,*args,**kwargs):
     #print '---- args=%r, kwargs=%r'%(args,kwargs)
@@ -91,11 +93,51 @@ def get_month_by_name(month_name):
       return i+1
   return None
 
+def formatted_relative_time(delta):
+  """Return a string formatted as '[-][DAYSd ]HH:MM:SS' expressing the
+  positive or negative number of seconds given in delta."""
+
+  if isinstance(delta,timedelta):
+    delta=total_seconds(delta)
+  if delta<0:
+    output='-'
+    delta=-delta
+  else:
+    output=''
+  if delta>=86400:
+    output+='%dd '%(delta//86400)
+    delta%=86400
+  output+='%02d:%02d:%02d'%(delta//3600,(delta%3600)//60,delta%60)
+  return output
+
+def unique(seq,key=None,shallowcopy=False,deepcopy=False):
+  """Return a copy of seq where consecutive, identical values are folded
+  into a single value. If present the key argument works like that of
+  the standard sorted() function."""
+
+  if deepcopy: c=copy.deepcopy
+  elif shallowcopy: c=copy.copy
+  else: c=lambda x:x
+
+  ret=[]
+  prev=None
+  for val in seq:
+    v=val
+    if key: v=key(val)
+    if v==prev: continue
+    ret.append(c(val))
+    prev=v
+  if isinstance(seq,tuple): ret=tuple(ret)
+  if isinstance(seq,str): ret=''.join(ret)
+  if isinstance(seq,unicode): ret=u''.join(ret)
+  if sys.version>=(2,6) and isinstance(seq,bytearray): ret=bytearray(ret)
+  return ret
+
 # Make sure we can get total_seconds() for a timedelta object, even if we're
 # running on a pre-2.7 version of Python.
 if sys.version_info<(2,7):
   def total_seconds(td):
-    return (td.microseconds+(td.seconds+td.days*24*3600)*10**6)/10**6
+    return (td.microseconds+(td.seconds+td.days*24*3600)*10**6)//10**6
 else:
   def total_seconds(td):
     return td.total_seconds()
@@ -215,7 +257,7 @@ def get_tz_by_name(tz_name):
 
 # Make a list of 
 epochs=dict(
-  microsoft=datetime(1,1,1,0,0,0,0,tz_utc),
+  ms=datetime(1,1,1,0,0,0,0,tz_utc),
   ad=datetime(1601,1,1,0,0,0,0,tz_utc),
   cobol=datetime(1601,1,1,0,0,0,0,tz_utc),
   ntfs=datetime(1601,1,1,0,0,0,0,tz_utc),
@@ -227,14 +269,54 @@ epochs=dict(
 epoch_names=sorted(epochs.keys())
 
 op=optparse.OptionParser(
-  usage="%prog [OPTIONS] arguments expressing date and time"
+  formatter=IndentedHelpFormatterWithNL(2,8),
+  usage="%prog [OPTIONS] [arguments expressing date and time]",
+  description="""The tread script (pronounced "T-read") reads a time expression in any of several formats and outputs it in a given (or default "YYYY-MM-DD hh:mm:ss") format.
+  
+%prog looks for the time to be parsed on the command line first and assumes that all arguments are part of a single time expression. If there are no command line arguments, but standard input is being redirected or piped, each line is parsed for a time. Failing that, the current time is used. Parsing from standard input is the only scenario that might output more than one time expression.
+  
+See the options below for output format help, including expressing time in various epochs and performing age calculations.""",
+  epilog="""
+EXAMPLES
+
+    Get the current time in the default format.
+
+        tread
+
+        2015-10-07 11:13:42 EDT
+
+
+    Get just the date in mm/dd/yyyy format.
+
+        tread -f '%m/%d/%Y'
+
+        10/07/2015
+
+
+    Show all epoch time values for the current time.
+
+        for e in ad cobol excel ms ntfs ntp unix vms; do
+          printf "$e:\\t%11ld\\n" $(tread --epoch=$e)
+        done
+
+        ad:     13088711329
+        cobol:  13088711329
+        excel:   3653226529
+        ms:     63579834529
+        ntfs:   13088711329
+        ntp:     3653226529
+        unix:    1444237729
+        vms:     4950954529
+
+"""
 )
 op.add_option('--age',metavar='UNITS',dest='age',choices=('seconds','minutes','hours','days','time'),help="Request the age of the given date and time, and give the desired units (days, hours, minutes, or seconds). The 'time' units value gives an output format of '[-][DAYSd ]%HH:%MM:%SS'. Only integer values are returned, and there is no rounding. Future times return a negative age.")
 op.add_option('--epoch',dest='epoch',choices=epoch_names,help="Output the number of seconds elapsed from the beginning of given epoch to the given time. Negative values are given for times that predate the epoch. Epoch choices: %s"%(', '.join(epoch_names)))
 op.add_option('-f',dest='format',action='store',default='%Y-%m-%d %H:%M:%S %Z',help="Set format for turning times into strings. See 'man strptime' for the format syntax. (default: %default)")
-op.add_option('-F',metavar='format',dest='output',action='store',default='{time}',help="Set the format for outputting the parsed time, which might include parts of the string from which the time was not parsed. The parts of any parsed string are \"before\", \"time\", and \"after\". (default: %default")
+op.add_option('-F',metavar='format',dest='output',action='store',default='{time}',help="""Set the format for outputting the parsed time, which might include parts of the string from which the time was not parsed. The parts of any parsed string are "before", "time", and "after". (default: %default")""")
 op.add_option('--furture',dest='assume_past',action='store_false',default=True,help="Assume dates with missing years refer to the future. The default is to assume they refer to a past date.")
 op.add_option('-t',metavar='TZ',dest='transpose',action='store',default=None,help="Transpose the parsed time to a new time zone. \"local\" may be used to identify the local time zone. This option does NOT transpose between standard time and DST, only between time zones. Note also and UTC is ALWAYS on standard time.")
+op.add_option('--tzlist',dest='tzlist',action='store_true',default=False,help="Show a list of time zones this program knows about and quit.")
 op.add_option('--where',dest='where',type='choice',choices=('beginning','start','whole','end'),default=None,help="""Say where to allow the date and time to appear in the given text. This can be any one of "start", "beginning", "whole", or "end". "start" and "beginning" are synonymous, and "whole" means that ONLY the date and time may appear in the given text.""")
 op.add_option('--debug',dest='debug',action='store_true',help="Presents output only a developer could love.")
 opt,args=op.parse_args()
@@ -247,6 +329,17 @@ if opt.debug:
 
   for n in sorted(zones_by_name.keys()):
     debug('%s: %r'%(n,zones_by_name[n]))
+
+if opt.tzlist:
+  for z in unique(
+    sorted(time_zones,key=lambda z:(z.std_offset,z.std_name)),
+    key=lambda z:z.std_name
+  ):
+    print '%s/%s: %s/%s'%(
+      z.std_name,z.dst_name,
+      formatted_relative_time(z.std_offset),formatted_relative_time(z.dst_offset)
+    )
+  sys.exit(0)
 
 if opt.epoch!=None:
   opt.epoch=epochs[opt.epoch]
@@ -289,10 +382,18 @@ class DateTimeParser(ParserBase):
 
   name="Full Date and Time"
   patterns=(
+  # mm-dd-YY HH:MM:SS
+    r'(?P<month>\d{1,2})[-/]'
+    r'(?P<day>\d{1,2})[-/]'
+    r'((?P<year>\d{2}))\s+'
+    r'(?P<hour>\d+):'
+    r'(?P<minute>\d+):'
+    r'(?P<second>\d+)'
+    r'(\s+(?P<tz>'+tz_pattern+'))?',
   # YYYY-mm-dd HH:MM:SS
-    r'((?P<year>\d+)[-/])?'
-    r'(?P<month>\d+)[-/]'
-    r'(?P<day>\d+)\s+'
+    r'((?P<year>\d{4})[-/])'
+    r'(?P<month>\d{1,2})[-/]'
+    r'(?P<day>\d{1,2})\s+'
     r'(?P<hour>\d+):'
     r'(?P<minute>\d+):'
     r'(?P<second>\d+)'
@@ -308,6 +409,7 @@ class DateTimeParser(ParserBase):
     r'(\s+(?P<tz>'+tz_pattern+'))?'
     r'(\s+(?P<year>\d+))?',
   )
+  # Cook and compile these patterns according to command line options.
   if opt.where in ('whole','end'):
     patterns=[p+'$' for p in patterns]
   if opt.where in ('beginning','start','whole'):
@@ -315,7 +417,12 @@ class DateTimeParser(ParserBase):
   patterns=[re.compile(p,re.IGNORECASE) for p in patterns]
 
   def parse(self,time_string):
+    """Return a (possibly empty) list of plausible interpretations of the
+    value in time_string. Each item in the list is a (before,time,after)
+    tuple."""
+
     debug("time_string=%r"%time_string)
+    matches=[]
     for p in self.patterns:
       debug("pattern='%s'"%p.pattern)
       m=p.search(time_string)
@@ -344,7 +451,9 @@ class DateTimeParser(ParserBase):
         else:
           d.month=get_month_by_name(d.month)
           if d.month<1:
-            die('Bad month in "%s", parsed by "%s"'%(time_string,p.pattern))
+            # Reject this as a possible match.
+            continue
+            #die('Bad month in "%s", parsed by "%s"'%(time_string,p.pattern))
 
         if not d.day:
           d.day=now.day
@@ -365,7 +474,6 @@ class DateTimeParser(ParserBase):
           d.second=now.second
         else:
           d.second=int(d.second)
-
 
         try:
           dt=datetime(d.year,d.month,d.day,d.hour,d.minute,d.second,0,d.tz)
@@ -398,22 +506,29 @@ class DateTimeParser(ParserBase):
                 dt.year+100,dt.month,dt.day,dt.hour,dt.minute,dt.second,
                 dt.microsecond,dt.tzinfo
               )
-          return (time_string[:m.start()],dt,time_string[m.end():])
+          matches.append((time_string[:m.start()],dt,time_string[m.end():]))
         except ValueError,e:
           die('Error in "%s", parsed by "%s": %s'%(time_string,p.pattern,str(e)))
-    return ('',None,'')
+    return matches
 
 parsers=(
   DateTimeParser(),
 )
 
 def parse_time(time_string):
+  possibles=[]
   for p in parsers:
-    dt=p.parse(time_string)
-    if dt!=None:
-      break
-  return  dt
-
+    l=p.parse(time_string)
+    if len(l)>0:
+      possibles.extend(l)
+  if len(possibles)==1:
+    return possibles[0]
+  if len(possibles)==0:
+    die("Couldn't parse time: %r"%time_string)
+  print 'Possible interpretations of %r:'%time_string
+  for before,dt,after in possibles:
+    print '    %s'%dt
+  die('Too many possibilities.')
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -423,21 +538,26 @@ def get_input():
   concatenated command line arguments. Failing that, it returns each
   line of standard input (one at a time). Failing that, it returns the
   current time in "YYYY-mm-dd HH:MM:SS TZ" format. Only reading from
-  stndard input can ever yield more than one input string."""
+  standard input can ever yield more than one input string."""
 
   if args:
     # Use command line arguments if available.
+    debug('Joining %r as %r'%(args,' '.join(args)))
     yield ' '.join(args)
   else:
     # If no args, maybe there's something on stdin.
+    debug('Checking stdin for content ...')
     mode=os.fstat(sys.stdin.fileno()).st_mode
     if stat.S_ISFIFO(mode) or stat.S_ISREG(mode):
+      debug('Reading stdin ...')
       for time_string in sys.stdin:
         yield time_string.rstrip()
     else:
       # Use the current time if none is given.
+      debug('Using current time.')
       yield datetime.today().strftime('%Y-%m-%d %H:%M:%S %Z')
 
+debug('Starting main loop ...')
 for time_string in get_input():
   before,dt,after=parse_time(time_string)
   if dt:
@@ -448,12 +568,17 @@ for time_string in get_input():
       ## Handle --epoch, which is really just some pre-processing for --age.
       ##
       delta=int(total_seconds(dt-opt.epoch))
+    debug('opt.age=%r'%(opt.age,))
     if opt.age!=None:
       ##
       ## Handle --age.
       ##
       if delta==None:
+        debug('Computing delta as %s - %s'%(datetime.now(dt.tzinfo),dt))
         delta=int(total_seconds(datetime.now(dt.tzinfo)-dt))
+      debug('now:\t%r'%datetime.now(dt.tzinfo))
+      debug('dt:\t%r'%dt)
+      debug('delta:\t%r'%delta)
       if delta<0:
         output='-'
         delta=-delta
@@ -463,11 +588,7 @@ for time_string in get_input():
       elif opt.age=='minutes': output+=str(delta//60)
       elif opt.age=='hours': output+=str(delta//3600)
       elif opt.age=='days': output+=str(delta//86400)
-      else:
-        if delta>=86400:
-          output+='%dd '%(delta//86400)
-          delta%=86400
-        output+='%02d:%02d:%02d'%(delta//3600,(delta%3600)//60,delta%60)
+      else: output+=formatted_relative_time(delta)
       print output
     else:
       ##
