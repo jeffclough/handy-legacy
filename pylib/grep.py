@@ -12,7 +12,7 @@ class Match(object):
   def __init__(self,match):
     self.match=match
 
-  def group(*args):
+  def group(self,*args):
     """Same as normal group(*args) method except that a value of None is
     returned if there was no match."""
 
@@ -37,6 +37,17 @@ class Match(object):
     else:
       d={}
     return addict.Dict(d)
+
+  def groupObject(self):
+    """Return an anonymous object whose attributes are named by the named
+    groups in the the RE that created this Match object. If the RE
+    failed to match anything, a value of None is returned."""
+
+    if self.match:
+      o=type('',(),**self.match.groupdict())
+    else:
+      o=None
+    return o
 
   def start(self,group=0):
     """Same as the normal start([group]) method except that a value of -1
@@ -105,8 +116,24 @@ class Grep(object):
     Keyword arguments:
       invert
       match_all
+
+    Exmaples:
+    Write to stdout only the lines from stdin that match all of
+    our regular expressions.
+      
+      grep=Grep(array_of_REs)
+      for line,n,matches in grep(sys.stdin):
+        sys.stdout.write(line)
+
+    Or if you're only going to do this once in your code, you could
+    do it this way.
+
+      for line,n,matches in Grep(array_of_REs)(sys.stdin):
+        sys.stdout.write(line)
+
     '''
 
+    find_all=kwargs.get('find_all',False)
     invert=kwargs.get('invert',False)
     match_all=kwargs.get('match_all',False)
   
@@ -115,25 +142,38 @@ class Grep(object):
     for line in input:
       n+=1
       results=[Match(p.search(line)) for p in self.pats]
-      matches=[i for i in r if results[i].match]
-      if bool(matches)==bool(invert):
+      lr=len(results)
+      matches=[m for m in results if m.match]
+      #matches=[i for i in r if results[i].match]
+      lm=len(matches)
+      if not find_all and (lm==lr if match_all else lm>0)==bool(invert):
         continue
-      yield (line,n,results)
+      yield (line,n,matches)
 
 if __name__=='__main__':
   import optparse,sys
 
   op=optparse.OptionParser()
-  op.add_option('--match-all',dest='match_all',action='store_true',default=False,help="Matching lines must match all paterns rather than simply any pattern.")
+  op.add_option('--find-all',dest='find_all',action='store_true',default=False,help="Output all lines, including those that do not match any pattern.")
+  op.add_option('--match-all',dest='match_all',action='store_true',default=False,help="Matching lines must match all paterns rather than at least one pattern.")
+  op.add_option('--matches-only',dest='matches_only',action='store_true',default=False,help="Show only the matching portion(s) of each line.")
   op.add_option('-n',dest='line_numbers',action='store_true',default=False,help="Each output line is preceded by its line number, starting at 1.")
   op.add_option('-v',dest='invert',action='store_true',default=False,help="Output non-matching lines rather than matching ones.")
   opt,args=op.parse_args()
 
+  def die(msg,rc=1):
+    if msg:
+      sys.stderr.write('%s: %s\n'%(op.get_prog_name(),msg))
+    sys.exit(rc)
+
+  if opt.invert and opt.matches_only:
+    die('option error: --matches_only and --invert make no sense when used together.')
+
   # Figure out what the user put on the command line.
   if len(args)>0 and not sys.stdin.isatty():
-    f=sys.stdin
+    inf=sys.stdin
   elif len(args)>1:
-    f=open(args[0])
+    inf=open(args[0])
     del args[0]
   else:
     print 'usage: %s [filename] regular_expression ...'
@@ -141,11 +181,20 @@ if __name__=='__main__':
 
   # Work that grep magic.
   grep_options=dict(
+    find_all=opt.find_all,
     match_all=opt.match_all,
     invert=opt.invert,
   )
-  for line,n,results in Grep(args)(f,**grep_options):
-    if opt.line_numbers:
-      sys.stdout.write(str(n)+': '+line)
+  grep=Grep(args)
+  for line,n,matches in grep(inf,**grep_options):
+    prefix=''
+    if opt.find_all: prefix+=('> ' if matches else '  ')
+    if opt.line_numbers: prefix+='%d: '%n
+    if opt.matches_only:
+      if len(matches)==1:
+        sys.stdout.write(prefix+matches[0].group()+'\n')
+      else:
+        sys.stdout.write(prefix+('-'.join(['<'+m.group()+'>' for m in matches]))+'\n')
     else:
-      sys.stdout.write(line)
+      sys.stdout.write(prefix+line)
+
