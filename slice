@@ -43,7 +43,7 @@ op.add_option('-l',dest='filenames',action='store_false',default=True,help="Supp
 # TODO: Add the --last option.
 op.add_option('--last',dest='last',action='store_true',default=False,help="Output only the last matching slice in each file. (NOT YET IMPLEMENTED!)")
 op.add_option('-n','--next',dest='next',action='store_true',default=False,help="Keeps ENDPAT from matching the same line STARTPAT matched. This also, and necessarily if you think about it, requires that the line matching ENDPAT not be output and remain available to be matched by STARTPAT. (This option has no effect if LASTLINE is use rather than ENDPAT, and it makes no sense if FIRSTLINE is used rather than STARTPAT.)")
-op.add_option('--multi',dest='multi',action='store_true',default=False,help="Output more than one slice per file. Only the first slice is output by default. (This only makes sense if STARTPAT is used.")
+op.add_option('-m','--multi',dest='multi',action='store_true',default=False,help="Output more than one slice per file. Only the first slice is output by default. (This only makes sense if STARTPAT is used.")
 op.add_option('--test',dest='test',action='store_true',default=False,help="This runs a self-test and is intended for debugging this program. (No output means everything worked correctly.)")
 opt,args=op.parse_args()
 
