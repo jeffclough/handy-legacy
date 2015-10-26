@@ -307,14 +307,17 @@ def get_input_lines(f=sys.stdin):
   for buffer control reasons. This is also a sensible place to
   implement our --discard and --keep functionality.'''
 
-  s=sys.stdin.readline()
-  while s:
-    if opt.discard and opt.discard.search(s):
-      s=sys.stdin.readline()
-      continue
-    if not opt.keep or opt.keep.search(s):
-      yield s
+  try:
     s=sys.stdin.readline()
+    while s:
+      if opt.discard and opt.discard.search(s):
+        s=sys.stdin.readline()
+        continue
+      if not opt.keep or opt.keep.search(s):
+        yield s
+      s=sys.stdin.readline()
+  except KeyboardInterrupt:
+    sys.exit(0)
 
 # Convert opt.palette into a list of ansi.Color objects.
 opt.palette=ansi.Palette(opt.palette)
