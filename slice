@@ -7,7 +7,9 @@ import OptionParserFormatters
 req=(2,5)
 vi=sys.version_info
 if vi<req:
+  # So we're running <2.5, but see if 2.6 or 2.7 is available.
   v=7
+  rc=0
   while v>=req[1]:
     cmd='python2.%d'%v
     rc=os.spawnv(os.P_WAIT,cmd,sys.argv)
@@ -29,7 +31,7 @@ FIRSTLINE is the number (starting from 1) of the first line to be output. LASTLI
 
 STARTPAT is a regular expression that, when matched in the input file, starts output. ENDPAT, when matched, ends output. By default, the line matching ENDPAT is included in the output.
 
-Forms 1 and 2 can be mixed, so FILESPEC[:[FIRSTLINE][:[ENDPAT]]] and FILESPEC[:[STARTPAT][:[LASTLINE]]] are also valid arguments. In the latter case, the user is advised to employe relative numbering for LASTLINE by prefixing it with a plus sign (+), though this is not required.
+Forms 1 and 2 can be mixed, so FILESPEC[:[FIRSTLINE][:[ENDPAT]]] and FILESPEC[:[STARTPAT][:[LASTLINE]]] are also valid arguments. In the latter case, the user is advised to use relative numbering for LASTLINE by prefixing it with a plus sign (+), though this is not required.
 """,
   formatter=OptionParserFormatters.IndentedHelpFormatterWithNL()
 )
@@ -39,9 +41,9 @@ op.add_option('-f','--follow',dest='follow',action='store_true',default=False,he
 op.add_option('-i',dest='case',action='store_false',default=True,help="Ignore case when scanning for regular expressions.")
 op.add_option('-l',dest='filenames',action='store_false',default=True,help="Suppress normal output of filename before slices of that file when more than one file is given.")
 # TODO: Add the --last option.
-op.add_option('--last',dest='last',action='store_true',default=False,help="Output only the last matching slice in each file.")
-op.add_option('-n','--next',dest='next',action='store_true',default=False,help="Keeps ENDPAT from matching the same line STARTPAT matched. This also, and necessarily if you think about it, requires that the line matching ENDPAT no be output and remain available to be matched by STARTPAT. (This option has no effect if LASTLINE is use rather than ENDPATH, and it makes no sense if FIRSTLINE is used rather than STARTPAT.)")
-op.add_option('--multi',dest='multi',action='store_true',default=False,help="Output more than one slice per file. Only the first slice is output by default. (This only makes sense if STARTPAT is used.")
+op.add_option('--last',dest='last',action='store_true',default=False,help="Output only the last matching slice in each file. (NOT YET IMPLEMENTED!)")
+op.add_option('-n','--next',dest='next',action='store_true',default=False,help="Keeps ENDPAT from matching the same line STARTPAT matched. This also, and necessarily if you think about it, requires that the line matching ENDPAT not be output and remain available to be matched by STARTPAT. (This option has no effect if LASTLINE is use rather than ENDPAT, and it makes no sense if FIRSTLINE is used rather than STARTPAT.)")
+op.add_option('-m','--multi',dest='multi',action='store_true',default=False,help="Output more than one slice per file. Only the first slice is output by default. (This only makes sense if STARTPAT is used.")
 op.add_option('--test',dest='test',action='store_true',default=False,help="This runs a self-test and is intended for debugging this program. (No output means everything worked correctly.)")
 opt,args=op.parse_args()
 
@@ -153,7 +155,7 @@ class File(file):
   """The File class is just like the native file class, but it adds a
   readfrom instance value that holds the file location from which the
   most recent data was read. This supports rewinding the file to read
-  the same line again when necessary."""
+  the same line (or buffer or list of lines) again when necessary."""
 
   def __init__(self,name,mode='r',buffering=-1):
     super(File,self).__init__(name,mode,buffering)
@@ -162,7 +164,7 @@ class File(file):
   def next(self):
     line=self.readline()
     if not line:
-      return StopIteration
+      raise StopIteration
     else:
       return line
 
@@ -194,8 +196,10 @@ def slice(filename,first,last,relative=False):
   The relative argument is true if last is numeric and expresses
   the number of lines to be returned rather than the ending line number.
 
-  >>> repr(slice(sys.argv[0],1,1))
-  '#!/usr/bin/env python'
+  TODO: In order to doctest slice(), we need its stdout. Figure that out.
+
+  #>>> repr(slice(sys.argv[0],1,1))
+  #'#!/usr/bin/env python'
   """
 
   n=0
@@ -206,7 +210,7 @@ def slice(filename,first,last,relative=False):
     except:
       die("Cannot use the -n (--next) option with \"%s\" because it can't be rewound."%filename)
   eof=False
-
+  
   while not eof: # In case opt.multi is True.
     # Skip lines until the first line of the slice.
     if isinstance(first,int):
@@ -252,7 +256,7 @@ def slice(filename,first,last,relative=False):
           sys.stdout.write(line)
           if found:
             if opt.next:
-              f.rewind() # Set up to re-read the last line we read.
+              f.rewind() # Set up to re-read this line.
             break
         else:
           eof=True
@@ -281,8 +285,6 @@ for arg in args:
     if opt.filenames and (len(args)>1 or len(flist)>1):
       print '\n%s:'%fn
     slice(fn,first,last,relative)
-
-
 
 """
 THIS IS TEST DATA, USED BY THE THIS FUNCTION'S DOCTESTS.
