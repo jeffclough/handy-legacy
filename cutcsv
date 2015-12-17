@@ -70,6 +70,9 @@ help='Output only these fields. FIELDS is made up of one range, or many ranges s
 op.add_option('-j',dest='joinfields',action='store',default=None,
 help='Join the a givn field range into a single field separated by a single character.')
 
+op.add_option('--no-heading',dest='skip',action='store_const',const=1,default=0,
+help="Assume the first line of input contains column headings, and skip over it.")
+
 op.add_option('-o',dest='fmt',action='store',default=None,
 help='Specify a format string outputting the fields. Use %1, %2, etc for output. Note that fields excluded by the -f option (if given) are not counted. I.e., If "-f3-5,7" is given, input field 3 becomes output field 1, 4 becomes 2, 5 becomes 3, and 7 becomes 4. In the absence of this option, the output format is CSV.')
 
@@ -230,7 +233,13 @@ for filename in args:
   #  print 'opt.joinchar=%r'%opt.joinchar
   #sys.exit(0)
 
+  input_line=0
   for row in reader:
+    # Skip initial lines according to opt.skip.
+    input_line+=1
+    if input_line<=opt.skip:
+      continue
+
     # Join any field ranges we've been told to.
     for n,m in opt.joinfields:
       row[n:m]=[opt.joinchar.join([x for x in row[n:m] if x])]
