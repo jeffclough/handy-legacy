@@ -12,6 +12,13 @@ levels=[(a,b) for a,b in logging._levelNames.items() if isinstance(b,int)]
 levels.sort(key=lambda x:x[1])
 levels=[x[0].lower() for x in levels if x[0]!='NOTSET']
 
+def get_log_level_by_name(level):
+  if isinstance(level,basestring):
+    level=level.upper()
+    if level in logging._levelNames:
+      return logging._levelNames[level]
+  raise ValueError,'bad log level value: %r'%(level,)
+
 def get_logger(facility=None,level='WARNING',name=os.path.basename(sys.argv[0]).split('.')[0],logfmt='%(name)s %(levelname).1s: %(message)s',datefmt='%Y-%m-%d %H:%M:%S '):
   """Return the default logging object (if facility==None), or set up a
   new logger in any other case, and return that.

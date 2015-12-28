@@ -1054,12 +1054,13 @@ except NameError:
         return True
     return False
 
+# Supply a Set class and set() function if we don't have them.
 try:
   set
 except NameError:
   class Set(object):
     """This is a very partial replacement for the set type introduced in
-    Python 2.3"""
+    Python 2.4"""
 
     def __init__(self,seq):
       "Initialize this set with the items in the given sequence."
@@ -1112,8 +1113,6 @@ def generate_random_string():
     # Generate a 16-bit binary password.
     print repr(''.join([unichr(random.randint(0,65535)) for x in range(random.randint(opt.min_length,opt.max_length))]))
   elif opt.dictionary:
-    #print >>sys.stderr,'--dictionary (-d) has not yet been implemented. Sorry.'
-    #sys.exit(1)
     pw=''
     i=0
     while True:
