@@ -75,10 +75,12 @@ class Grep(object):
   dummy_pattern=re.compile('dummy')
 
   def __init__(self,arg=None,**kwargs):
-    '''Initialize this object from a regular expression string, a
-    compiled regular expression object, or a list or tuple of either (or
-    both) of those things.
-    
+    '''Initialize this object. The arg parameter may be string to be
+    compiled as a regular expression, an-already compiled regular
+    expression, or a list or tuple of any combination thereof. You can
+    also use this as a copy constructor by passing in another Grep (or
+    subclass thereof) object as the arg parameter.
+
     Keyword arguments:
 
       flags:     Integer defaults to 0. The same as the re module's
@@ -87,26 +89,31 @@ class Grep(object):
       find_all:  Boolean defaults to False. If True, find ALL items in
                  the input iterable. This means that non-matching string
                  values will be returned, but the corresponding
-                 [Match,...] array will be empty for them.
+                 [Match,...] arrays will be empty for them.
 
       invert:    Boolean defaults to False. Find non-matching items
                  rather than matching one. In this case, the [Match,...]
                  array of each returned tuple will be empty.
 
-      match_all: Boolean defaults to False. Normally, an item fromthe
+      match_all: Boolean defaults to False. Normally, an item from the
                  input iterable that matches ANY of the regular
                  expressions given to this Grep object will be returned
                  as a match. If match_all is True, an item must match
-                 ALL the RE in order to qualify as a match. (This can be
+                 ALL the REs in order to qualify as a match. (This can be
                  used profitably in combination with the invert
-                 argument.)
+                 argument, in which case you can think of this as a
+                 doesnt_match_all flag.)
+
       value:     Function defaults to None. This function accecpts the
                  value of one item in the list of items to be searched
                  and returns the string value to use in the search on
                  that item. The only requirement is that it return a
-                 string value.
+                 string value. (Use this argument if your iterable
+                 doesn't naturally and always return string values as
+                 items (e.g. a list of mixed-type values or of database
+                 rows).
 
-    All but the flags keyword arguments provide default values for the
+    All but the flags keyword argument provide default values for the
     same arguments to Grep.__call__().
     '''
 
@@ -131,10 +138,10 @@ class Grep(object):
       self.value=arg.value
     elif isinstance(arg,basestring):
       # Assume this string value is an RE to be compiled.
-      self.pats.append(re.compile(arg,self.flags))
+      self.pats=[re.compile(arg,self.flags)]
     elif isinstance(arg,type(Grep.dummy_pattern)):
       # Our argument is an already compile RE.
-      self.path.append(arg)
+      self.pats=[arg]
     elif isinstance(arg,list) or isinstance(arg,tuple):
       # Our argument is a sequence of (hopefully) strings and/or
       # compiled RE objects. We'll compile any string values we find as
@@ -143,7 +150,12 @@ class Grep(object):
         if isinstance(a,basestring):
           self.pats.append(re.compile(a,self.flags))
         elif isinstance(a,re.RegexObject):
-          self.path.append(a)
+          self.pats.append(a)
+        else:
+          # As a final effort, try converting this value to a string and then
+          # compiling that as a regular expression. If it raises an exception,
+          # so be it.
+          self.pats.append(re.compile(str(a),self.flags))
 
   def __repr__(self):
     '''Return a string that Python can evaluate to recreate this object.'''
@@ -159,9 +171,11 @@ class Grep(object):
     return repr(self)
 
   def __call__(self,input,**kwargs):
-    '''This is an iterator that returns all matches from the input,
-    which must be an iterable that contains or yields string values.
-    Tuples returned look like (string,i,[Match,...]) and contain:
+    '''This is an iterator that returns all matches from the input
+    argument, which must be an iterable that contains or yields string
+    values. (Non-string values can be managed using the value keyword
+    argument. See __init__()'s description for details.) Tuples returned
+    look like (string,i,[Match,...]) and contain:
 
       1. the whole string that matched
       2. the number (starting with 1) of the matched item in the input
@@ -177,7 +191,7 @@ class Grep(object):
     will win and match_all will be implicitly ignored.
 
     Exmaples:
-    Write to stdout only the lines from stdin that match all of
+    Write to stdout only the lines from stdin that match any of
     our regular expressions.
 
       grep=Grep(array_of_REs)
@@ -185,8 +199,8 @@ class Grep(object):
         sys.stdout.write(line)
 
 
-    Or if you're only going to do this once in your code, you could
-    do it this way.
+    Or if you're only going to do this once in your code, as seems
+    likely when reading stdin, you could do it this way.
 
       for line,n,matches in Grep(array_of_REs)(sys.stdin):
         sys.stdout.write(line)
@@ -196,8 +210,8 @@ class Grep(object):
     regular expression:
 
       def find_files(root):
-        """Return (path,filename) tuple or each file under the
-        given root."""
+        """Return a list of (path,filename) tuples, one for each file
+        under the given root path."""
 
         file_list=[]
         for path,dirs,files in os.walk(root):
@@ -205,16 +219,23 @@ class Grep(object):
             file_list.append((path,f))
         return file_list
 
-      # Set up a Grep object with the RE we want and which operates on
-      # the second element of each tuple in the list given to it.
-      grep=Grep(args,value=lambda x:x[1],**grep_options)
+      # Set up a Grep object with the RE that matches the files we want
+      # and which operates on the second element of each tuple in the
+      # list given to it.
+      grep=Grep(args,value=lambda x:x[1])
 
       # Get a list of all (dir,filename) values for each file found
       # under the current directory.
       all_files=find_files('.')
 
       # Now keep only the files matching "foo*.bar".
-      good_files=[dirfile for dirfile,n,matches in grep(all_files)]
+      good_files=[item for item,n,matches in grep(all_files)]
+
+    [Note that a much better way to accomplish the above assignment
+    would be to subclass Grep as DirGrep (for example), whose __call__()
+    operator accepts a root path rather than an input iterable. Ooo.
+    Maybe I'll build that into the next version of this module. (Yeah.
+    Right. Like THAT's gonna happen.)]
     '''
 
     # Get our keyword arguments, and reject any that shouldn't be there.
@@ -255,9 +276,18 @@ class Grep(object):
 
 if __name__=='__main__':
   import optparse,os
+  from OptionParserFormatters import IndentedHelpFormatterWithNL
 
-  op=optparse.OptionParser()
+  op=optparse.OptionParser(
+    formatter=IndentedHelpFormatterWithNL(2,8),
+    usage="%prog [OPTIONS] [FILE] RE ...",
+    description="""This is the test mode of my grep Python module, but you can also use it as a kind of screwey (see the very backward-looking usage above) replacement for your native grep command. Note that this command can be given only one input file, but many regular expressions.""",
+    epilog="""The exit status is 0 if the match was successfull. Otherwise, a value of 1 is returned. If an error occurrs, a value >= 2 is returned. 
+
+If -l is used with --find-files, no filenames are output. The caller must test the exit code to know whether a match was found (or not found, if -v was also given)."""
+  )
   op.add_option('-i',dest='ignore_case',action='store_true',default=False,help="Ingore case.")
+  op.add_option('-l',dest='list_only',action='store_true',default=False,help="Only list the names of files where matches are found. Don't show the actual matches. In this mode, the input file is searched only until the first match.")
   op.add_option('--find-all',dest='find_all',action='store_true',default=False,help="Output all lines, including those that do not match any pattern.")
   op.add_option('--match-all',dest='match_all',action='store_true',default=False,help="Matching lines must match all paterns rather than at least one pattern.")
   op.add_option('--matches-only',dest='matches_only',action='store_true',default=False,help="Show only the matching portion(s) of each line.")
@@ -308,15 +338,21 @@ if __name__=='__main__':
 
     # Figure out what the user put on the command line.
     if len(args)>0 and not sys.stdin.isatty():
+      filename='stdin'
       infile=sys.stdin
     elif len(args)>1:
-      infile=open(args[0])
-      del args[0]
+      filename=args.pop(0)
+      infile=open(filename)
     else:
-      print 'usage: %s [filename] regular_expression ...'
-      sys.exit(1)
+      op.print_usage()
+      sys.exit(2)
 
+    return_code=1
     for line,n,matches in Grep(args,**grep_options)(infile):
+      return_code=0
+      if opt.list_only:
+        print filename
+        break
       prefix=''
       if opt.find_all: prefix+=('> ' if matches else '  ')
       if opt.line_numbers: prefix+='%d: '%n
@@ -327,3 +363,5 @@ if __name__=='__main__':
           sys.stdout.write(prefix+('-'.join(['<'+m.group()+'>' for m in matches]))+'\n')
       else:
         sys.stdout.write(prefix+line)
+
+  sys.exit(return_code)
