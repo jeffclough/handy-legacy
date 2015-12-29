@@ -97,8 +97,8 @@ if __name__=='__main__':
 
   op=optparse.OptionParser('usage: %prog [options] message ...')
 
-  op.add_option('--facility',dest='facility',metavar='FACILITY',action='store',default='stdout',help="Log to the given syslog facility (any of: %s)"%', '.join(syslog_facilities))
-  op.add_option('--file',dest='facility',metavar='FILE',action='store',help="Log message to the given file. The special filename stdout and stderr may also be given.")
+  op.add_option('--facility',dest='facility',metavar='FACILITY',action='store',default='stdout',help="Log to the given syslog facility (any of: %s). (default: %%default)"%', '.join(syslog_facilities))
+  op.add_option('--file',dest='facility',metavar='FILE',action='store',help="Log message to the given file. The special filenames stdout and stderr (or any of the facilities listed above) may also be given. The --file option is just a synonym for --facility. They're exactly the same.")
   op.add_option('--level',dest='level',action='store',default='INFO',help="Log at the given level, any of: %s (default=%%default)"%', '.join(levels))
 
   opt,args=op.parse_args()
