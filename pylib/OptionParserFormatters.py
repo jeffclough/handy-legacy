@@ -55,12 +55,12 @@ class IndentedHelpFormatterWithNL(optparse.IndentedHelpFormatter):
       width,short_first
     )
 
-  def format_description(self, description):
-    if not description: return ""
+  def __internal_message_formatter(self,message):
+    if not message: return ""
     desc_width = self.width - self.current_indent
     indent = " "*self.current_indent
     # the above is still the same
-    bits = description.split('\n')
+    bits = message.split('\n')
     formatted_bits = [
       textwrap.fill(bit,
         desc_width,
@@ -70,20 +70,11 @@ class IndentedHelpFormatterWithNL(optparse.IndentedHelpFormatter):
     result = "\n".join(formatted_bits) + "\n"
     return result
 
-  def format_epilog(self, epilog):
-    if not epilog: return ""
-    desc_width = self.width - self.current_indent
-    indent = " "*self.current_indent
-    # the above is still the same
-    bits = epilog.split('\n')
-    formatted_bits = [
-      textwrap.fill(bit,
-        desc_width,
-        initial_indent=indent,
-        subsequent_indent=indent)
-      for bit in bits]
-    result = "\n".join(formatted_bits) + "\n"
-    return result
+  def format_description(self,description):
+    return self.__internal_message_formatter(description)
+
+  def format_epilog(self,epilog):
+    return '\n'+self.__internal_message_formatter(epilog)
 
   def format_option(self, option):
     # The help for each option consists of two parts:
