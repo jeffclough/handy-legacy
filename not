@@ -2,6 +2,7 @@
 
 import fnmatch,optparse,os,re,stat,sys
 from glob import glob
+from OptionParserFormatters import IndentedHelpFormatterWithNL
 
 def die(msg,rc=1):
   if msg:
@@ -9,12 +10,14 @@ def die(msg,rc=1):
   sys.exit(rc)
 
 op=optparse.OptionParser(
-  usage='%prog [OPTIONS] FILENAME ...',
+  formatter=IndentedHelpFormatterWithNL(2,8),
+  usage='%prog [OPTIONS] FILESPEC ...',
   description="Output all filenames not matching either the -f or -r arguments. At least one -f or -r argument MUST be given."
 )
 op.add_option('-b',dest='base',action='store_true',default=False,help="Compare FS or RE patterns only against the basename of each filename, ignoring any path prefixing it.")
 op.add_option('-f',dest='fs',action='append',default=[],help="Unix-style filespec matching filenames to exclude. Use -f once for each such filespec.")
 op.add_option('-i',dest='ignore_case',action='store_const',const=re.IGNORECASE,default=0,help="Ignore case when matching filenames.")
+op.add_option('-R','--root',dest='root',action='store',default=None,help="Look in the given root path and its subdirectories.")
 op.add_option('-r',dest='re',action='append',default=[],help="Regular expression matching filenames to exclude. Use -r once for each such filespec.")
 op.add_option('-v',dest='invert',action='store_true',default=False,help="Invert the exclusion function so that only the files that would be excluded are reported.")
 opt,args=op.parse_args()
@@ -44,17 +47,28 @@ if len(args)<1:
 ## Output all filenames that DON'T match the patterns to be excluded.
 ##
 output=set([])
-for fn in args:
-  if opt.base:
-    b=os.path.basename(fn)
-    is_match=any([p.match(b) for p in opt.re])
-  else:
-    is_match=any([p.match(fn) for p in opt.re])
-  if is_match==opt.invert:
-    output.add(fn)
+if opt.root:
+  top=opt.root
+else:
+  top='.'
+for root,dirs,files in os.walk(top):
+  if not opt.root:
+    # Don't process subdirectories.
+    del(dirs[:])
+  for fn in files:
+    path=os.path.join(root,fn)
+    if opt.base:
+      is_match=any([p.match(fn) for p in opt.re])
+    else:
+      is_match=any([p.match(path) for p in opt.re])
+    if is_match==opt.invert:
+      output.add(path)
 
 # Output each distinct filename alphabetically.
 output=list(output)
 output.sort()
 for fn in output:
-  print fn
+  if fn.startswith('./'):
+    print fn[2:]
+  else:
+    print fn
