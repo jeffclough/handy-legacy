@@ -1,67 +1,27 @@
 #!/usr/bin/env python
 
 import csv,optparse,os,re,sys
+import OptionParserFormatters
 try:
   import xlrd
   XLRD=True
 except:
   XLRD=False
 
+def die(msg,rc=1):
+  if msg:
+    sys.stderr.write(os.path.basename(sys.argv[0])+': '+msg+'\n')
+  sys.exit(rc)
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Handle the command line.
-
-default_dialect=dict(
-  delimiter=',',
-  quotechar='"',
-  escapechar=None,
-  doublequote=True,
-  skipinitialspace=False,
-  lineterminator='\n',
-  quoting=csv.QUOTE_MINIMAL,
-)
-
-import OptionParserFormatters
-progname=os.path.basename(sys.argv[0])
+ 
 op=optparse.OptionParser(
   formatter=OptionParserFormatters.IndentedHelpFormatterWithNL(2,8),
   usage="%prog [options] [filename] ...",
   description="""
   This program does for CSV files (or Excel files, depending on file extension) what the
   traditional cut command does for more simply delimited data."""
-)
-
-op.add_option('-D','--dialect',dest='dialect',action='append',default=[],
-help='''Accept any one of the following dialect parameters. As many -D options may be specified as are needed.
-
-  delimiter=,
-  quotechar="
-  escapechar=None
-  doublequote=True
-  skipinitialspace=False
-  lineterminator=\\n
-  quoting=QUOTE_MINIMAL''')
-
-op.add_option('-R','--read-as',dest='read_as',action='append',default=[],
-help='''Accept any one of the following dialect parameters. As many -R options may be specified as are needed.
-
-  delimiter=,
-  quotechar="
-  escapechar=None
-  doublequote=True
-  skipinitialspace=False
-  lineterminator=\\n
-  quoting=QUOTE_MINIMAL''')
-
-op.add_option('-W','--write-as',dest='write_as',action='append',default=[],
-help='''Accept any one of the following dialect parameters. As many -W options may be specified as are needed.
-
-  delimiter=,
-  quotechar="
-  escapechar=None
-  doublequote=True
-  skipinitialspace=False
-  lineterminator=\\n
-  quoting=QUOTE_MINIMAL'''
 )
 
 op.add_option('-f',dest='fields',action='store',default=None,
@@ -76,15 +36,20 @@ help="Assume the first line of input contains column headings, and skip over it.
 op.add_option('-o',dest='fmt',action='store',default=None,
 help='Specify a format string outputting the fields. Use %1, %2, etc for output. Note that fields excluded by the -f option (if given) are not counted. I.e., If "-f3-5,7" is given, input field 3 becomes output field 1, 4 becomes 2, 5 becomes 3, and 7 becomes 4. In the absence of this option, the output format is CSV.')
 
-op.add_option('-s',dest='strip',action='store',default='',
-help="Strip white space from the left and/or right of each field. STRIP may be l, r, lr, or rl. If l is given, white space is be stripped from the left. If r is given, white space is stripped from the right. (Yes, it's rocket science.) By default, no white space is stripped.")
+op.add_option('--strip',dest='strip',action='store',default='',help="Strip left and/or right whitespace from each parsed field, depending on whether STRIP contains and l and/or r character.")
 
 op.add_option('--vars',dest='vars',action='store',default='',
 help="""This option produces output similar to what could be accomplished with the -o option (e.g., -o "name='%1';email='%2';labs='%3';affil='$4'"), but specifying variables this way is simpler, AND the values are safe to use with your shell's eval command. Just give the names of the variables as a list of comma- or space-separated strings, and run eval on the individual lines. (E.g. cutcsv --vars name,email,labs,affil | while read line; do eval "$line"; ... use the variables here ...; done)""")
 
+op.add_option('--reader',dest='reader',action='store',default=",t\'\\m",help="Specify the CSV reader's dialect as (a|m|N|n)[SEP[(t|f)[Q[E]]]]. a, m, N, and n are literals that specify the quoting style: all, minimum, non-numeric, and none. SEP is a single-character field seperater. t and f are either true or false for whether to regard two consecutive quote characters as a literal quote in the field's value. Q is the character to use for quoting. E is the character to use for escaping the character that follows it. (default: %default)")
+
+op.add_option('--writer',dest='writer',action='store',default=",t\'\\m",help="Specify the CSV writer's dialect, using the same syntax as for --reader. (default: %default)")
+
 op.add_option('--worksheet',dest='worksheet',action='store',default=0,
-help="""Set the number or 
-""")
+help="""Set the number or name of the worksheet to read from the Excel spreadsheet, assuming we're reading and XLS file.""")
+
+op.add_option('--debug',dest='debug',action='store_true',default=False,
+help="You don't need this.")
 
 try:
   opt,args=op.parse_args()
@@ -92,16 +57,78 @@ except Exception,e:
   print >>sys.stderr,str(e)
   sys.exit(2)
 
-# Set up our dialects.
-read_dialect=dict(default_dialect)
-read_dialect.update(dict(
-  [([x.strip() for x in spec.split('=',1)]) for spec in opt.read_as]
-))
-write_dialect=dict(default_dialect)
-write_dialect.update(dict(
-  [([x.strip() for x in spec.split('=',1)]) for spec in opt.write_as]
-))
- 
+re_dialect=re.compile(
+  '(?P<delimiter>.)'
+  '(?P<doublequote>[ft])'
+  '(?P<quotechar>.)'
+  '(?P<escapechar>.)'
+  '(?P<quoting>[amNn])'
+  '$'
+)
+
+quoting_map=dict(
+  a=csv.QUOTE_ALL,
+  m=csv.QUOTE_MINIMAL,
+  N=csv.QUOTE_NONNUMERIC,
+  n=csv.QUOTE_NONE
+)
+
+# Cook the reader spec into an actual CSV dialect structure.
+m=re_dialect.match(opt.reader)
+if m==None:
+  die("Bad reader dialect specification: %r"%opt.reader)
+d=dict(
+  quoting='m',
+  delimiter=',',
+  doublequote='t',
+  quotechar='"',
+  escapechar='\\',
+  skipinitialspace=True
+)
+
+d.update(m.groupdict())
+d=type('',(),d)
+d.quoting=quoting_map[d.quoting]
+d.doublequote=d.doublequote=='t'
+reader_dialect=d
+if opt.debug:
+  print 'DEBUG: reader: quoting=%r delimiter=%r doublequote=%r quotechar=%r escapechar=%r skipinitialspace=%r'%(
+  reader_dialect.quoting,
+  reader_dialect.delimiter,
+  reader_dialect.doublequote,
+  reader_dialect.quotechar,
+  reader_dialect.escapechar,
+  reader_dialect.skipinitialspace
+)
+
+# Cook the writer spec into an actual CSV dialect structure.
+m=re_dialect.match(opt.writer)
+if m==None:
+  die("Bad writer dialect specification: %r"%opt.writer)
+d=dict(
+  quoting='m',
+  delimiter=',',
+  doublequote='t',
+  quotechar='"',
+  escapechar='\\',
+  skipinitialspace=True
+)
+d.update(m.groupdict())
+d=type('',(),d)
+d.quoting=quoting_map[d.quoting]
+d.doublequote=d.doublequote=='t'
+writer_dialect=d
+if opt.debug:
+  print 'DEBUG: writer: quoting=%r delimiter=%r doublequote=%r quotechar=%r escapechar=%r skipinitialspace=%r'%(
+  writer_dialect.quoting,
+  writer_dialect.delimiter,
+  writer_dialect.doublequote,
+  writer_dialect.quotechar,
+  writer_dialect.escapechar,
+  writer_dialect.skipinitialspace
+)
+
+
 # Validate our field stripping specification.
 for ch in opt.strip:
   if ch not in 'lr':
@@ -210,7 +237,7 @@ re_escape=re.compile(r'''([\\"`$])''')
 re_excel_filename=re.compile(r'\.xls[^.]*$')
 
 # Prepare for CSV output.
-writer=csv.writer(open('/dev/stdout','wb'),**write_dialect)
+writer=csv.writer(open('/dev/stdout','wb'),dialect=writer_dialect)
 
 for filename in args:
   if filename=='-':
@@ -225,7 +252,7 @@ for filename in args:
       sys.exit(1)
       
   else:
-    reader=csv.reader(open(filename,'rb'),**read_dialect)
+    reader=csv.reader(open(filename,'rb'),dialect=reader_dialect)
 
   #print 'opt.fields=%r'%opt.fields
   #print 'opt.joinfields=%r'%opt.joinfields
