@@ -15,6 +15,8 @@ def die(msg,rc=1):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Handle the command line.
+
+default_dialect_spec=',"mt\\f'
  
 op=optparse.OptionParser(
   formatter=OptionParserFormatters.IndentedHelpFormatterWithNL(2,8),
@@ -41,9 +43,17 @@ op.add_option('--strip',dest='strip',action='store',default='',help="Strip left 
 op.add_option('--vars',dest='vars',action='store',default='',
 help="""This option produces output similar to what could be accomplished with the -o option (e.g., -o "name='%1';email='%2';labs='%3';affil='$4'"), but specifying variables this way is simpler, AND the values are safe to use with your shell's eval command. Just give the names of the variables as a list of comma- or space-separated strings, and run eval on the individual lines. (E.g. cutcsv --vars name,email,labs,affil | while read line; do eval "$line"; ... use the variables here ...; done)""")
 
-op.add_option('--reader',dest='reader',action='store',default=",t\'\\m",help="Specify the CSV reader's dialect as (a|m|N|n)[SEP[(t|f)[Q[E]]]]. a, m, N, and n are literals that specify the quoting style: all, minimum, non-numeric, and none. SEP is a single-character field seperater. t and f are either true or false for whether to regard two consecutive quote characters as a literal quote in the field's value. Q is the character to use for quoting. E is the character to use for escaping the character that follows it. (default: %default)")
+op.add_option('--reader',dest='reader',action='store',default=default_dialect_spec,
+help="""Specify the CSV reader's dialect as SEP[Q[QSTYLE[DQUOTE[ESC[SKIPWS]]]]]. This is a single string of up to five characters:
+    SEP: Field separator character. (default: ,)
+    Q: Quote character. (default: ")
+    QSTYLE: Quoting style. One of 'a' (all), 'm' (minimal, the default), 'N' (non-numeric), or 'n' (none).
+    DQUOTE: Represent a literal quote as two consecutive quotes. Either 't' (the default) or 'f'.
+    ESC: The escape charater, which makes the next character a literal. (default: \\)
+    SKIPWS: Skip whitespace immediately following a field separator. Either 't' or 'f' (the default).""")
 
-op.add_option('--writer',dest='writer',action='store',default=",t\'\\m",help="Specify the CSV writer's dialect, using the same syntax as for --reader. (default: %default)")
+op.add_option('--writer',dest='writer',action='store',default=default_dialect_spec,
+help="Specify the CSV writer's dialect, using the same syntax as for --reader. (default: %default)")
 
 op.add_option('--worksheet',dest='worksheet',action='store',default=0,
 help="""Set the number or name of the worksheet to read from the Excel spreadsheet, assuming we're reading and XLS file.""")
@@ -58,11 +68,13 @@ except Exception,e:
   sys.exit(2)
 
 re_dialect=re.compile(
+  '^'
   '(?P<delimiter>.)'
-  '(?P<doublequote>[ft])'
   '(?P<quotechar>.)'
-  '(?P<escapechar>.)'
   '(?P<quoting>[amNn])'
+  '(?P<doublequote>[ft])'
+  '(?P<escapechar>.)'
+  '(?P<skipinitialspace>[ft])'
   '$'
 )
 
@@ -74,22 +86,15 @@ quoting_map=dict(
 )
 
 # Cook the reader spec into an actual CSV dialect structure.
+if len(opt.reader)<len(default_dialect_spec):
+  opt.reader+=default_dialect_spec[-(len(default_dialect_spec)-len(opt.reader)):]
 m=re_dialect.match(opt.reader)
 if m==None:
   die("Bad reader dialect specification: %r"%opt.reader)
-d=dict(
-  quoting='m',
-  delimiter=',',
-  doublequote='t',
-  quotechar='"',
-  escapechar='\\',
-  skipinitialspace=True
-)
-
-d.update(m.groupdict())
-d=type('',(),d)
+d=type('',(),m.groupdict())
 d.quoting=quoting_map[d.quoting]
 d.doublequote=d.doublequote=='t'
+d.skipinitialspace=d.skipinitialspace=='t'
 reader_dialect=d
 if opt.debug:
   print 'DEBUG: reader: quoting=%r delimiter=%r doublequote=%r quotechar=%r escapechar=%r skipinitialspace=%r'%(
@@ -102,21 +107,15 @@ if opt.debug:
 )
 
 # Cook the writer spec into an actual CSV dialect structure.
+if len(opt.writer)<len(default_dialect_spec):
+  opt.writer+=default_dialect_spec[-(len(default_dialect_spec)-len(opt.writer)):]
 m=re_dialect.match(opt.writer)
 if m==None:
   die("Bad writer dialect specification: %r"%opt.writer)
-d=dict(
-  quoting='m',
-  delimiter=',',
-  doublequote='t',
-  quotechar='"',
-  escapechar='\\',
-  skipinitialspace=True
-)
-d.update(m.groupdict())
-d=type('',(),d)
+d=type('',(),m.groupdict())
 d.quoting=quoting_map[d.quoting]
 d.doublequote=d.doublequote=='t'
+d.skipinitialspace=d.skipinitialspace=='t'
 writer_dialect=d
 if opt.debug:
   print 'DEBUG: writer: quoting=%r delimiter=%r doublequote=%r quotechar=%r escapechar=%r skipinitialspace=%r'%(
