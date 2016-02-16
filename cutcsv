@@ -13,6 +13,41 @@ def die(msg,rc=1):
     sys.stderr.write(os.path.basename(sys.argv[0])+': '+msg+'\n')
   sys.exit(rc)
 
+class CsvDialectError(Exception):
+  def __init__(self,dialect_spec):
+    super(CsvDialectError,self).__init__("Bad CSV dialect specification: %r"%dialect_spec)
+    self.dialect_spec=dialect_spec
+
+re_dialect=re.compile(
+  '^'
+  '(?P<delimiter>.)'
+  '(?P<quotechar>.)'
+  '(?P<quoting>[amNn])'
+  '(?P<doublequote>[ft])'
+  '(?P<escapechar>.)'
+  '(?P<skipinitialspace>[ft])'
+  '$'
+)
+
+quoting_map=dict(
+  a=csv.QUOTE_ALL,
+  m=csv.QUOTE_MINIMAL,
+  N=csv.QUOTE_NONNUMERIC,
+  n=csv.QUOTE_NONE
+)
+
+def parse_dialect(dialect_spec):
+  if len(dialect_spec)<len(default_dialect_spec):
+    dialect_spec+=default_dialect_spec[-(len(default_dialect_spec)-len(dialect_spec)):]
+  m=re_dialect.match(dialect_spec)
+  if m==None:
+    raise CsvDialectError(dialect_spec)
+  d=type('',(),m.groupdict())
+  d.quoting=quoting_map[d.quoting]
+  d.doublequote=d.doublequote=='t'
+  d.skipinitialspace=d.skipinitialspace=='t'
+  return d
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Handle the command line.
 
@@ -58,8 +93,8 @@ help="Specify the CSV writer's dialect, using the same syntax as for --reader. (
 op.add_option('--worksheet',dest='worksheet',action='store',default=0,
 help="""Set the number or name of the worksheet to read from the Excel spreadsheet, assuming we're reading and XLS file.""")
 
-op.add_option('--debug',dest='debug',action='store_true',default=False,
-help="You don't need this.")
+#op.add_option('--debug',dest='debug',action='store_true',default=False,
+#help="You don't need this.")
 
 try:
   opt,args=op.parse_args()
@@ -67,66 +102,19 @@ except Exception,e:
   print >>sys.stderr,str(e)
   sys.exit(2)
 
-re_dialect=re.compile(
-  '^'
-  '(?P<delimiter>.)'
-  '(?P<quotechar>.)'
-  '(?P<quoting>[amNn])'
-  '(?P<doublequote>[ft])'
-  '(?P<escapechar>.)'
-  '(?P<skipinitialspace>[ft])'
-  '$'
-)
+try:
+  opt.reader=parse_dialect(opt.reader)
+except CsvDialectError as e:
+  die("Bad CSV reader dialect: %r"%e.dialect_spec)
+except:
+  raise
 
-quoting_map=dict(
-  a=csv.QUOTE_ALL,
-  m=csv.QUOTE_MINIMAL,
-  N=csv.QUOTE_NONNUMERIC,
-  n=csv.QUOTE_NONE
-)
-
-# Cook the reader spec into an actual CSV dialect structure.
-if len(opt.reader)<len(default_dialect_spec):
-  opt.reader+=default_dialect_spec[-(len(default_dialect_spec)-len(opt.reader)):]
-m=re_dialect.match(opt.reader)
-if m==None:
-  die("Bad reader dialect specification: %r"%opt.reader)
-d=type('',(),m.groupdict())
-d.quoting=quoting_map[d.quoting]
-d.doublequote=d.doublequote=='t'
-d.skipinitialspace=d.skipinitialspace=='t'
-reader_dialect=d
-if opt.debug:
-  print 'DEBUG: reader: quoting=%r delimiter=%r doublequote=%r quotechar=%r escapechar=%r skipinitialspace=%r'%(
-  reader_dialect.quoting,
-  reader_dialect.delimiter,
-  reader_dialect.doublequote,
-  reader_dialect.quotechar,
-  reader_dialect.escapechar,
-  reader_dialect.skipinitialspace
-)
-
-# Cook the writer spec into an actual CSV dialect structure.
-if len(opt.writer)<len(default_dialect_spec):
-  opt.writer+=default_dialect_spec[-(len(default_dialect_spec)-len(opt.writer)):]
-m=re_dialect.match(opt.writer)
-if m==None:
-  die("Bad writer dialect specification: %r"%opt.writer)
-d=type('',(),m.groupdict())
-d.quoting=quoting_map[d.quoting]
-d.doublequote=d.doublequote=='t'
-d.skipinitialspace=d.skipinitialspace=='t'
-writer_dialect=d
-if opt.debug:
-  print 'DEBUG: writer: quoting=%r delimiter=%r doublequote=%r quotechar=%r escapechar=%r skipinitialspace=%r'%(
-  writer_dialect.quoting,
-  writer_dialect.delimiter,
-  writer_dialect.doublequote,
-  writer_dialect.quotechar,
-  writer_dialect.escapechar,
-  writer_dialect.skipinitialspace
-)
-
+try:
+  opt.writer=parse_dialect(opt.writer)
+except CsvDialectError as e:
+  die("Bad CSV writer dialect: %r"%e.dialect_spec)
+except:
+  raise
 
 # Validate our field stripping specification.
 for ch in opt.strip:
@@ -236,7 +224,7 @@ re_escape=re.compile(r'''([\\"`$])''')
 re_excel_filename=re.compile(r'\.xls[^.]*$')
 
 # Prepare for CSV output.
-writer=csv.writer(open('/dev/stdout','wb'),dialect=writer_dialect)
+writer=csv.writer(open('/dev/stdout','wb'),dialect=opt.writer)
 
 for filename in args:
   if filename=='-':
@@ -251,7 +239,7 @@ for filename in args:
       sys.exit(1)
       
   else:
-    reader=csv.reader(open(filename,'rb'),dialect=reader_dialect)
+    reader=csv.reader(open(filename,'rb'),dialect=opt.reader)
 
   #print 'opt.fields=%r'%opt.fields
   #print 'opt.joinfields=%r'%opt.joinfields
