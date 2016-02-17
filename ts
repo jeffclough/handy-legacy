@@ -16,9 +16,9 @@ extensions=set('''
   .mbox .mcl .md .mdc .mef .model .mos .mov .mp3 .mp4 .mpo .mrw .mustache .nef
   .net .nib .node .nrw .o .oab .obm .odg .opts .orf .org .otf .pack .pak .pal
   .pbm .pcf .pdf .pef .pem .pgm .php .pict .pimx .pkg .pl .plist .pm .png .pnm
-  .pns .postscript .ppm .prefs .psd .psp .psw .ptx .pub .pxn .py .pyc .pyd .qyp
-  .r3d .raf .raw .rb .ref .rif .rpm .rtv .rw2 .rwl .rwz .scpt .scss .settings
-  .sh .sig .so .sql .sqlite .sqlite3 .sqlitedb .sr2 .srf .srw .sst
+  .pns .postscript .ppm .prefs .psd .psp .psv .psw .ptx .pub .pxn .py .pyc .pyd
+  .qyp .r3d .raf .raw .rb .ref .rif .rpm .rtv .rw2 .rwl .rwz .scpt .scss
+  .settings .sh .sig .so .sql .sqlite .sqlite3 .sqlitedb .sr2 .srf .srw .sst
   .sublime-keymap .sublime-menu .svg .svn .swf .tab .tar .tcl .tgz .tif .tiff
   .todo .tsv .ttf .txt .url .uue .vdi .war .watchr .webm .webp .x3f .xaml .xbm
   .xls .xml .xsd .yaml .z .zip'''.split())
@@ -40,6 +40,7 @@ op.add_option('--time-format',dest='time_format',action='store',default='%Y%m%d_
 op.add_option('-n','--dry-run',dest='dry_run',action='store_true',default=False,help="Don't actually rename any files. Only output the new name of each file as it would be renamed.")
 op.add_option('--offset',dest='offset',action='store',default=None,help="Formatted as '[+|-]H:M' or '[+|-]S', where H is hours, M is minutes, and S is seconds, apply the given offset to the time.")
 op.add_option('-c','--copy',dest='copy',action='store_true',default=False,help="Copy the file rather than renaming it.")
+op.add_option('-s','--show-me',dest='showme',action='store_true',default=False,help="Only output the timestamped filename of the given file(s). No file is actually renamed or copied.")
 op.add_option('--utc',dest='utc',action='store_true',default=False,help="Express all times as UTC (no time zone at all).")
 opt,args=op.parse_args()
 if opt.offset:
@@ -89,8 +90,22 @@ if args:
     # Format the time as a string.
     t=time.strftime(opt.time_format,time.localtime(t))
     # Create the new filename.
+    for ext in extensions:
+      if f.endswith(ext):
+        # Remove the file extension, but remember what we removed.
+        f=f[:-len(ext)]
+        break
+    else:
+      # No special file extension found, so remember that.
+      ext=None
     filename=opt.format%dict(filename=f,time=t)
-    if opt.dry_run:
+    if ext!=None:
+      # Re-attach the file extension to our original and new filenames.
+      f+=ext
+      filename+=ext
+    if opt.showme:
+      print filename
+    elif opt.dry_run:
       # Just output the new name of the file.
       print "'%s' %s> '%s'"%(f,'-='[opt.copy],filename)
     else:
