@@ -46,6 +46,7 @@ def parse_dialect(dialect_spec):
   d.quoting=quoting_map[d.quoting]
   d.doublequote=d.doublequote=='t'
   d.skipinitialspace=d.skipinitialspace=='t'
+  d.lineterminator=os.linesep
   return d
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
