@@ -4,7 +4,7 @@ import optparse,os,re,shutil,stat,sys,time
 
 # By defalt, files with any of these extensions keep their extension when
 # they are renamed with a timestamp.
-extensions=set('''
+extensions='''
   .3ctype .3fr .a .ac .aiff .ani .anim .ar .arc .ari .arw .asc .asm .awk .bay
   .bin .bmp .bom .book .bsd .c .c++ .cache .cc .cdf .cfg .cgm .cix .class .cmd
   .coffee .collection .com .conf .config .cpp .cr2 .crl .crw .css .csv .cvf .d
@@ -21,7 +21,7 @@ extensions=set('''
   .settings .sh .sig .so .sql .sqlite .sqlite3 .sqlitedb .sr2 .srf .srw .sst
   .sublime-keymap .sublime-menu .svg .svn .swf .tab .tar .tcl .tgz .tif .tiff
   .todo .tsv .ttf .txt .url .uue .vdi .war .watchr .webm .webp .x3f .xaml .xbm
-  .xls .xml .xsd .yaml .z .zip'''.split())
+  .xls .xml .xsd .yaml .z .zip'''.split()
 
 prog=os.path.basename(sys.argv[0])
 
