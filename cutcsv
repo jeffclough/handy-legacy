@@ -36,18 +36,50 @@ quoting_map=dict(
   n=csv.QUOTE_NONE
 )
 
+class LocalDialect(csv.Dialect):
+  """Make it a simple thing to concoct any silly CSV dialect we can
+  think of."""
+
+  def __init__(self,**kwargs):
+    """Let the user give keyword arguments for dialectic elements (with
+    reasonable default for those not given): delimiter (','), quotechar
+    ('"'), quoting (csv.QUOTE_MINIMAL), doublequote (True), escapechar
+    ('\\'), skipinitialspace (False), and lineterminator (the system
+    default line terminator string)."""
+
+    self.delimiter=kwargs.get('delimiter',',')
+    self.quotechar=kwargs.get('quotechar','"')
+    self.escapechar=kwargs.get('escapechar','\\')
+    self.doublequote=kwargs.get('doublequote',True)
+    self.skipinitialspace=kwargs.get('skipinitialspace',False)
+    self.lineterminator=kwargs.get('lineterminator',os.linesep)
+    self.quoting=kwargs.get('quoting',csv.QUOTE_MINIMAL)
+
 def parse_dialect(dialect_spec):
+  """Parse a dialect string, and return a LocalDialect instance that is
+  configured accordingly."""
+
+  # Supply defaults for any unspecified elements of the dialect string.
   if len(dialect_spec)<len(default_dialect_spec):
     dialect_spec+=default_dialect_spec[-(len(default_dialect_spec)-len(dialect_spec)):]
+
+  # Validate and parse the dialect string using a regular expression.
   m=re_dialect.match(dialect_spec)
   if m==None:
     raise CsvDialectError(dialect_spec)
-  d=type('',(),m.groupdict())
-  d.quoting=quoting_map[d.quoting]
-  d.doublequote=d.doublequote=='t'
-  d.skipinitialspace=d.skipinitialspace=='t'
-  d.lineterminator=os.linesep
-  return d
+
+  # Cook the non-literal 
+  d=m.groupdict()
+  try:
+    d['quoting']=quoting_map[d['quoting']]
+  except KeyError:
+    raise CsvDialectError(dialect_spec)
+  except:
+    raise
+  d['doublequote']=d['doublequote']=='t'
+  d['skipinitialspace']=d['skipinitialspace']=='t'
+  d['lineterminator']=os.linesep
+  return LocalDialect(**d)
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Handle the command line.
