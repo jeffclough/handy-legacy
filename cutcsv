@@ -105,14 +105,14 @@ except Exception,e:
 
 try:
   opt.reader=parse_dialect(opt.reader)
-except CsvDialectError as e:
+except CsvDialectError,e:
   die("Bad CSV reader dialect: %r"%e.dialect_spec)
 except:
   raise
 
 try:
   opt.writer=parse_dialect(opt.writer)
-except CsvDialectError as e:
+except CsvDialectError,e:
   die("Bad CSV writer dialect: %r"%e.dialect_spec)
 except:
   raise
