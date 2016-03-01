@@ -5,7 +5,7 @@ from base64 import *
 
 # Resolve this program's identity crisis.
 prog=os.path.basename(sys.argv[0])
-default_action=default=('decode','encode')[prog[0]=='e']
+default_action=default=('decode','encode')[prog in ('base64','encode64')]
 
 # Parse our command line.
 op=OptionParser(add_help_option=False,usage="""
@@ -42,13 +42,13 @@ if len(args)==1:
   else:
     fin=open(args[0],'rb')
 elif len(args)==2:
-  fin=open(args[0])
+  fin=open(args[0],'rb')
   fout=open(args[1],'wb')
 # But reopen stdin and stdout in binary mode if we must use them.
 if not fin:
-  fin=open('/dev/stdin','rb')
+  fin=os.fdopen(sys.stdin.fileno(),'rb')
 if not fout:
-  fout=open('/dev/stdout','ab')
+  fout=os.fdopen(sys.stdout.fileno(),'ab')
 
 if opt.action=='encode':
   encode(fin,fout)
