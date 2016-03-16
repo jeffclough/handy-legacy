@@ -39,6 +39,7 @@ CPROGS=( # Compile these targets from C source files.
 
 SCRIPTS=( # These targets are simply copied during installation.
   'ansi',
+  'ascii',
   'args',
   'backup-volume',
   'chronorename',

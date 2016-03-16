@@ -6,7 +6,8 @@ from OptionParserFormatters import IndentedHelpFormatterWithNL
 op=optparse.OptionParser(
   add_help_option=False,
   formatter=IndentedHelpFormatterWithNL(2,8),
-  usage="%prog [OPTIONS] [string]"
+  usage="%prog [OPTIONS] [string]",
+  description="Description: Read text from standard input and/or the command line argument(s), and output the ASCII value of each character in the given or default radix."
 )
 op.add_option('--radix','-r',dest='radix',action='store',type='int',default=16,help="Set the base to use when giving ASCII values for characters. The valid range is from 2 to 36. (default: %default)")
 op.add_option('-b',dest='radix',action='store_const',const=2,help="Binary (--radix 2)")
