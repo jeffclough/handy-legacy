@@ -34,7 +34,8 @@ import OptionParserFormatters
 usage=''' Form 1: %prog [options] [RE ...]
   Form 2: %prog [options] --columns=COLUMNS
   Form 3: %prog [options] --csv
-  Form 4: %prog [options] --fields=FIELDS'''
+  Form 4: %prog [options] --fields=FIELDS
+  Form 4: %prog [options] --stripe=N'''
 description='''The %prog command is a filter (reads from standard input and
 writes to standard output) that colors its output using ANSI escape sequences.
 Because of this, %prog's output is suitable only for terminal display.
@@ -156,6 +157,8 @@ op.add_option('--re-help',dest='re_help',action='store_true',default=False,
   help='''Display a brief description of Python regular expressions. Then quit.''')
 op.add_option('-s','--stanzas',dest='stanzas',action='store_true',default=False,
   help='''In "stanzas" mode, the the RE arguments are matched against input lines. Output lines are colored according to the most recent RE matched. If only one RE is given, output lines will alternate between the first two colors in thte palette every time the input line matches the RE.'''),
+op.add_option('--stripe',metavar='N',dest='stripe',type='int',default=None,
+  help='''Color each group of N lines of text a different color, rotating through the default or given pallete as we go.''')
 op.add_option('-w',dest='wrap',action='store_true',default=False,
   help='''Turn on color wrapping mode. By default, for n colors in the palette, the match for any pattern beyond the nth pattern simply uses the last color in the palette. Wrapping mode changes this behavior so the first color is used for the n+1st pattern, the second for the n+2nd, and so on.''')
 
@@ -203,6 +206,8 @@ if opt.columns:
     die('-I (--input) cannot be used with --columns')
   if opt.stanzas:
     die('-s (--stanzas) cannot be used with --columns')
+  if opt.stripe:
+    die('--stripe cannot be used with --columns')
 if opt.fields:
   if opt.delim and opt.csv:
     die('-d (--delimiter) cannot be used with --csv')
@@ -214,6 +219,8 @@ if opt.fields:
     die('-I (--input) cannot be used with -f (--fields)')
   if opt.stanzas:
     die('-s (--stanzas) cannot be used with --fields')
+  if opt.stripe:
+    die('--stripe cannot be used with --fields')
   if not opt.csv and not opt.delim:
     opt.delim=r'\s+'
 if opt.comment_mode:
@@ -237,6 +244,8 @@ if opt.discard:
   opt.discard=re.compile(opt.discard,opt.re_flags)
 if opt.keep:
   opt.keep=re.compile(opt.keep,opt.re_flags)
+if opt.stripe!=None and opt.stripe<1:
+  die('--stripe requires an integer greater than 0.')
 
 if pat:
   for p in pat:
@@ -244,7 +253,7 @@ if pat:
       x=re.compile(p)
     except re.error,e:
       die('RE error (%s): %r'%(' '.join(e.args),p))
-elif not (opt.columns or opt.fields):
+elif not (opt.columns or opt.fields or opt.stripe):
   die('No RE arguments given. Nothing to do.')
 
 def parseRangeList(s):
@@ -327,7 +336,7 @@ if opt.fields:
     opt.delim=re.compile(opt.delim)
 
 def colorOf(index):
-  return str(opt.palette(i))
+  return str(opt.palette(index))
 
 if opt.columns:
   # Color each field of our fixed field width data.
@@ -376,6 +385,15 @@ elif opt.stanzas:
       sys.stdout.flush()
     sys.stdout.write(str(ansi.norm))
     sys.stdout.flush()
+elif opt.stripe:
+  # Color each group of opt.stripe lines a new color from our palette.
+  color=n=0
+  for s in get_input_lines():
+    print colorOf(color)+s.rstrip()+str(ansi.norm)
+    n+=1
+    if n%opt.stripe==0:
+      color+=1
+  #sys.stdout.write(str(ansi.norm))
 elif opt.fields:
   # Highlight fields based on position.
   opt.fields=parseRangeList(opt.fields)
@@ -385,10 +403,10 @@ elif opt.fields:
     reader=DelimitedDataReader(sys.stdin,opt.delim)
     for flist in reader:
       for i in frange:
-	j,k=opt.fields[i]
-	for f in range(j,[k,len(flist)][k==None]):
-	  if f<len(flist):
-	    flist[f][0]=colorOf(i)+flist[f][0]+str(ansi.norm)
+        j,k=opt.fields[i]
+        for f in range(j,[k,len(flist)][k==None]):
+          if f<len(flist):
+            flist[f][0]=colorOf(i)+flist[f][0]+str(ansi.norm)
       print ''.join([f+d for f,d in flist])
       sys.stdout.flush()
   else:
@@ -397,10 +415,10 @@ elif opt.fields:
     writer=csv.writer(sys.stdout)
     for flist in reader:
       for i in frange:
-	j,k=opt.fields[i]
-	for f in range(j,[k,len(flist)][k==None]):
-	  if f<len(flist):
-	    flist[f]=colorOf(i)+flist[f]+str(ansi.norm)
+        j,k=opt.fields[i]
+        for f in range(j,[k,len(flist)][k==None]):
+          if f<len(flist):
+            flist[f]=colorOf(i)+flist[f]+str(ansi.norm)
       writer.writerow(flist)
       sys.stdout.flush()
 elif opt.log_mode:
