@@ -228,9 +228,11 @@ if opt.comment_mode:
     die('-D (--diff) and -C cannot be used together.')
   pat.insert(0,opt.comment_format)
 elif opt.diff:
+  pat.insert(0,'^==================+')
   pat.insert(0,'^[+>].*')
   pat.insert(0,'^[-<].*')
 elif opt.input_from=='diff':
+  pat.insert(0,'^==================+')
   pat.insert(0,'^[+>].*')
   pat.insert(0,'^[-<].*')
 elif opt.input_from=='du':
