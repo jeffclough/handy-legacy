@@ -114,6 +114,8 @@ background=dict(
   white='47',
 )
 
+current_background='black';
+
 # Dark and light palette specifications.
 dark='norm red on black,green,yellow,bold blue,norm magenta,cyan,white'
 light='norm red on white,green,blue,magenta,black'
@@ -199,15 +201,15 @@ class Color(object):
     Color and suffixed with the ANSI sequence to turn this Coler back
     off.
 
-    >>> Color('normal','white','black')('test')=='\x1b[0;37;40mtest\x1b[0m'
+    >>> Color('normal','white','black')('test')=='\x1b[0;37mtest\x1b[0m'
     True
-    >>> Color('normal white on black')('test')=='\x1b[0;37;40mtest\x1b[0m'
+    >>> Color('normal white on black')('test')=='\x1b[0;37mtest\x1b[0m'
     True
-    >>> Color(None,'white','black')('test')=='\x1b[37;40mtest\x1b[0m'
+    >>> Color(None,'white','black')('test')=='\x1b[37mtest\x1b[0m'
     True
-    >>> Color('white on black')('test')=='\x1b[37;40mtest\x1b[0m'
+    >>> Color('white on black')('test')=='\x1b[37mtest\x1b[0m'
     True
-    >>> Color('bold',None,'black')('test')=='\x1b[1;40mtest\x1b[0m'
+    >>> Color('bold',None,'black')('test')=='\x1b[1mtest\x1b[0m'
     True
     >>> Color('bold','white',None)('test')=='\x1b[1;37mtest\x1b[0m'
     True
@@ -217,7 +219,7 @@ class Color(object):
     True
     >>> Color(None,'white',None)('test')=='\x1b[37mtest\x1b[0m'
     True
-    >>> Color(None,None,'black')('test')=='\x1b[40mtest\x1b[0m'
+    >>> Color(None,None,'black')('test')=='\x1b[mtest\x1b[0m'
     True
     """
 
@@ -234,13 +236,21 @@ class Color(object):
     foreground, and background"""
 
     s='\x1b['
-    s+=';'.join([
-      d[k] for d,k in (
-        (attr,self.attribute),
-        (foreground,self.foreground),
-        (background,self.background)
-      ) if d.get(k)
-    ])
+    if current_background in background and self.background==current_background:
+      s+=';'.join([
+        d[k] for d,k in (
+          (attr,self.attribute),
+          (foreground,self.foreground)
+        ) if d.get(k)
+      ])
+    else:
+      s+=';'.join([
+        d[k] for d,k in (
+          (attr,self.attribute),
+          (foreground,self.foreground),
+          (background,self.background)
+        ) if d.get(k)
+      ])
     s+='m'
     return s
     #return color(self.attribute,self.foreground,self.background)
