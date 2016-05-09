@@ -126,6 +126,8 @@ op.add_option('--discard',dest='discard',metavar='RE',action='store',default=Non
   help='''Discards any lines matching the given RE and keeps all others. Discarding lines of CSV data has not yet been implemented. This option is for filtering only and has no effect on colarization. (Cannot be used with --keep.)''')
 op.add_option('-f','--fields',dest='fields',action='store',default=None,
   help='''Specifies which fields are to be marked. Field ranges are separated by commas and take the form "m[-[n]]" or "[[m]-]n" where m is the first column in the range (counted from 1) and n is the last. Each field *range* gets its own color. E.g., "-f 1-3,6" says to mark fields 1-3 with the first color in the current palette and to color field 6 with the second. See --csv and -d for data parsing options.''')
+op.add_option('--file',dest='file',action='store',default=None,
+  help='''Read from the given file rather than standard input.''')
 op.add_option('-g','--grep',dest='grep',action='store_true',default=False,
   help='''Output only lines that match at least one color filter.''')
 op.add_option('-i',dest='ignore_case',action='store_true',default=False,
@@ -175,6 +177,13 @@ except IOError,e:
     sys.exit(1)
   raise
 ansi.current_background=opt.background
+if opt.file:
+  try:
+    opt.file=open(opt.file)
+  except IOError,e:
+    die(str(e))
+else:
+  opt.file=sys.stdin
 if opt.re_help:
   re_help()
   sys.exit(0)
@@ -322,14 +331,14 @@ def get_input_lines(f=sys.stdin):
   implement our --discard and --keep functionality.'''
 
   try:
-    s=sys.stdin.readline()
+    s=f.readline()
     while s:
       if opt.discard and opt.discard.search(s):
-        s=sys.stdin.readline()
+        s=f.readline()
         continue
       if not opt.keep or opt.keep.search(s):
         yield s
-      s=sys.stdin.readline()
+      s=f.readline()
   except KeyboardInterrupt:
     sys.exit(0)
 
@@ -347,7 +356,7 @@ if opt.columns:
   # Color each field of our fixed field width data.
   r=range(len(opt.columns))
   opt.columns.append(None)
-  for s in get_input_lines():
+  for s in get_input_lines(opt.file):
     try:
       s=(''.join([colorOf(i)+s[opt.columns[i]:opt.columns[i+1]] for i in r])).replace('\n',str(ansi.norm))
       print s
@@ -365,7 +374,7 @@ elif opt.stanzas:
     pat=re.compile('|'.join(['(%s)'%x.replace('(','(?:') for x in pat]),opt.re_flags)
   if patcount>1:
     # Assign color based on which RE most recently matched.
-    for s in get_input_lines():
+    for s in get_input_lines(opt.file):
       m=pat.search(s)
       if m!=None:
         g=m.groups()
@@ -381,7 +390,7 @@ elif opt.stanzas:
   else:
     # Alternate between first two palette entries every time RE is matched.
     i=1
-    for s in get_input_lines():
+    for s in get_input_lines(opt.file):
       m=pat.search(s)
       if m!=None:
         i=1-i
@@ -393,7 +402,7 @@ elif opt.stanzas:
 elif opt.stripe:
   # Color each group of opt.stripe lines a new color from our palette.
   color=n=0
-  for s in get_input_lines():
+  for s in get_input_lines(opt.file):
     print colorOf(color)+s.rstrip()+str(ansi.norm)
     n+=1
     if n%opt.stripe==0:
@@ -429,7 +438,7 @@ elif opt.fields:
 elif opt.log_mode:
   pat=re.compile(opt.log_format)
   output_format=string.Template('$time $host $prog$level: $message')
-  for s in get_input_lines():
+  for s in get_input_lines(opt.file):
     m=pat.search(s)
     if m!=None and not opt.grep:
       d=m.groupdict('')
@@ -443,7 +452,7 @@ else:
     except re.error,e:
       die('Internal RE error (%s): %r'%(' '.join(e.args),pat))
 
-  for s in get_input_lines():
+  for s in get_input_lines(opt.file):
     # Scan each line for matches to our patterns and insert highlighting.
     m=pat.search(s)
     if m!=None or not opt.grep:
