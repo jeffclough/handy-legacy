@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import sys
+import colorsys,math,sys
 
 """
 This module is all about sending colored text to an ANSI-compatibe
@@ -92,6 +92,28 @@ attr=dict(
   strikethrough='9',
 )
 
+rgb=dict(
+  black=  (0x00,0x00,0x00),
+  red=    (0xbf,0x00,0x00),
+  green=  (0x00,0xbf,0x00),
+  yellow= (0xbf,0xbf,0x00),
+  blue=   (0x00,0x00,0xbf),
+  magenta=(0xbf,0x00,0xbf),
+  cyan=   (0x00,0xbf,0xbf),
+  white=  (0xbf,0xbf,0xbf)
+)
+
+rgb_bold=dict(
+  black=  (0x00,0x00,0x00),
+  red=    (0xff,0x00,0x00),
+  green=  (0x00,0xff,0x00),
+  yellow= (0xff,0xff,0x00),
+  blue=   (0x00,0x00,0xff),
+  magenta=(0xff,0x00,0xff),
+  cyan=   (0x00,0xff,0xff),
+  white=  (0xff,0xff,0xff)
+)
+
 foreground=dict(
   black='30',
   red='31',
@@ -115,6 +137,18 @@ background=dict(
 )
 
 current_background='black';
+
+# Assign luminosity values to our colors.
+luminosity=dict(
+  black=0.1,
+  blue=0.2,
+  red=0.3,
+  magenta=0.4,
+  green=0.6,
+  cyan=0.7,
+  yellow=0.8,
+  white=0.9
+)
 
 # Dark and light palette specifications.
 dark='norm red on black,green,yellow,bold blue,norm magenta,cyan,white'
@@ -300,6 +334,55 @@ class Color(object):
     self.attribute,self.foreground,self.background=(a,f,b)
     return self
 
+  def rgb(self):
+    """Return two (r,g,b) triplets for the foreground and background of
+    this color as (foreground rgb triplet,background rgb triplet). The
+    r, g, and b values are integers from 0 to 255."""
+
+    global current_background
+
+    if self.attribute=='bold':
+      fg=rgb_bold.get(self.foreground,rgb['white'])
+    else:
+      fg=rgb.get(self.foreground,rgb['white'])
+    bg=rgb.get(self.background,rgb.get(current_background,rgb['black']))
+    return (fg,bg)
+
+  def rgbFloat(self):
+    """Same as rgb(), but returns values in the range from 0.0 to 1.0."""
+
+    return tuple([tuple([x/255.0 for x in y]) for y in self.rgb()])
+
+  def brightness(self):
+    """Return a tuple containing brightness values of the foreground and
+    background colors. Values are in the range from 0.0 to 1.0."""
+
+    # Compute brightness from RGB according to https://www.w3.org/TR/AERT,
+    # but express the result as a floating point number from 0.0 to 1.0.
+    fg,bg=self.rgb()
+    fg=reduce(lambda a,b:a+b,[c*val for c,val in zip((299,587,114),fg)])/255000.0
+    bg=reduce(lambda a,b:a+b,[c*val for c,val in zip((299,587,114),bg)])/255000.0
+    return (fg,bg)
+
+  def contrast(self):
+    """Return a float from 0.0 to 1.0 indicating how different the
+    foreground and background colors are."""
+
+    # We already have a way to compute brightness.
+    fg_brightness,bg_brightness=self.brightness()
+
+    # Get the HSV version of our foreground and background colors.
+    fg,bg=self.rgbFloat()
+    fgH,fgS,fgV=colorsys.rgb_to_hsv(*fg)
+    bgH,bgS,bgV=colorsys.rgb_to_hsv(*bg)
+
+    # Now that we're in a cylendrical color system, return the "distance"
+    # between the two colors. The constant divisor is the maximum actual
+    # distance possible, which keeps the return value in the range from 0.0 to
+    # 1.0, and I'm rounding to keep the values easy on the eyes. And I'm
+    # ignoring saturation because considering it messes up the result.
+    return round(cylindricalDistance((0,fgH,fgV),(0,bgH,bgV)),6)
+    
   def str(self):
     '''Return the ANSI escape sequence for this object's attribute,
     foreground, and background. (color.str() is exactly the same as
@@ -400,6 +483,46 @@ def flattenList(l,result=None):
       result.append(elem)
   return result
 
+def cylindrical_to_cartesian(rho,theta,z):
+  """Given point p in a cylindrical coordinate system, return the
+  cartesian equivalent. OUR cylindrical coordinate system is defined by
+  Rho, Theta, and Z dimensions. Rho is radial distance from the Z axis
+  (any non-negative value), Theta is the angular component about the
+  Z axis (from 0.0 to 1.0), and Z is any floating point value along the
+  Z axis."""
+
+  # Condition our coordinates into their canonical ranges to keep the
+  # caller from violating the assumptions further down in this fun
+  # subsequent assumptions cannot be violated.
+  if rho<0.0:
+    theta+=0.5
+    rho=-rho
+  # rho is now non-negative, and theta has been reversed if needed.
+  theta=math.modf(theta)[0] # Puts theta in (-1 .. 1).
+  if theta<0:
+    theta=1-theta # Makes theta non-negative.
+  # theta is now in [0 .. 1).
+
+  theta*=2*math.pi # Converts theta to radians.
+  x=round(rho*math.cos(theta),8)
+  y=round(rho*math.sin(theta),8)
+  # We're rounding x and y to 8 decimal places to let 0 be 0.
+  return x,y,z
+
+def cylindricalDistance(p1,p2):
+  """Return the linear distance between two points defined in a
+  cylindrical coordinate system. c1 and c2 MUST be tuples expresing
+  cylindrical coordinates. See the documentation for the
+  cylendrical_to_cartesian() function for details of expressing
+  cylindrical coordinates."""
+
+  # Convert our cylendrical space to cartesian space.
+  c1=cylindrical_to_cartesian(*p1)
+  c2=cylindrical_to_cartesian(*p2)
+
+  # The Pythoreans were very cool.
+  return math.sqrt(sum([(a-b)**2 for a,b in zip(c1,c2)]))
+
 def paint(*args):
   '''Kind of like print, but supports coloring its output.
 
@@ -410,9 +533,16 @@ def paint(*args):
   Painting is always turned off before this function returns, and this
   is always done before a final newline character is output.'''
 
+  global current_background
+
   for arg in args:
     sys.stdout.write(str(arg))
+    if isinstance(arg,Color):
+      current_background=arg.background
+      
   sys.stdout.write(str(norm)+'\n')
+  current_background=norm.background
+
 
 if __name__=='__main__': # TEST CODE TEST CODE TEST CODE TEST CODE TEST CODE
   import doctest,sys
@@ -420,15 +550,36 @@ if __name__=='__main__': # TEST CODE TEST CODE TEST CODE TEST CODE TEST CODE
   if failed==0:
 
     colors='Black Red Green Yellow Blue Magenta Cyan White'.split()
+    # Print the column headings.
     print '        '+(' '.join([Color('under','black',c)('%-9s'%c) for c in colors]))
+    # Foreground colors and attributes change from one line to the next.
     for fg in colors:
-      # The first line of a given foreground color is labeled.
+      # The first line of a given foreground color is labeled. Note that the
+      # color name in the row label is given as flattenLists()'s result
+      # initializer.
       paint(*flattenList(
         [[Color('norm',fg,bg),'Normal   ',norm,' '] for bg in colors],
         [Color('bold %s'%fg),'%7s '%fg]
       ))
+      # The second line shows contrast values for the above foreground and
+      # background combinations.
+      paint(*flattenList(
+        ['%-10.5f'%Color('norm',fg,bg).contrast() for bg in colors],
+        [' '*8]
+      ))
+      paint(*flattenList(
+        [[Color('Bold',fg,bg),'Bold     ',norm,' '] for bg in colors],
+        [' '*8]
+      ))
+      # The fourth line shows contrast values for the above foreground and
+      # background combinations.
+      paint(*flattenList(
+        ['%-10.5f'%Color('bold',fg,bg).contrast() for bg in colors],
+        [' '*8]
+      ))
+      # Show the contrast figures for normal text.
       # Remaining lines of a given foreground just begin with spaces.
-      for a in ('Bold','Italics','Underline'):
+      for a in ('Italics','Underline'):
         paint(*flattenList(
           [[Color(a,fg,bg),'%-9s'%a,norm,' '] for bg in colors],
           [' '*8]

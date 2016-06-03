@@ -1,3 +1,6 @@
 [submodule "externals/addict"]
 	path = externals/addict
 	url = https://github.com/mewwts/addict.git
+[submodule "externals/pyipinfodb"]
+	path = externals/pyipinfodb
+	url = https://github.com/mossberg/pyipinfodb.git
