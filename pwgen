@@ -15,41 +15,49 @@ except:
 rule_sets=dict(
   default=dict( # This is the default, general-purpose, rule set.
     binary=None,
-    base64=False,
     classes='Aa1',
     dictionary=False,
+    format='text',
     min_length=11,
     max_length=15,
     capitalize=False,
-    default=True
+    pronounceable=False,
+    typable=False,
+    default=True # <--- Identifies this dictionary as the default values.
   ),
-    gt=dict( # For working with GT account holders.
-      binary=None,
-      base64=False,
-      classes='a1',
-      dictionary=False,
-      min_length=11,
-      max_length=11,
-      capitalize=True
-    ),
-    iam=dict( # For IAM connectivity password values.
-      binary=8,
-      base64=True,
-      classes=None,
-      dictionary=False,
-      min_length=16,
-      max_length=32,
-      capitalize=False
-    ),
-    guest=dict( # For guest password values.
-      binary=None,
-      base64=False,
-      classes='Aa1',
-      dictionary=True,
-      min_length=11,
-      max_length=22,
-      capitalize=False
-    )
+  gt=dict( # For working with GT account holders.
+    binary=None,
+    classes='a1',
+    dictionary=False,
+    format='text',
+    min_length=11,
+    max_length=11,
+    capitalize=True,
+    pronounceable=False,
+    typable=False,
+  ),
+  iam=dict( # For IAM connectivity password values.
+    binary=8,
+    classes='Aa1',
+    dictionary=False,
+    format='base64',
+    min_length=24,
+    max_length=32,
+    capitalize=False,
+    pronounceable=False,
+    typable=False,
+  ),
+  guest=dict( # For guest password values.
+    binary=None,
+    classes='Aa1',
+    dictionary=True,
+    format='text',
+    min_length=11,
+    max_length=22,
+    capitalize=False,
+    pronounceable=False,
+    typable=False,
+  )
 )
 rule_set_names=tuple(sorted(rule_sets.keys()))
 default_rule_set=None
@@ -73,17 +81,19 @@ Description:
 '''
 )
 
-op.add_option('--base64',dest='base64',action='store_true',default=rules.base64,help='Encode the password as base64 and output it after the plaintext password.')
-op.add_option('--bin',dest='binary',action='store_const',const=8,default=rules.binary,help="Generate a binary password of 8-bit characters. You should redirect output to a file and/or use the --base64 option above to avoid spewing random binary crap to your terminal with this option.")
-op.add_option('--bin16',dest='binary',action='store_const',const=16,default=rules.binary,help="Generate a binary password of 16-bit characters. You should redirect output to a file and/or use the --base64 option above to avoid spewing random binary crap to your terminal with this option.")
+op.add_option('--bin',dest='binary',action='store_const',const=8,default=rules.binary,help="""Generate a binary password of 8-bit characters. You should redirect output to a file and/or use the "--format base64" option to avoid spewing random binary crap to your terminal with this option.""")
+op.add_option('--bin16',dest='binary',action='store_const',const=16,default=rules.binary,help="""Generate a binary password of 16-bit characters. You should redirect output to a file and/or use the "--format base64" option to avoid spewing random binary crap to your terminal with this option.""")
 op.add_option('-c','--capitalize',dest='capitalize',action='store_true',default=rules.capitalize,help="Capitalize ONLY the first character of the generated password, which incidently forces the first character to be an alphabetic character. (default: %default)")
 op.add_option('--classes',dest='classes',action='store',default=rules.classes,help="""The CLASSES value, which defaults to \"%default\", should contain one character from each character class (lower case, upper case, numerals, and punctuation) that must appear in the generated string.
 
 The format of this option's argument is '(C[{N[,M]}]) ...'. C is a character from the desired characer class (e.g. A-Z for upper case, 0-9 for digits, etc.), N is the minimum number of caracters from from that class (defauls to 1), and M is the maximum number (defaults to --max's value). The (, [, ], and ) are the usual BNF syntax elements. If {N[,M]} is not given, N defaults to 1, and M defauls to --max's value. For example, an argument of Aa9: is the same as Aa9{1}:{1}, but you can use Aa9{1,1}:{1,1} to require at least one and allow no more than one digit and punctuation (each) in a generated password.""")
 op.add_option('-d','--dictionary',dest='dictionary',action='store_true',default=rules.dictionary,help="Use the system dictionary to compose the random password.")
-op.add_option('-m','--min',dest='min_length',type='int',action='store',default=rules.min_length,help="Minimum length of the generated random string. (default: %default)")
-op.add_option('-M','--max',dest='max_length',type='int',action='store',default=rules.max_length,help="Maximum length of the generated random string. (default: %default)")
-op.add_option('-r','--rules',dest='rules',action='store',choices=rule_set_names,default=None,help="Specify what preset password rules (choose from  to apply when generating passwords, obviating any other options that might be given before or after this one.")
+op.add_option('-f','--format',dest='format',action='store',choices=('base64','hex','text'),default='text',help="Choose the output format (base64, hex, or text) of the generated password(s). Text output yields one password per line unless --bin or --bin16 is given, in which case text output yields binary output with terminating nulls (8- or 16-bit values, depending on the option given) after each password. (default: %default)")
+op.add_option('-m','--min',dest='min_length',type='int',action='store',default=rules.min_length,help="Minimum length of the generated random string. If --min is greater than --max, --min takes precedence. (default: %default)")
+op.add_option('-M','--max',dest='max_length',type='int',action='store',default=rules.max_length,help="Maximum length of the generated random string. If --min is greater than --max, --min takes precedence. (default: %default)")
+op.add_option('-p','--pronounceable',dest='pronounceable',action='store_true',default=rules.pronounceable,help="Generates random passwords, but ensures that they can be spoken (in english). May be combined with -t (--typable).")
+op.add_option('-r','--rules',dest='rules',action='store',choices=rule_set_names,default=None,help="Specify what rule set (choose from %s) to apply when generating passwords, obviating any other options that might be given before or after this one."%(', '.join(rule_set_names)))
+op.add_option('-t','--typable',dest='typable',action='store_true',default=rules.typable,help="Generates random passwords, but ensures they they can be typed easily (on a QWERTY keyboard). May be combined with -p (--pronounceable).")
 opt,args=op.parse_args()
 
 # Apply any rule set that may have been given.
@@ -253,6 +263,7 @@ class RandomString(object):
 
       self.count=0
 
+  # A RE for parsing a character class specification.
   ccspec=re.compile(r'((.)(?:{(\d+)(?:,(\d+))?})?)')
 
   def __init__(self,character_classes='A{1}a{10}9',min_length=None,max_length=None):
@@ -424,8 +435,19 @@ i=0
 while i<N:
   s=randstr(mode)
   # The string in s must be valid to get to this point, so print it.
-  if opt.base64:
+  if opt.format=='base64':
     print base64.b64encode(s)
+  elif opt.format=='hex':
+    print ''.join(['%02x'%ord(ch) for ch in s])
+  elif opt.binary:
+    sys.stdout.write(s)
+    if N>1:
+      # Terminate binary passwords with nulls only if more than one password
+      # was requested.
+      if opt.binary==8:
+        sys.stdout.write('\x00')
+      else:
+        sys.stdout.write('\x00\x00')
   else:
     print s
   i+=1
