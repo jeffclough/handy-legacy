@@ -6,6 +6,10 @@ try:
 except:
   IndentedHelpFormatterWithNL=optparse.IndentedHelpFormatter
 
+def debug(msg,output=sys.stdout):
+  if opt.debug:
+    output.write('D: '+msg+'\n')
+
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Set up and handle the command line.
@@ -88,6 +92,7 @@ op.add_option('--classes',dest='classes',action='store',default=rules.classes,he
 
 The format of this option's argument is '(C[{N[,M]}]) ...'. C is a character from the desired characer class (e.g. A-Z for upper case, 0-9 for digits, etc.), N is the minimum number of caracters from from that class (defauls to 1), and M is the maximum number (defaults to --max's value). The (, [, ], and ) are the usual BNF syntax elements. If {N[,M]} is not given, N defaults to 1, and M defauls to --max's value. For example, an argument of Aa9: is the same as Aa9{1}:{1}, but you can use Aa9{1,1}:{1,1} to require at least one and allow no more than one digit and punctuation (each) in a generated password.""")
 op.add_option('-d','--dictionary',dest='dictionary',action='store_true',default=rules.dictionary,help="Use the system dictionary to compose the random password.")
+op.add_option('--debug',dest='debug',action='store_true',default=False,help='For output only a developer could love.')
 op.add_option('-f','--format',dest='format',action='store',choices=('base64','hex','text'),default='text',help="Choose the output format (base64, hex, or text) of the generated password(s). Text output yields one password per line unless --bin or --bin16 is given, in which case text output yields binary output with terminating nulls (8- or 16-bit values, depending on the option given) after each password. (default: %default)")
 op.add_option('-m','--min',dest='min_length',type='int',action='store',default=rules.min_length,help="Minimum length of the generated random string. If --min is greater than --max, --min takes precedence. (default: %default)")
 op.add_option('-M','--max',dest='max_length',type='int',action='store',default=rules.max_length,help="Maximum length of the generated random string. If --min is greater than --max, --min takes precedence. (default: %default)")
@@ -96,14 +101,45 @@ op.add_option('-r','--rules',dest='rules',action='store',choices=rule_set_names,
 op.add_option('-t','--typable',dest='typable',action='store_true',default=rules.typable,help="Generates random passwords, but ensures they they can be typed easily (on a QWERTY keyboard). May be combined with -p (--pronounceable).")
 opt,args=op.parse_args()
 
+if opt.debug:
+  debug('Before testing for rules ...')
+  debug('    binary: %r'%(opt.binary))
+  debug('    capitalize: %r'%(opt.capitalize))
+  debug('    classes: %r'%(opt.classes))
+  debug('    dictionary: %r'%(opt.dictionary))
+  debug('    format: %r'%(opt.format))
+  debug('    min_length: %r'%(opt.min_length))
+  debug('    max_length: %r'%(opt.max_length))
+  debug('    pronounceable: %r'%(opt.pronounceable))
+  debug('    rules: %r'%(opt.rules))
+  debug('    typable: %r'%(opt.typable))
+
 # Apply any rule set that may have been given.
 if opt.rules:
+  debug('Applying rules ...')
   for o,v in rule_sets[opt.rules].items():
+    debug(    '%s=%r'%(o,v))
     setattr(opt,o,v)
+
+if opt.debug:
+  debug('After processing rules (if given) ...')
+  debug('    binary: %r'%(opt.binary))
+  debug('    capitalize: %r'%(opt.capitalize))
+  debug('    classes: %r'%(opt.classes))
+  debug('    dictionary: %r'%(opt.dictionary))
+  debug('    format: %r'%(opt.format))
+  debug('    min_length: %r'%(opt.min_length))
+  debug('    max_length: %r'%(opt.max_length))
+  debug('    pronounceable: %r'%(opt.pronounceable))
+  debug('    rules: %r'%(opt.rules))
+  debug('    typable: %r'%(opt.typable))
 
 # Ensure that max_length>=min_length.
 if opt.min_length>opt.max_length:
   opt.max_length=opt.min_length
+
+if opt.debug:
+  debug('Final min=%r, max=%r'%(opt.min_length,opt.max_length))
 
 # If we're capitalizing only the first character of the password, ensure
 # that our character classes exclude upper-case characters.
@@ -205,6 +241,38 @@ except NameError:
     s=Set(seq)
     return s
 
+def random_ireplacer(s,mdict,n=1):
+  """Replace  up to 1 (by default) randomly chosen character in s
+  according to the map in the given dictionary. If n==-1, ALL possible
+  substitutions are performed. The resulting string value is
+  returned. This is a case-insensitive version of this function, and as
+  such, any upper-case key values in mdict will be ignored.
+
+  Ex: Perform a l337 replacement.
+
+  >> mapper=dict(a='4',e='3',i='1',o='0',s='5',t='7',z='2')
+  >> random_ireplacer('This is a test.',mapper)
+  'Th1s is a test.'
+  """
+
+  ls=s.lower()
+  if n==-1:
+    return ''.join([mdict.get(ls[i],s[i]) for i in range(len(s))])
+  klist=mdict.keys()
+  indices=[i for i in range(len(s)) if ls[i] in klist]
+  while indices and n>0:
+    i=random.choice(indices)
+    s=s[:i]+mdict[ls[i]]+s[i+1:]
+    indices.remove(i) # Only one substitution per character position.
+    n-=1
+  return s
+
+# These variables are used for pronounceable passwords.
+consonents='b bl br c cl cr d dl dr f fr fl g gl gr h j k kl kr l m n p ph pl pr qu r s sh sl t v vl x z'.split()
+vowels='a e i o u y'.split()
+endings='b b c ck ct d f fk ft g j k kle kt l lk lt m mb mc md mk mp mt mv mz n nb nc nd nk np nt nv nz p ph ple r rk rkle rt s sh sl tle v ve vle x z'.split()
+digit_mapper=dict(a='4',e='3',i='1',o='0',s='5',t='7',z='2')
+punct_mapper=dict(a='@',c='<',d=']',g='&',h='#',k='<',l='!',s='$',t='?',v='>')
 
 # Cook up some character class data based on the user's options.
 class RandomString(object):
@@ -307,6 +375,60 @@ class RandomString(object):
       max_length=min_length
     self.max_length=max_length
 
+  def pronounceable(self):
+    """Return a random string of appropriate length that is pronounceable
+    to a speaker of english."""
+
+    # Compose random, pronounceable words until one of them meets our requirements.
+    outer_patience=20
+    while outer_patience>0:
+      debug('outer_patience=%r'%(outer_patience))
+      pw=''
+      # Choose a random target password length.
+      plen=random.randrange(self.min_length,max(self.min_length+1,self.max_length-4))
+      debug('plen=%r'%(plen))
+      inner_patience=5
+      while not self.isValid(pw) and inner_patience>0:
+        debug('  inner_patience=%r'%(inner_patience))
+        # Put together some syllables.
+        while len(pw)<plen:
+          pw+=random.choice(consonents)+random.choice(vowels)
+          debug('    pw=%r (len=%r)'%(pw,len(pw)))
+        e=random.choice(endings)
+        debug('    e=%r'%(e))
+        if len(pw)+len(e)<=self.max_length:
+          pw+=e
+        debug('    pw=%r (len=%r)'%(pw,len(pw)))
+          
+        # Add other character classes as needed.
+        if len(pw)<=self.max_length:
+          for cc in RandomString.CharacterClass.classes:
+            if any([ch in pw for ch in cc.members]):
+              continue
+            if 'a' in cc.members:
+              # We need to start over on this password.
+              debug('    Starting over. No characters of class %r'%(cc.name()))
+              break
+            if 'A' in cc.members:
+              # Choose a random character and capitalize it.
+              i=random.randrange(len(pw))
+              pw=pw[:i]+pw[i].upper()+pw[i+1:]
+              debug('    After capitalizing character %d: %r'%(i,pw))
+            lpw=pw.lower()
+            if '1' in cc.members:
+              # Replace a random letter with a number.
+              pw=random_ireplacer(pw,digit_mapper)
+              debug('    After adding a digit: %r'%(pw))
+            if '@' in cc.members:
+              # Replace a random letter with a punctuation character.
+              pw=random_ireplacer(pw,punct_mapper)
+              debug('After adding a punctuation: %r'%(pw))
+        inner_patience-=1
+      if self.isValid(pw):
+        break
+      outer_patience-=1
+    return pw
+
   def isValid(self,candidate):
     """Return True iff the given string matches what we've been told to
     generate."""
@@ -367,6 +489,8 @@ class RandomString(object):
           #print 'w=%r pw=%r'%(w,pw)
         if opt.capitalize:
           pw=pw.capitalize()
+      elif mode=='pronounceable':
+        pw=self.pronounceable()
       else:
         raise RandomString.Error('Bad mode: %r: invalid character: %r'%(spec,ch))
     return pw
@@ -421,15 +545,19 @@ if len(args)>0:
 else:
   N=1
 
-randstr=RandomString()
+debug('Setting mode ...')
 if opt.binary==16:
   mode='binary16'
 elif opt.binary==8:
   mode='binary'
 elif opt.dictionary:
   mode='dictionary'
+elif opt.pronounceable:
+  mode='pronounceable'
 else:
   mode='random'
+debug('    mode=%r'%(mode))
+randstr=RandomString()
 
 i=0
 while i<N:
