@@ -2,6 +2,9 @@
 
 import optparse,os,pipes,re,sys
 
+# Use this expression to recognize and parse log file data.
+log_parser=re.compile(r'(?P<month>\w+)\s+(?P<day>\d+)\s+(?P<time>\d+:\d+:\d+)\s+(?P<host>.*?)\s+(?P<proc>.*?)\[(?P<pid>\d+)\]:\s+(?P<msg>.*)')
+
 if sys.version_info<(2,4):
   # We'll need to supply our own reversed() function.
 
@@ -42,10 +45,83 @@ def format(fmt,*args,**kwargs):
       fmt=fmt[:start]+kwargs.get(ndx,'')+fmt[end:]
   return fmt
 
-def grepfile(filename,r):
+class FakeMatchObject(object):
+  """Combine multiple _sre.SRE_Match objects into a single object that
+  behaves ALMOST the same way."""
+
+  _shebang=None # the whole matching string of the FIRST object given.
+  _groups=[] # string values of all groups
+  _groupdict={} # dictionary of named groups
+
+  def __init__(self,*args):
+    for m in args:
+      if m==None:
+        continue
+      if self._shebang==None:
+        # Remember the whole matching string only for the first object we're given.
+        self._shebang=m.group()
+      self._groups.extend(m.groups())
+      self._groupdict.update(m.groupdict())
+
+  def group(self,*args):
+    "Just like the standard re.MatchObject.group() method."
+
+    # In the absence of arguments, assume a single argument with value 0.
+    if not args:
+      args=(0,)
+
+    # If the first argument is 0 return the whole matching string.
+    if args[0]==0:
+      return self._shebang
+
+    # If there is only one group given, return it as a string.
+    if len(args)==1:
+      return self._groups[args[0]-1]
+
+    # Return a tuple of strings corresponding to the requested groups.
+    g=[]
+    for ndx in args:
+      if isinstance(ndx,basestring):
+        g+=_groupdict[ndx]
+      else:
+        g+=self._groups[ndx-1]
+    return tuple(g)
+
+  def groups(self,default=None):
+    "Just like the standard re.MatchObject.groups() method."
+
+    return tuple([
+      [v,default][v==None] for v in self._groups
+    ])
+
+  def groupdict(self,default=None):
+    "Just like the standard re.MatchObject.groupdict() method."
+
+    return dict([
+      (k,[v,default][v==None]) for k,v in self._groupdict.items()
+    ])
+
+    # The following methods and attributes are not implemented because
+    # I don't need them is this code. And not all of them would have any
+    # meaning (or be uncomputable) for a FakeMatchObject object anyway.
+    #   def expand(template)
+    #   def start(group=0)
+    #   def stop(group=0)
+    #   def span(group=0)
+    #   pos
+    #   endpos
+    #   lastindex
+    #   lastgroup
+    #   re
+    #   string
+
+def grepfile(filename,r,also=None):
   '''Search the given file (or stdin if filename is '-') for lines that
   match the given regular expression. Return the number of matching
-  lines.'''
+  lines. The optional also(regexp,string) funciton, if given, MUST
+  return the re.MatchObject resulting from regexp.search(string), or
+  None if the match fails. Results of this match will be added to those
+  of the initial match.'''
 
   # Open our input file as inf.
   if filename=='-':
@@ -70,10 +146,23 @@ def grepfile(filename,r):
       m=r.match(line)
     else:
       m=r.search(line)
-    if (m!=None)!=opt.invert:
+    if (m!=None and also!=None) or (m!=None)!=opt.invert:
+      # If we've been given a subsequent match to test, do that now.
+      if also!=None:
+        #print 'D: r.pattern=%r'%(r.pattern,)
+        #print 'D: m.groupdict()["msg"]=%r'%(m.groupdict()["msg"],)
+        mm=eval(also)
+        #mm=r.search(m.groupdict()['msg'])
+        #print 'D: mm=%r'%(mm,)
+        if (mm!=None)==opt.invert:
+          continue
+        # Merge mm into m, and proceed as usual from there.
+        m=FakeMatchObject(m,mm)
+
+      # So this is a match! Yea!
       matches+=1
       if opt.list:
-	if opt.number:
+        if opt.number:
           continue
         break
 
@@ -191,7 +280,7 @@ else:
     description=description,
     epilog=epilog
   )
-op.add_option('-f','--format',dest='format',action='store',default=None,help="""Format matching lines (or non-matching lines if -v is also used) according to the given FORMAT. FORMAT is a Python formatting string as described in 7.1.3 of the Python Standard Library documentation. Briefly, all brace expressions ({}) are replaced by either positional or named groups within the matched regular expression. You can leave the braces empty to let the formatter do the counting for you (e.g. '{} then {}' is the same as '{0} then {1}'). If the matched RE uses named groups (e.g. '(?P<age>\d+) (?P<lname>[^,]+),(?P<fname>.*)'), then the FORMAT string can refer to what those groups match (e.g. '{fname} {lname} is {age} years of age.').""")
+op.add_option('-f','--format',dest='format',action='store',default=None,help="""Format matching lines (or non-matching lines if -v is also used) according to the given FORMAT. FORMAT is a Python formatting string as described in section 7.1.3 of the Python Standard Library documentation. Briefly, all brace expressions ({}) are replaced by either positional or named groups within the matched regular expression. You can leave the braces empty to let the formatter do the counting for you (e.g. '{} then {}' is the same as '{0} then {1}'). If the matched RE uses named groups (e.g. '(?P<age>\d+) (?P<lname>[^,]+),(?P<fname>.*)'), then the FORMAT string can refer to what those groups match (e.g. '{fname} {lname} is {age} years of age.').""")
 
 op.add_option('-1',dest='onefile',action='store_true',default=False,help="Matching lines are normally prefixed with the filename followed by a colon when more than one filename is given on the command line. When only one filename is given, this prefix is omitted. This option tells %prog to behave as if only one file were given regardless of how many were actually given. (default: %default)")
 
@@ -212,13 +301,15 @@ op.add_option('-G',dest='groups',action='store_const',const='dict',default=None,
 
 op.add_option('-i',dest='ignore_case',action='store_true',default=False,help="Ingore case. (Same as --flag=i.)")
 
-op.add_option('-l',dest='list',action='store_true',default=False,help="Suppress normal output; instead print the name of each input file from which no output would normally have been printed. The scanning will stop on the first match. If -n is used with -l, the number of matches in each file is given after the filename, with a colon separating them.")
+op.add_option('--log-parser',dest='log_parser',action='store_true',default=False,help='''Assume that the input file is a "typical" *nix log file. Parse the month, day, time, host name, process name, process ID and message from each line. For each matching line of input, apply the RE from the command line to the message portion of the log line. This is VERY useful with -f, -g, and -G.''')
 
-op.add_option('-m',dest='match',action='store_true',default=False,help="Use the match() function rather than the search() re class method. To over-simplify, match() only finds matches at the beginning of a line, while search() will scan the whole line for at match anywhere within it.")
+op.add_option('-l',dest='list',action='store_true',default=False,help="Suppress normal output; instead print the name of each input file from which any output would normally have been printed. The scanning will stop on the first match. If -n is used with -l, the number of matches in each file is given after the filename, with a colon separating them.")
+
+op.add_option('-m',dest='match',action='store_true',default=False,help="Use the match() function rather than the search() re class method. To over-simplify, match() only finds matches at the beginning of a line, while search() will scan the whole line for a match anywhere within it.")
 
 op.add_option('-n',dest='number',action='store_true',default=False,help="Prefix each line of output with the line number within its input file. See -l for how it modifies -n's behavior.")
 
-op.add_option('--shell',dest='shell',action='store_true',default=False,help="Useful only if named groups (e.g. '(?P<user>\w+)\s+(?P<dbname>\w+)') are used, this option outputs shell-executable code to assign matched values to the given names (e.g. 'user=rsmith337; dbname=employees'). All required escape characters are applied to make this save and reliable to use with the shell's eval command.")
+op.add_option('--shell',dest='shell',action='store_true',default=False,help="Useful only if named groups (e.g. '(?P<user>\w+)\s+(?P<dbname>\w+)') are used, this option outputs shell-executable code to assign matched values to the given names (e.g. 'user=rsmith337; dbname=employees'). All required escape characters are applied to make this safe and reliable to use with the shell's eval command.")
 
 op.add_option('--strip',dest='strip',action='store_true',default=False,help="Remove any whitespace characters from the beginning and ending of each matched group's value.")
 
@@ -266,7 +357,12 @@ try:
   if not opt.onefile and len(args)==1:
     opt.onefile=True
   for filename in args:
-    matches+=grepfile(filename,r)
+    if opt.log_parser:
+      # Tell grepfile() to try a subsequent match on each initially matching line.
+      also_re=r
+      matches+=grepfile(filename,log_parser,"also_re.search(m.groupdict()['msg'])")
+    else:
+      matches+=grepfile(filename,r)
 
 except IOError,e:
   if 'broken pipe' not in str(e).lower():
