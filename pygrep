@@ -206,17 +206,17 @@ def grepfile(filename,r,also=None):
           sys.stdout.flush()
           sys.stderr.write('%s: %s(%d): %s\n'%(progname,filename,linecount,msg))
           raise
-          exit(2)
+          sys.exit(2)
         except IndexError,e:
           msg=str(e)
           sys.stdout.flush()
           sys.stderr.write('%s: %s(%d): %s\n'%(progname,filename,linecount,msg))
-          exit(2)
+          sys.exit(2)
         except ValueError,e:
           msg=str(e)
           sys.stdout.flush()
           sys.stderr.write('%s: %s(%d): %s\n'%(progname,filename,linecount,msg))
-          exit(2)
+          sys.exit(2)
 
       # Handle prefixing of filename and/or line number.
       prefix=''
@@ -333,7 +333,7 @@ if opt.flags:
       flags|=re.VERBOSE
     else:
       print >>sys.stderr,'%s: Invalid flag character: "%s"'%(progname,f)
-      exit(2)
+      sys.exit(2)
 if opt.ignore_case:
   flags|=re.IGNORECASE
 opt.flags=flags
@@ -343,12 +343,12 @@ try:
   # Compile our regular expression.
   if not args:
     print >>sys.stderr,'%s: Missing regular expression'%progname
-    exit(2)
+    sys.exit(2)
   try:
     r=re.compile(args[0],opt.flags)
   except Exception,e:
     print >>sys.stderr,'%s: %s'%(progname,e)
-    exit(2)
+    sys.exit(2)
   del args[0]
 
   # Scan the given files (or stdin) for our regular expression.
