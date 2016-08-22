@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import optparse,os,pipes,re,sys
+import datetime,optparse,os,pipes,re,sys
 
 # Use this expression to recognize and parse log file data.
 log_parser=re.compile(r'(?P<month>\w+)\s+(?P<day>\d+)\s+(?P<time>\d+:\d+:\d+)\s+(?P<host>.*?)\s+(?P<proc>.*?)\[(?P<pid>\d+)\]:\s+(?P<msg>.*)')
@@ -158,6 +158,11 @@ def grepfile(filename,r,also=None):
           continue
         # Merge mm into m, and proceed as usual from there.
         m=FakeMatchObject(m,mm)
+        if r==log_parser:
+          # This tight coupling is brought to you by expeditious pragmatism.
+          monthname=m._groupdict['month']
+          m._groupdict['month']='%02d'%datetime.datetime.strptime(monthname,'%b').month
+          m._groupdict['monthname']=monthname
 
       # So this is a match! Yea!
       matches+=1
@@ -196,7 +201,9 @@ def grepfile(filename,r,also=None):
         d=groupdict
         line= '; '.join(['%s=%s'%(x,shell_value(d[x])) for x in d])
       elif opt.dictionary:
-        line=repr(groupdict)
+        keys=groupdict.keys()
+        keys.sort()
+        line='{'+', '.join(['%r: %r'%(k,groupdict[k]) for k in keys])+'}'
       elif opt.format:
         try:
           line=format(opt.format,*((m.group(),)+groups),**groupdict)
@@ -301,7 +308,7 @@ op.add_option('-G',dest='groups',action='store_const',const='dict',default=None,
 
 op.add_option('-i',dest='ignore_case',action='store_true',default=False,help="Ingore case. (Same as --flag=i.)")
 
-op.add_option('--log-parser',dest='log_parser',action='store_true',default=False,help='''Assume that the input file is a "typical" *nix log file. Parse the month, day, time, host name, process name, process ID and message from each line. For each matching line of input, apply the RE from the command line to the message portion of the log line. This is VERY useful with -f, -g, and -G.''')
+op.add_option('--log-parser',dest='log_parser',action='store_true',default=False,help='''Assume that the input file is a "typical" *nix log file. Parse the month, day, time, host name, process name, process ID and message from each line. For each matching line of input, apply the RE from the command line to the message portion of the log line. This is VERY useful with -f, -g, and -G. (And try out the --dictionary option to the fields --log-parser is finding.)''')
 
 op.add_option('-l',dest='list',action='store_true',default=False,help="Suppress normal output; instead print the name of each input file from which any output would normally have been printed. The scanning will stop on the first match. If -n is used with -l, the number of matches in each file is given after the filename, with a colon separating them.")
 
