@@ -25,6 +25,19 @@ extensions='''
 
 prog=os.path.basename(sys.argv[0])
 
+if hasattr(os.path,'lexists'):
+  lexists=os.path.lexists
+else:
+  # Shamelessly rip off the standard python implementation of os.path.lexists.
+  def lexists(path):
+    """Test whether a path exists. Returns True for broken links."""
+
+    try:
+        st = os.lstat(path)
+    except os.error:
+        return False
+    return True
+
 op=optparse.OptionParser(
   usage='Usage: %prog [OPTIONS] filename ...',
   description='''This command renames the given file(s) to include the date and
@@ -110,7 +123,7 @@ if args:
       print "'%s' %s> '%s'"%(f,'-='[opt.copy],filename)
     else:
       # Ensure that there's no existing file by the new filename.
-      if os.path.lexists(filename):
+      if lexists(filename):
         sys.stdout.flush()
         sys.stderr.write('%s: file exists: %s\n'%(prog,filename))
         sys.stderr.flush()
