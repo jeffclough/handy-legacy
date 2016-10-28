@@ -6,9 +6,23 @@ try:
 except:
   IndentedHelpFormatterWithNL=optparse.IndentedHelpFormatter
 
-def debug(msg,output=sys.stdout):
+debug_indent=0
+def debug(msg,**kwargs):
+  global debug_indent
+
   if opt.debug:
-    output.write('D: '+msg+'\n')
+    # Get our keyword arguments.
+    output=kwargs.get('output',sys.stdout)
+    indent=kwargs.get('indent')
+
+    # Handle any indenture changes.
+    if indent!=None:
+      if indent==0:
+        debug_indent=0
+      else:
+        debug_indent=max(0,debug_indent+indent)
+    if msg!=None:
+      output.write('D: '+('  '*debug_indent)+msg+'\n')
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -27,11 +41,12 @@ rule_sets=dict(
     capitalize=False,
     pronounceable=False,
     typable=False,
+    unambiguous=False,
     default=True # <--- Identifies this dictionary as the default values.
   ),
   gt=dict( # For working with GT account holders.
     binary=None,
-    classes='a1',
+    classes='A{1,1}a1{1,1}',
     dictionary=False,
     format='text',
     min_length=11,
@@ -39,9 +54,10 @@ rule_sets=dict(
     capitalize=True,
     pronounceable=False,
     typable=False,
+    unambiguous=True,
   ),
   iam=dict( # For IAM connectivity password values.
-    binary=8,
+    binary=None,
     classes='Aa1',
     dictionary=False,
     format='base64',
@@ -50,6 +66,7 @@ rule_sets=dict(
     capitalize=False,
     pronounceable=False,
     typable=False,
+    unambiguous=False,
   ),
   guest=dict( # For guest password values.
     binary=None,
@@ -61,6 +78,7 @@ rule_sets=dict(
     capitalize=False,
     pronounceable=False,
     typable=False,
+    unambiguous=False,
   )
 )
 rule_set_names=tuple(sorted(rule_sets.keys()))
@@ -99,6 +117,7 @@ op.add_option('-M','--max',dest='max_length',type='int',action='store',default=r
 op.add_option('-p','--pronounceable',dest='pronounceable',action='store_true',default=rules.pronounceable,help="Generates random passwords, but ensures that they can be spoken (in english). May be combined with -t (--typable).")
 op.add_option('-r','--rules',dest='rules',action='store',choices=rule_set_names,default=None,help="Specify what rule set (choose from %s) to apply when generating passwords, obviating any other options that might be given before or after this one."%(', '.join(rule_set_names)))
 op.add_option('-t','--typable',dest='typable',action='store_true',default=rules.typable,help="Generates random passwords, but ensures they they can be typed easily (on a QWERTY keyboard). May be combined with -p (--pronounceable).")
+op.add_option('-u','--unambiguous',dest='unambiguous',action='store_true',default=rules.unambiguous,help="Don't use characters that are easily misread.")
 opt,args=op.parse_args()
 
 if opt.debug:
@@ -113,6 +132,7 @@ if opt.debug:
   debug('    pronounceable: %r'%(opt.pronounceable))
   debug('    rules: %r'%(opt.rules))
   debug('    typable: %r'%(opt.typable))
+  debug('    unambiguous: %r'%(opt.unambiguous))
 
 # Apply any rule set that may have been given.
 if opt.rules:
@@ -133,6 +153,7 @@ if opt.debug:
   debug('    pronounceable: %r'%(opt.pronounceable))
   debug('    rules: %r'%(opt.rules))
   debug('    typable: %r'%(opt.typable))
+  debug('    unambiguous: %r'%(opt.unambiguous))
 
 # Ensure that max_length>=min_length.
 if opt.min_length>opt.max_length:
@@ -143,8 +164,8 @@ if opt.debug:
 
 # If we're capitalizing only the first character of the password, ensure
 # that our character classes exclude upper-case characters.
-if opt.capitalize:
-  opt.classes=filter(lambda c:not c.isupper(),opt.classes)
+#if opt.capitalize:
+#  opt.classes=filter(lambda c:not c.isupper(),opt.classes)
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -267,6 +288,15 @@ def random_ireplacer(s,mdict,n=1):
     n-=1
   return s
 
+def dump_character_classes():
+  "Show all character classes."
+
+  debug("Character classes:")
+  debug(None,indent=1)
+  for cc in RandomString.CharacterClass.classes.values():
+    debug(repr(cc))
+  debug(None,indent=-1)
+
 # These variables are used for pronounceable passwords.
 consonents='b bl br c cl cr d dl dr f fr fl g gl gr h j k kl kr l m n p ph pl pr qu r s sh sl t v vl x z'.split()
 vowels='a e i o u y'.split()
@@ -282,17 +312,58 @@ class RandomString(object):
 
     pass
 
+   # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+  ##
+  ## RandomString.CharacterClass
+  ## 
+
   class CharacterClass(object):
+    """Provide a simple interface to a single character class. Such an
+    object knows its members and minimum and maximum occurrances withing
+    a password. It can be queried for a random member character, and it
+    keep track how many times this has happened. Requesting more than
+    the maximum number of characters from a given class will return a
+    value of None."""
+
+     # # # # # # # # # # # # # # # # #
+    # # # # # # # # # # # # # # # # # #
+    # Class attributes.
+
     cc_strings=(
       '9012345678',
       'abcdefghijklmnopqrstuvwxyz',
       'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
-      '-!@#$%^&*()=_+~[]{}|;:,./<>?', # I've left out backslash and all quotes.
+      '?-!@#$%^&*()=_+~[]{}|;:,./<>', # I've left out backslash and all quotes.
       ' '
     )
-    classes=[] # This is a list of all CharacterClass instances.
+    first=None
+    classes={} # This is a dictionary of all CharacterClass instances.
+
+    @classmethod
+    def choice(cls):
+      "Return a random character class instance."
+
+      return cls.classes[random.choice(cls.classes.keys())]
+
+    @classmethod
+    def resetAll(cls):
+      "Reset the count of EVERY character classes."
+
+      debug("CharacterClass.resetAll() ...")
+      debug(None,indent=1)
+      for cc in cls.classes.values():
+        debug('before: %r'%(cc,))
+        cc.resetCount()
+        debug('after:  %r'%(cc,))
+      debug(None,indent=-1)
+
+    # End of class attributes.
+    # # # # # # # # # # # # # # # # # #
+     # # # # # # # # # # # # # # # # #
 
     def __init__(self,sample,min_count,max_count):
+      debug('CharacterClass(%r,%r,%r) ...'%(sample,min_count,max_count))
       self.members=None
       for cc_members in RandomString.CharacterClass.cc_strings:
         if sample in cc_members:
@@ -300,18 +371,64 @@ class RandomString(object):
           break
       if self.members==None:
         raise RandomString.Error("Bad Character class sample: %r"%sample)
-      self.min_count=min_count
-      self.max_count=max_count
+      if min_count==None:
+        self.min_count=1
+      else:
+        self.min_count=min_count
+      if max_count==None:
+        self.max_count=opt.max_length
+      else:
+        self.max_count=max_count
+      # Clear the number of times this character class has been sampled.
       self.resetCount()
-      RandomString.CharacterClass.classes.append(self)
+      # Add this new CharacterClass object to the dictionary of all such objects,
+      # keyed by the first character in its members string.
+      RandomString.CharacterClass.classes[self.members[0]]=self
+      # Also remember the FIRST CharacterClass that's defined.
+      if RandomString.CharacterClass.first==None:
+        RandomString.CharacterClass.first=self
+      debug('Created CharacterClass object %r'%(self.getName(),))
 
-    def isalpha(self):
+    def __repr__(self):
+      return "RandomString.CharacterClass(%r,%r,%r)=%r (count=%r)"%(self.members[0],self.min_count,self.max_count,self.members,self.count)
+
+    def __int__(self):
+      """Return the number of samples already taken from this character
+      class."""
+
+      return self.count
+
+    def isAlpha(self):
       "Return True iff this character class holds alphabetic characters."
 
-      return self.members.is_alpha()
+      return self.members[0].is_alpha()
 
-    def name(self):
+    def isLower(self):
+      return self.members[0].islower()
+
+    def isUpper(self):
+      return self.members[0].isupper()
+
+    def isDigit(self):
+      return self.members[0].isdigit()
+
+    def isSpace(self):
+      return self.members[0].isspace()
+
+    def isSpecial(self):
+      "Special characters are anything not any of the other categories."
+
+      return not(self.isAlpha() or self.isLower() or self.isUpper() or self.isDigit() or self.isSpace());
+
+    def getName(self):
       "Return the name of this character class."
+
+      if self.members:
+        return '%s{%r,%r}'%(self.members[0],self.min_count,self.max_count)
+      return None
+
+    def getTag(self):
+      "Return the first character of this character class."
 
       if self.members:
         return self.members[0]
@@ -331,6 +448,12 @@ class RandomString(object):
 
       self.count=0
 
+  ##
+  ## End of RandomString.CharacterClass
+  ## 
+  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+   # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
   # A RE for parsing a character class specification.
   ccspec=re.compile(r'((.)(?:{(\d+)(?:,(\d+))?})?)')
 
@@ -338,8 +461,10 @@ class RandomString(object):
     'Set up this character class according to the given spec.'
 
     # Create the CharacterClass objects according to the caller's spec.
+    debug('Parsing character classes from %r ...'%character_classes)
+    debug(msg=None,indent=1)
     for spec,ch,min_count,max_count in RandomString.ccspec.findall(character_classes):
-      #print 'D: spec=%r ch=%r min_count=%r max_count=%r'%(spec,ch,min_count,max_count)
+      debug('RAW:    spec=%r ch=%r min_count=%r max_count=%r'%(spec,ch,min_count,max_count))
       if min_count=='':
         self.min_count=1
       else:
@@ -348,27 +473,51 @@ class RandomString(object):
         except:
           raise RandomString.Error('Bad character class spec: %r: %r is not an integer'%(spec,min_count))
       if max_count=='':
-        self.max_count=self.min_count
+        self.max_count=opt.max_length
       else:
         try:
           self.max_count=int(max_count)
         except:
           raise RandomString.Error('Bad character class spec: %r: %r is not an integer'%(spec,max_count))
-      #print 'D: self.min_count=%r self.max_count=%r'%(self.min_count,self.max_count)
+      debug('COOKED: spec=%r ch=%r min_count=%r max_count=%r'%(spec,ch,self.min_count,self.max_count))
+
       if self.max_count<self.min_count:
         raise RandomString.Error('Bad character class spec: %r: %d<%d'%(spec,min_count,max_count))
       cc=RandomString.CharacterClass(ch,self.min_count,self.max_count)
-      if not cc.name():
+      if not cc.getTag():
         raise RandomString.Error('Bad character class spec: %r: invalid character: %r'%(spec,ch))
+    debug(msg=None,indent=-1)
+
+    # Make note of what character classes we're set up to use.
+    self.use_upper='A' in RandomString.CharacterClass.classes
+    self.use_lower='a' in RandomString.CharacterClass.classes
+    self.use_digit='9' in RandomString.CharacterClass.classes
+    self.use_punct='?' in RandomString.CharacterClass.classes
+    self.use_space=' ' in RandomString.CharacterClass.classes
+
+    # Adjust our character classes if --capitalized is in effect.
+    if opt.capitalize:
+      if self.use_upper:
+        cc_upper=RandomString.CharacterClass.classes['A']
+        if not self.use_lower:
+          # Create a lowercase character class in place of the uppercase one.
+          RandomString.CharacterClass('a',cc_upper.min_count,cc_upper.max_count)
+        del RandomString.CharacterClass.classes['A']
+        self.use_upper=False
+        # Adjust out "first" character class if it was upper-case.
+        debug("RandomString.CharacterClass.first.getTag=%r"%(RandomString.CharacterClass.first.getTag(),))
+        if RandomString.CharacterClass.first.getTag()=='A':
+          RandomString.CharacterClass.first=RandomString.CharacterClass.classes['a']
+        debug("RandomString.CharacterClass.first=%r"%(RandomString.CharacterClass.first,))
 
     # Give min_length a workable value if not supplied by the caller.
-    l=sum([cl.min_count for cl in RandomString.CharacterClass.classes])
+    l=sum([cl.min_count for cl in RandomString.CharacterClass.classes.values()])
     if min_length==None or min_length<l:
       min_length=l
     self.min_length=min_length
 
     # Give max_length a workable value if not supplied by the caller.
-    l=sum([cl.max_count for cl in RandomString.CharacterClass.classes])
+    l=sum([cl.max_count for cl in RandomString.CharacterClass.classes.values()])
     if max_length==None:
       max_length=l
     if max_length<min_length:
@@ -407,7 +556,7 @@ class RandomString(object):
               continue
             if 'a' in cc.members:
               # We need to start over on this password.
-              debug('    Starting over. No characters of class %r'%(cc.name()))
+              debug('    Starting over. No characters of class %r'%(cc.getName()))
               break
             if 'A' in cc.members:
               # Choose a random character and capitalize it.
@@ -434,14 +583,21 @@ class RandomString(object):
     generate."""
 
     # Validate overall string length.
+    debug('RandomString.isValid(%r) ...'%(candidate,))
     if len(candidate)<self.min_length or len(candidate)>self.max_length:
+      debug('RandomString.isValid(%r) returns False (bad length: %d)'%(candidate,len(candidate)))
       return False
 
     # Validate number of instances of each character class.
-    for cl in RandomString.CharacterClass.classes:
+    debug('Checking character classes ...',indent=1)
+    for cl in RandomString.CharacterClass.classes.values():
       l=len(filter(lambda ch:ch in cl.members,candidate))
       if l<cl.min_count or l>cl.max_count:
+        debug("Not valid (%r). Has %d of class %r. Range is [%d,%d]."%(candidate,l,cl.getName(),cl.min_count,cl.max_count))
+        debug(None,indent=-1)
         return False
+    else:
+      debug(None,indent=-1)
 
     return True
 
@@ -463,12 +619,17 @@ class RandomString(object):
               for x in range(random.randint(opt.min_length,opt.max_length))
           ])
       elif mode=='dictionary':
+        non_alpha_classes=[
+          RandomString.CharacterClass.classes[k]
+            for k in RandomString.CharacterClass.classes
+              if k.lower()!='a'
+        ]
         nac=0 # Used as an index to non_alpha_classes.
         while True:
           # Choose a random word from the dictionary.
           w=random.choice(words)
           # If we're using capital letters, capitalize each word.
-          if 'A' in chars:
+          if 'A' in RandomString.CharacterClass.classes:
             w=w.capitalize()
           # If we're going to need another word, and if we're using non-
           # alpha character classes, use characters from those classes
@@ -477,11 +638,11 @@ class RandomString(object):
           l=len(pw)
           if l<opt.min_length:
             if len(non_alpha_classes):
-              pw+=random.choice(non_alpha_classes[nac])
+              pw+=random.choice(non_alpha_classes[nac].members)
               nac=(nac+1)%len(non_alpha_classes)
           else:
             # Validate length and character classe compliance.
-            if l<=opt.max_length or all([any([ch in pw for ch in cl]) for cl in classes]):
+            if self.isValid(pw):
               break # pw holds a valid password.
             # Otherwise, start over.
             pw=''
@@ -492,47 +653,61 @@ class RandomString(object):
       elif mode=='pronounceable':
         pw=self.pronounceable()
       else:
-        raise RandomString.Error('Bad mode: %r: invalid character: %r'%(spec,ch))
+        raise RandomString.Error('Bad mode: %r'%(mode,))
+    if opt.capitalize:
+      pw=pw.capitalize()
     return pw
 
   def __str__(self):
     "Return a random string."
 
+    debug('RandomString.__str__() ...')
+    debug(None,indent=1)
+    #debug('RandomString.CharacterClass.classes=%r'%(RandomString.CharacterClass.classes,))
+    dump_character_classes()
     while True:
       # Reset our character class counts.
-      for cl in RandomString.CharacterClass.classes:
-        cl.resetCount()
+      RandomString.CharacterClass.resetAll()
       # Choose a random string length within our range.
       l=random.randint(self.min_length,self.max_length)
       # Always begin with a caracter from the first character class.
-      rs=RandomString.CharacterClass.classes[0].getCharacter()
+      rs=RandomString.CharacterClass.first.getCharacter()
+      if rs==None:
+        raise RandomString.Error('"First" character class (%r) failed to return a random character.'%(RandomString.CharacterClass.first,))
       while len(rs)<l:
-        ch=random.choice(RandomString.CharacterClass.classes).getCharacter()
+        ch=RandomString.CharacterClass.choice().getCharacter()
         if ch!=None:
           rs+=ch
       if self.isValid(rs):
         break
-      #print 'D: Rejecting %r'%(rs,)
+      debug('Rejecting %r'%(rs,))
+      self.rese
+    debug(None,indent=-1)
+    debug('RandomString.__str__() returns %r'%(rs,))
     return rs
     
 
-class_n='0123456789'
-class_l='abcdefghijklmnopqrstuvwxyz'
-class_u='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-class_p='!@#$%^&*()-=_+~[]{}|;:,./<>?' # I've left out backslash and all quotes.
-class_s=' '
-classes=[class_n,class_l,class_u,class_p,class_s]
-for i in range(len(classes)-1,-1,-1):
-  if not any([ch in classes[i] for ch in opt.classes]):
-    del classes[i]
-if opt.max_length<len(classes):
-  print >>sys.stderr,'For %d character classes, a maximum length of %d is too short!'%(len(classes),opt.max_length)
-  sys.exit(1)
-chars=''.join(classes)
-non_alpha_classes=[
-  s for s in (class_n,class_p,class_s)
-    if any([ch in s for ch in opt.classes])
-]
+#class_n='0123456789'
+#class_l='abcdefghijklmnopqrstuvwxyz'
+#class_u='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+#class_p='!@#$%^&*()-=_+~[]{}|;:,./<>?' # I've left out backslash and all quotes.
+#class_s=' '
+#classes=[class_n,class_l,class_u,class_p,class_s]
+## Remove any unneeded character classes.
+## FIXME: The "ch in opt.classes" condition needs to be rewritten to consider
+##        new, more sophisticated syntax of the --classes option's value.
+#for i in range(len(classes)-1,-1,-1):
+#  if not any([ch in classes[i] for ch in opt.classes]):
+#    del classes[i]
+## Make sure we can hold all our character classes in a password.
+#if opt.max_length<len(classes):
+#  print >>sys.stderr,'For %d character classes, a maximum length of %d is too short!'%(len(classes),opt.max_length)
+#  sys.exit(1)
+#chars=''.join(classes)
+#non_alpha_classes=[
+#  s for s in (class_n,class_p,class_s)
+#    if any([ch in s for ch in opt.classes])
+#]
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -557,9 +732,11 @@ elif opt.pronounceable:
 else:
   mode='random'
 debug('    mode=%r'%(mode))
-randstr=RandomString()
+#def __init__(self,character_classes='A{1}a{10}9',min_length=None,max_length=None):
+randstr=RandomString(opt.classes,opt.min_length,opt.max_length)
 
 i=0
+random.seed()
 while i<N:
   s=randstr(mode)
   # The string in s must be valid to get to this point, so print it.
