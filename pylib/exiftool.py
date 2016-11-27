@@ -36,16 +36,17 @@ instead. Isn't that nicer!
 import datetime,exceptions,json,os,re,shlex,subprocess,sys
 import adhoc
 
+# Use this RE to parse date and time from EXIF data.
 re_exif_time=re.compile('(?P<year>\d\d\d\d):(?P<mon>\d\d):(?P<day>\d\d) (?P<hour>\d\d):(?P<min>\d\d):(?P<sec>\d\d)(\.(?P<cs>\d\d))?')
 
-def exiftool(argstring):
-  'Run exiftool with the given argument string and return [stdout,stderr].'
+def exiftool(*args):
+  'Run exiftool with the given arguments and return [stdout,stderr].'
 
-  clist=shlex.split('exiftool '+argstring)
+  clist=['exiftool']+list(args)
   try:
     rc=subprocess.Popen(clist,bufsize=16384,stdout=subprocess.PIPE,stderr=subprocess.PIPE).communicate()
   except exceptions.OSError,(errno,strerr):
-    print >>sys.stderr,'%s: %s: exiftool %s'%(os.path.basename(sys.argv[0]),strerr,argstring)
+    print >>sys.stderr,'%s: %s: exiftool %s'%(os.path.basename(sys.argv[0]),strerr,clist)
     sys.exit(1)
   return rc
 
@@ -53,7 +54,7 @@ def readfile(filename):
   '''Return a python object (an instance of class AdHoc) whose
   attributes contain the grouped EXIF tags of the given file.'''
 
-  out,err=exiftool("-g -json '%s'"%filename)
+  out,err=exiftool('-g','-json',filename)
   if err:
     print >>sys.stderr,'exiftool error:\n'+err
     sys.exit(1)
@@ -63,15 +64,15 @@ def readfile(filename):
     dd=d[g]
     if isinstance(dd,dict):
       for key,val in dd.iteritems():
-	# Convert any string timestamps to Python datetime values.
-	#print 'key=%r val=%r'%(key,val)
-	if isinstance(val,str) or isinstance(val,unicode):
-	  m=re_exif_time.match(val)
-	  if m:
-	    t=m.groupdict('0')
-	    for x in t:
-	      t[x]=int(t[x])
-	    dd[key]=datetime.datetime(t['year'],t['mon'],t['day'],t['hour'],t['min'],t['sec'],t['cs']*10000)
+        # Convert any string timestamps to Python datetime values.
+        #print 'key=%r val=%r'%(key,val)
+        if isinstance(val,str) or isinstance(val,unicode):
+          m=re_exif_time.match(val)
+          if m:
+            t=m.groupdict('0')
+            for x in t:
+              t[x]=int(t[x])
+            dd[key]=datetime.datetime(t['year'],t['mon'],t['day'],t['hour'],t['min'],t['sec'],t['cs']*10000)
   return adhoc.AdHoc(**d)
 
 if __name__=='__main__':
