@@ -60,7 +60,7 @@ if opt.offset:
   # Convert our --offset argument to positive or negative seconds.
   m=re.match(r'(?P<sign>[-+])?((?P<hours>\d+):(?P<minutes>\d+)|(?P<seconds>\d+))$',opt.offset)
   if not m:
-    print >>sys.stderr,'%s: Bad --offset argument: %r'%(sys.argv[0],opt.offset)
+    print >>sys.stderr,'%s: Bad --offset argument: %r'%(prog,opt.offset)
     sys.exit(1)
   d=m.groupdict('0')
   for k in d:
@@ -88,12 +88,16 @@ if args:
   # This is the usual mode of renaming files according to their time.
   for f in args:
     # Get the time this file was created, accessed, or modified.
-    if opt.time=='created':
-      t=os.stat(f).st_ctime
-    elif opt.time=='accessed':
-      t=os.stat(f).st_atime
-    else:
-      t=os.stat(f).st_mtime
+    try:
+      if opt.time=='created':
+        t=os.stat(f).st_ctime
+      elif opt.time=='accessed':
+        t=os.stat(f).st_atime
+      else:
+        t=os.stat(f).st_mtime
+    except OSError,e:
+      print >>sys.stderr,'%s: %s'%(prog,e)
+      sys.exit(2)
     # Apply any offset
     t+=utc_offset
     t+=opt.offset
@@ -129,14 +133,18 @@ if args:
         sys.stderr.flush()
         continue
       else:
-        if opt.copy:
-          # Copy f to filename.
-          print "'%s' => '%s'"%(f,filename)
-          shutil.copy2(f,filename)
-        else:
-          # Rename f to filename.
-          print "'%s' -> '%s'"%(f,filename)
-          os.rename(f,filename)
+        try:
+          if opt.copy:
+            # Copy f to filename.
+            print "'%s' => '%s'"%(f,filename)
+            shutil.copy2(f,filename)
+          else:
+            # Rename f to filename.
+            print "'%s' -> '%s'"%(f,filename)
+            os.rename(f,filename)
+        except OSError,e:
+          print >>sys.stderr,'%s: %s'%(prog,e)
+          sys.exit(2)
 else:
   # We're just outputting the current (or offset) time.
   if opt.age:
