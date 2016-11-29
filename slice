@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import optparse,os,re,sys
+import optparse,os,re,stat,sys
 from glob import glob
 import OptionParserFormatters
 
@@ -159,7 +159,12 @@ class File(file):
 
   def __init__(self,name,mode='r',buffering=-1):
     super(File,self).__init__(name,mode,buffering)
-    self.readfrom=self.tell()
+    self.seekable=stat.S_ISREG(os.fstat(self.fileno()).st_mode)
+    if self.seekable:
+      self.readfrom=self.tell()
+
+  def seekable(self):
+    return stat.S_ISREG(self.mode)
 
   def next(self):
     line=self.readline()
@@ -169,20 +174,24 @@ class File(file):
       return line
 
   def read(self,size=-1):
-    self.readfrom=self.tell()
+    if self.seekable:
+      self.readfrom=self.tell()
     return super(File,self).read(size)
 
   def readline(self,size=-1):
-    self.readfrom=self.tell()
+    if self.seekable:
+      self.readfrom=self.tell()
     return super(File,self).readline(size)
 
   def readlines(self,size=None):
-    self.readfrom=self.tell()
+    if self.seekable:
+      self.readfrom=self.tell()
     return super(File,self).readlines(size)
 
   def seek(self,offset,whence=0):
     super(File,self).seek(offset,whence)
-    self.readfrom=self.tell()
+    if self.seekable:
+      self.readfrom=self.tell()
 
   def rewind(self):
     """Set the file location to where the most recent read operation was
@@ -202,13 +211,11 @@ def slice(filename,first,last,relative=False):
   #'#!/usr/bin/env python'
   """
 
+  # Initialization and reality checking.
   n=0
   f=File(filename)
-  if opt.next:
-    try:
-      f.rewind() # This has no practical effect on a newly created File object.
-    except:
-      die("Cannot use the -n (--next) option with \"%s\" because it can't be rewound."%filename)
+  if opt.next and not f.seekable:
+    die("Cannot use -n (--next) option with %s because it can't be rewound."%(filename,))
   eof=False
   
   while not eof: # In case opt.multi is True.
