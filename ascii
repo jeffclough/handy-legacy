@@ -2,6 +2,25 @@
 import optparse,os,sys
 from OptionParserFormatters import IndentedHelpFormatterWithNL
 
+# default_padding[radix]=number of digits to allow for.
+default_padding={
+  2:8,
+  8:3,
+  10:3,
+  16:2
+}
+
+# Set up for outputting an ASCII table.
+character3=[
+  'NUL','SOH','STX','ETX','EOT','ENQ','ACK','BEL',
+  ' BS','TAB',' LF',' VT',' FF',' CR',' SO',' SI',
+  'DLE','DC1','DC2','DC3','DC4','NAK','SYN','EBT',
+  'CAN',' EM','SUB','ESC',' FS',' GS',' RS',' US'
+]
+for ch in range(32,127):
+  character3.append('  '+chr(ch))
+character3.append('DEL')
+
 # Handle command line options.
 op=optparse.OptionParser(
   add_help_option=False,
@@ -14,9 +33,10 @@ op.add_option('-b',dest='radix',action='store_const',const=2,help="Binary (--rad
 op.add_option('-d',dest='radix',action='store_const',const=10,help="Decimal (--radix 10)")
 op.add_option('-h',dest='radix',action='store_const',const=16,help="Hexadecimal (--radix 16)")
 op.add_option('-o',dest='radix',action='store_const',const=8,help="Octal (--radix 8)")
-op.add_option('--pad',dest='pad',action='store',type='int',default=0,help="Pad with leading zeros to make occupy this many characters (not counting any prefix). (default: %default)")
+op.add_option('--pad',dest='pad',action='store',type='int',default=0,help="Pad with leading zeros to make numeric values occupy this many characters (not counting any prefix). (default: %default)")
 op.add_option('--prefix','-p',action='store_true',default=False,help="Prefix each numeric character value with notation indicating the base being used.")
-op.add_option('-v',dest='value_only',action='count',default=0,help="Output only numeric values of the input. Do not output each corresponding character. -v gives one value per line. -vv gives one line with values separated by spaces. -vvv outputs all values on one line with nothing between them.")
+op.add_option('-t',dest='value_only',action='count',default=0,help="How terse would you like the output to be? -t suppresses the output each corresponding character, giving one numeric value per line. -tt gives one line with values separated by spaces. -ttt outputs all values on one line with nothing between them.")
+op.add_option('--table',dest='table',action='store_true',help="Rather than translating standard input and the command line into ASCII on standard output, just wright an ASCII table to standard output.")
 op.add_option('--help',dest='help',action='store_true',default=False,help="Show this usage message.")
 try:
   opt,args=op.parse_args()
@@ -55,6 +75,7 @@ def based_integer(n,b,prefix='',pad=0):
   following the given prefix string."""
 
   chars=[]
+  sign=1
   if n<0:
     sign=-1
   elif n==0:
@@ -71,11 +92,34 @@ def based_integer(n,b,prefix='',pad=0):
     prefix+=digits[0]*(pad-len(chars))
   return prefix+''.join(chars)
 
-if opt.value_only:
-  print opt.delimiter.join([
-    based_integer(ord(ch),opt.radix,opt.prefix,opt.pad) for ch in instr
-  ])
+if opt.table:
+  if opt.radix not in (8,10,16):
+    sys.stderr.write("I'm really not set up to output an ASCII table with radix=%d.\n"%opt.radix)
+    sys.exit(1)
+  cw=4
+  if default_padding[opt.radix]==2:
+    prefix='  '
+  else:
+    prefix=' '
+  sys.stdout.write(' '*default_padding[opt.radix]+prefix)
+  for col in range(16):
+    if col%3==0:
+      sys.stdout.write(' ')
+    sys.stdout.write(based_integer(col*16,opt.radix,prefix,default_padding[opt.radix]))
+  for row in range(8):
+    sys.stdout.write('\n'+based_integer(row,opt.radix,prefix,default_padding[opt.radix]))
+    for col in range(16):
+      if col%3==0:
+        sys.stdout.write(' ')
+      ch=row*16+col
+      sys.stdout.write(' '+character3[ch])
+  sys.stdout.write('\n')
 else:
-  for ch in instr:
-    n=based_integer(ord(ch),opt.radix,opt.prefix,opt.pad)
-    print '%r: %s'%(ch,n)
+  if opt.value_only:
+    print opt.delimiter.join([
+      based_integer(ord(ch),opt.radix,opt.prefix,opt.pad) for ch in instr
+    ])
+  else:
+    for ch in instr:
+      n=based_integer(ord(ch),opt.radix,opt.prefix,opt.pad)
+      print '%r: %s'%(ch,n)
