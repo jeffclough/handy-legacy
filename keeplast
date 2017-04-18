@@ -1,0 +1,64 @@
+#!/usr/bin/env python
+
+import optparse,os,re,sys
+from OptionParserFormatters import IndentedHelpFormatterWithNL
+
+progname=os.path.basename(sys.argv[0])
+op=optparse.OptionParser(
+  add_help_option=False, # Because I like the -h option to be listed last.
+  formatter=IndentedHelpFormatterWithNL(2,8),
+  usage="%prog [OPTIONS] [FILENAME]",
+  description="""Description: Read from the given FILENAME, or standard input if no FILENAME is given, and write only lines that do not occur later in the file. This has the effect of writing out only the last occurrance of each distinct line value. Output is written to standard output unless --in-place is used."""
+)
+op.add_option('-i',dest='ignore_case',action='store_true',default=False,help="""Ingore the case of the input when comparing lines. (This option doubles the amount of memory required.)""")
+op.add_option('--in-place',dest='in_place',action='store_true',default=False,help="""Edit the input file in place. This means that the input file will be replaced with the de-duplicated output, and nothing will be written to standard output. The FILENAME argument MUST be given if this option is used, and an error will occur if that file cannot be written to.""")
+op.add_option('-h','--help',action='store_true',default=False,help="""Show this help message.""")
+try:
+  opt,args=op.parse_args()
+except Exception,e:
+  print >>sys.stderr,str(e)
+  sys.exit(2)
+if opt.help:
+  op.print_help()
+  sys.exit(0)
+if opt.in_place and not args:
+  print >>sys.stderr,"%s: --in-place option requires a filename be to be given."%(progname,)
+  sys.exit(2)
+if len(args)>1:
+  print >>sys.stderr,"%s: only 1 filename may be given on the command line."%(progname,)
+  sys.exit(2)
+
+# Get our input from SOMEPLACE.
+if args:
+  filename=args[0]
+  if opt.in_place:
+    f=open(filename,'rw+')
+  else:
+    f=open(filename,'r')
+else:
+  f=sys.stdin
+
+# Turn the text coming in into the text going out.
+coming=f.readlines()
+going=[]
+if opt.ignore_case:
+  # Here's how we ignore case.
+  ic=[x.lower() for x in coming]
+  while coming:
+    if ic[0] not in ic[1:]:
+      going.append(coming[0])
+    del(ic[0])
+    del(coming[0])
+else:
+  # Respecting case is simpler.
+  while coming:
+    if coming[0] not in coming[1:]:
+      going.append(coming[0])
+    del(coming[0])
+
+# Write the outgoing text.
+if opt.in_place:
+  f.truncate()
+else:
+  f=sys.stdout
+f.writelines(going)

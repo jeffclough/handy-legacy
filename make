@@ -52,6 +52,7 @@ SCRIPTS=( # These targets are simply copied during installation.
   'gensig/gensig',
   'ip2host',
   'json2csv',
+  'keeplast',
   'mark',
   'names',
   'not',
