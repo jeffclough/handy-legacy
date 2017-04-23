@@ -33,7 +33,7 @@ instead. Isn't that nicer!
 
 '''
 
-import datetime,exceptions,json,os,re,shlex,subprocess,sys
+import datetime,exceptions,json,os,re,subprocess,sys
 import adhoc
 
 # Use this RE to parse date and time from EXIF data.
