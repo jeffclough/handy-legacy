@@ -1,0 +1,43 @@
+#!/usr/bin/env python
+import argparse,os,sys,time
+
+# Handle our command line options.
+ap=argparse.ArgumentParser(
+  description="Format multi-factor access codes so that they will fit into your wallet."
+)
+ap.add_argument('--html',dest='format',action='store_const',const='html',default='text',help="Format the output as HTML for prettier printing from a web browser.")
+ap.add_argument('codes',action='append',nargs='*',help="Passcodes MAY be given on the command line. Otherwise, %prog will prompt the user for codes.")
+args=ap.parse_args()
+args.codes=args.codes[0]
+
+# Read the codes from standard input.
+if not args.codes:
+  codes=''
+  while True:
+    try:
+      s=raw_input("Codes: ").strip()
+      if s=='':
+        break
+      codes+=' '+s
+    except(EOFError):
+      break
+  print
+  args.codes=codes.split()
+
+# Compute the rows.
+if len(args.codes)%2:
+  args.codes.append('')
+column_offset=len(args.codes)/2
+rows=[]
+for i in range(column_offset):
+  rows.append((args.codes[i],args.codes[i+column_offset]))
+
+# Output the rows.
+if args.format=='text':
+  for r in rows:
+    print '[_] %s   [_] %s'%(r[0],r[1])
+elif args.format=='html':
+  print "<html><body>"
+  for r in rows:
+    print '&#x25a2; %s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#x25a2; %s<br />'%(r[0],r[1])
+  print "</body></html>"
