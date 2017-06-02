@@ -1,9 +1,30 @@
 #!/usr/bin/env python
 
 import optparse,os,re,sys
-from base64 import *
 
-possible_bases=(16,26,32,64,85)
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+# Set up our alphabets. Base 16 is a special case not represented as an
+# explicit alphabet.
+#
+alphabet=dict([(len(s),s) for s in (
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567',
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/+',
+  '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~'
+)])
+possible_bases=tuple(sorted([16]+alphabet.keys()))
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+# Wrangle the command line, including setting default options according to the
+# name of the command this code was run as. If the command doesn't indicate
+# what the default base should be, require that the -b (--base) option be
+# given. 
+#
+
 cmd=os.path.basename(sys.argv[0])
 cmd_parser=re.compile(r'^(base|decode|encode)(%s)?$'%('|'.join([str(b) for b in possible_bases])))
 m=cmd_parser.match(cmd)
@@ -12,35 +33,116 @@ if not m:
   sys.exit(1)
 print m.groups()
 
-encode_if=tuple(
-  ['base%d'%b for b in possible_bases]+['encode%d'%b for b in possible_bases]
-)
-action=default_action=('decode','encode')[cmd in encode_if]
+default_action=('encode','decode')[m.groups()[0]=='decode']
+default_base=m.groups()[1]
+if not default_base:
+  default_base=0
 
 op=optparse.OptionParser(
+  add_help_option=False,
+  usage='%s [OPTION ...] [INPUT_FILE]'%cmd,
   description="""With no FILE, or when FILE is -, read standard input.
 
 The data are encoded as described for the base64 alphabet in RFC 3548. When decoding, the input may contain newlines in addition to the bytes of the formal base64 alphabet. Use --ignore-garbage to attempt to recover from any other non-alphabet bytes in the encoded stream."""
 )
 
 op.add_option(
-  '-d','--decode',dest='decode',action='store_true',default=False,
-  help="Decode data."
+  '-d','--decode',dest='action',action='store_const',const='decode',default=default_action,
+  help="Decode previously encoded ASCII input to (possibly) binary output. (%s by default.)"%(('Off','On')[default_action=='decode'])
+)
+op.add_option(
+  '-e','--encode',dest='action',action='store_const',const='encode',
+  help="Encode (possibly) binary input data to ASCII output. (%s by default.)"%(('Off','On')[default_action=='encode'])
 )
 op.add_option(
   '-i','--ignore-garbage',dest='ignore_garbage',action='store_true',default=False,
-  help="When decoding, ignore non-alphabet characters."
+  help="When decoding, ignore non-alphabet characters. (default: %default)"
 )
 op.add_option(
-  '-w','--wrap',dest='wrap',action='store',type='int',default=76,
-  help="Wrap encoded lines after COLS character (default 76). Use 0 to disable line wrapping."
+  '-w','--wrap',dest='wrap',metavar='COLS',action='store',type='int',default=76,
+  help="Wrap encoded lines after COLS character (default 76). Use 0 to disable line wrapping. (default: %default)"
+)
+#op.add_option(
+#  '-i','--input',dest='input',action='store',default=None,
+#  help="Read input from this file. Default is stdin; passing - also represents stdin."
+#)
+op.add_option(
+  '-o','--output',dest='output',metavar='FILENAME',action='store',default=None,
+  help="Write output to this file.  Default is stdout; passing - also represents stdout. (default: stdout)"
 )
 op.add_option(
-  '-b','--base',dest='base',action='store',type='int',default=0,
-  help="Specify what base %r to work in for encoding or decoding. If the name used to invoke this command (e.g. base64) doesn't give a base, this option MUST be used to specify one."%(possible_bases,)
+  '-b','--base',dest='base',action='store',type='int',default=default_base,
+  help="Specify what base %r to encode or decode with. If the name used to invoke this command (e.g. base64) doesn't give a base, this option MUST be used to specify one. (default: %%default)"%(possible_bases,)
+)
+op.add_option(
+  '-h','--help',dest='help',action='store_true',default=False,
+  help="Show this help message, and exit."
 )
 opt,args=op.parse_args()
 
-print 'Program name: %s'%(cmd,)
+if args:
+  if len(args)>1:
+    sys.stderr.write("Too many input files given to %s: %s"%(cmd,' '.join([repr(s) for s in args])))
+    sys.exit(1)
+  opt.input=args[0]
+else:
+  opt.input='-'
 
+if opt.output==None:
+  opt.output='-'
 
+if opt.help:
+  op.print_help()
+  sys.exit(0)
+
+print 'DEBUG: opt.action=%r'%(opt.action,)
+print 'DEBUG: opt.ignore_garbage=%r'%(opt.ignore_garbage,)
+print 'DEBUG: opt.wrap=%r'%(opt.wrap,)
+print 'DEBUG: opt.output=%r'%(opt.output,)
+print 'DEBUG: opt.base=%r'%(opt.base,)
+
+if opt.base==0:
+  sys.stderr.write('%s was called with no -b (--base) option.'%cmd)
+  sys.exit(1)
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+# Open input and output files in modes conducive to whatever operation we're
+# performing. If writing to standard output, be sure to append.
+#
+
+fin=fout=None
+if opt.output=='-':
+  fout_mode='a' # append if we're writing to standard output.
+else:
+  fout_mode='w'
+if opt.action=='encode':
+  fin_mode='rb'
+else:
+  fin_mode='r'
+  fout_mode+='b'
+if opt.input=='-':
+  fin=os.fdopen(sys.stdin.fileno(),fin_mode)
+else:
+  fin=open(opt.input,fin_mode)
+if opt.output=='-':
+  fout=os.fdopen(sys.stdout.fileno(),fin_mode)
+else:
+  fout=open(opt.output,fout_mode)
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+# TODO: Now do what we came here to do.
+
+def decode(inf,outf,alphabet):
+  pass
+
+def encode(inf,outf,alphabet):
+  pass
+
+if opt.action=='encode':
+  pass
+else: # decode
+  pass
