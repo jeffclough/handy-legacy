@@ -1,0 +1,46 @@
+#!/usr/bin/env python
+
+import optparse,os,re,sys
+from base64 import *
+
+possible_bases=(16,26,32,64,85)
+cmd=os.path.basename(sys.argv[0])
+cmd_parser=re.compile(r'^(base|decode|encode)(%s)?$'%('|'.join([str(b) for b in possible_bases])))
+m=cmd_parser.match(cmd)
+if not m:
+  sys.stderr.write('Improper command name (%s) not recognized by "base" command.'%(cmd,))
+  sys.exit(1)
+print m.groups()
+
+encode_if=tuple(
+  ['base%d'%b for b in possible_bases]+['encode%d'%b for b in possible_bases]
+)
+action=default_action=('decode','encode')[cmd in encode_if]
+
+op=optparse.OptionParser(
+  description="""With no FILE, or when FILE is -, read standard input.
+
+The data are encoded as described for the base64 alphabet in RFC 3548. When decoding, the input may contain newlines in addition to the bytes of the formal base64 alphabet. Use --ignore-garbage to attempt to recover from any other non-alphabet bytes in the encoded stream."""
+)
+
+op.add_option(
+  '-d','--decode',dest='decode',action='store_true',default=False,
+  help="Decode data."
+)
+op.add_option(
+  '-i','--ignore-garbage',dest='ignore_garbage',action='store_true',default=False,
+  help="When decoding, ignore non-alphabet characters."
+)
+op.add_option(
+  '-w','--wrap',dest='wrap',action='store',type='int',default=76,
+  help="Wrap encoded lines after COLS character (default 76). Use 0 to disable line wrapping."
+)
+op.add_option(
+  '-b','--base',dest='base',action='store',type='int',default=0,
+  help="Specify what base %r to work in for encoding or decoding. If the name used to invoke this command (e.g. base64) doesn't give a base, this option MUST be used to specify one."%(possible_bases,)
+)
+opt,args=op.parse_args()
+
+print 'Program name: %s'%(cmd,)
+
+
