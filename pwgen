@@ -681,7 +681,6 @@ class RandomString(object):
       if self.isValid(rs):
         break
       debug('Rejecting %r'%(rs,))
-      self.rese
     debug(None,indent=-1)
     debug('RandomString.__str__() returns %r'%(rs,))
     return rs
