@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import csv,optparse,os,re,shlex,string,sys
+import argparse,csv,os,re,shlex,string,sys
 import ansi
 
 progname=os.path.basename(sys.argv[0])
@@ -30,47 +30,81 @@ following URL:
     http://docs.python.org/library/re.html#regular-expression-syntax
 '''
 
-import OptionParserFormatters
-usage=''' Form 1: %prog [options] [RE ...]
-  Form 2: %prog [options] --columns=COLUMNS
-  Form 3: %prog [options] --csv
-  Form 4: %prog [options] --fields=FIELDS
-  Form 4: %prog [options] --stripe=N'''
-description='''The %prog command is a filter (reads from standard input and
-writes to standard output) that colors its output using ANSI escape sequences.
-Because of this, %prog's output is suitable only for terminal display.
-Redirecting %prog's output to a file or to the input of another command (except
-for things like the "less" command) will likely yield unwanted results.
+import textwrap
+class FittedHelpFormatter(argparse.HelpFormatter):
+  """Formatter for generating usage messages and argument help settings.
 
-Form 1 of %prog scans each line for any REs (regular expressions) given as
-arguments. Any text matching the first RE is colored by the first palette
-entry, any text matching the second RE is colored by the second, and so on. By
-default, the palette entries are red, green, yellow, bold blue, magenta, and
-cyan, all against a black background. The --palette option can be used to
-change the list of colors.
+  This formatter class extends argparse.HelpFormatter so that it wraps
+  text to the actual terminal width rather than assuming 80 columns. It
+  also does not remove newlines. :-)"""
 
-By default, the number of REs used from the command line is limited to the
-number of entries in the palette. Exceeding this number of REs is not an error,
-but text matching the surplus REs will not be colored. Use the -w option to
-change this bahavior.
+  def __init__(self,
+               prog,
+               indent_increment=2,
+               max_help_position=None,
+               width=None):
+    if width==None:
+      width=self.getTerminalSize()[0]
+    if max_help_position==None:
+      max_help_position=int(width/3.33333333)
+    super(FittedHelpFormatter,self).__init__(
+      prog,indent_increment,max_help_position,width
+    )
+  
+  def _fill_text(self, text, width, indent):
+      #text = self._whitespace_matcher.sub(' ', text).strip()
+      return textwrap.fill(
+        text,width,replace_whitespace=False,
+        initial_indent=indent,subsequent_indent=indent
+      )
 
-Since %prog is written in Python, Python's regular expression extensions are
-available. Python REs are extensions of POSIX EREs, but it uses Perl-like
-character classes (e.g. \s and \w) rather than POSIX character classes (e.g.
-[:space:] and [:word:], respectively), making REs more concise. Use --re-help
-to get a brief lesson in Python REs.
+  def getTerminalSize(self):
+    '''This method came from StackOverflow.com (wonderful site) in an
+    answer posted by Johannes WeiB (the B is really a beta symbol). He
+    didn't know the source.'''
 
-NOTE: Because of how %prog currently handles REs, using the (?...) RE forms
-will cause an error. This is a known bug and is on the list of things to fix.
+    import os
+    env = os.environ
+    def ioctl_GWINSZ(fd):
+      try:
+        import fcntl, termios, struct, os
+        cr=struct.unpack(
+          'hh',
+          fcntl.ioctl(fd,termios.TIOCGWINSZ,'1234')
+        )
+      except:
+        return
+      return cr
+    cr=ioctl_GWINSZ(0) or ioctl_GWINSZ(1) or ioctl_GWINSZ(2)
+    if not cr:
+      try:
+        fd=os.open(os.ctermid(),os.O_RDONLY)
+        cr=ioctl_GWINSZ(fd)
+        os.close(fd)
+      except:
+        pass
+    if not cr:
+      cr=(env.get('LINES',25),env.get('COLUMNS',80))
+    return int(cr[1]),int(cr[0])
 
-Forms 2-4 take no RE. They use column or field position to determine the color
-of each part of the output, the first field according to the first palette
-entry, and so forth.
+usage=''' Form 1: %(prog)s [options] [RE ...]
+  Form 2: %(prog)s [options] --columns=COLUMNS
+  Form 3: %(prog)s [options] --csv
+  Form 4: %(prog)s [options] --fields=FIELDS
+  Form 4: %(prog)s [options] --stripe=N'''
+description='''The %(prog)s command is a filter (reads from standard input and writes to standard output) that colors its output using ANSI escape sequences. Because of this, %(prog)s's output is suitable only for terminal display. Redirecting %(prog)s's output to a file or to the input of another command (except for things like the "less" command) will likely yield unwanted results.
 
-The MARKOPTS environment variable may be used to supply default command line
-options to %prog. Anything found in this variable is processed before %prog's
-command line options. The value of MARKOPTS is interpreted in a shell context,
-so be sure to quote or escape any white space.'''
+Form 1 of %(prog)s scans each line for any REs (regular expressions) given as arguments. Any text matching the first RE is colored by the first palette entry, any text matching the second RE is colored by the second, and so on. By default, the palette entries are red, green, yellow, bold blue, magenta, and cyan, all against a black background. The --palette option can be used to change the list of colors.
+
+By default, the number of REs used from the command line is limited to the number of entries in the palette. Exceeding this number of REs is not an error, but text matching the surplus REs will not be colored. Use the -w option to change this bahavior.
+
+Since %(prog)s is written in Python, Python's regular expression extensions are available. Python REs are extensions of POSIX EREs, but it uses Perl-like character classes (e.g. \s and \w) rather than POSIX character classes (e.g. [:space:] and [:word:], respectively), making REs more concise. Use --re-help to get a brief lesson in Python REs.
+
+NOTE: Because of how %(prog)s currently handles REs, using the (?...) RE forms will cause an error. This is a known bug and is on the list of things to fix.
+
+Forms 2-4 take no RE. They use column or field position to determine the color of each part of the output, the first field according to the first palette entry, and so forth.
+
+The MARKOPTS environment variable may be used to supply default command line options to %(prog)s. Anything found in this variable is processed before %(prog)s's command line options. The value of MARKOPTS is interpreted in a shell context, so be sure to quote or escape any white space.'''
 envopts=shlex.split(os.getenv('MARKOPTS','').strip())
 if envopts:
   sys.argv[1:1]=envopts
@@ -88,57 +122,57 @@ NOTE: The context options have not yet been implemented!
 '''
 
 if sys.version_info>=(2,5):
-  op=optparse.OptionParser(
-    formatter=OptionParserFormatters.IndentedHelpFormatterWithNL(2,8),
+  p=argparse.ArgumentParser(
+    formatter_class=FittedHelpFormatter,
     usage=usage,
     description=description,
     epilog=epilog
   )
 else:
   # Don't give OptionParser() an epilog argument if we know it can't handle it.
-  op=optparse.OptionParser(
-    formatter=OptionParserFormatters.IndentedHelpFormatterWithNL(2,8),
+  p=argparse.ArgumentParser(
+    formatter_class=FittedHelpFormatter,
     usage=usage,
     description=description+'\n'+epilog
   )
 
-op.add_option('-b','--background',dest='background',type='choice',choices=ansi.background.keys(),default='black',
-  help='''Sets the assumed background color, which defaults to %default. ASNI codes to effect the background color that's aready assumed will not be output.''')
-op.add_option('-C',dest='comment_mode',action='store_true',default=False,
+p.add_argument('-b','--background',dest='background',choices=ansi.background.keys(),default='black',
+  help='''Sets the assumed background color, which defaults to %(default)s. ASNI codes to effect the background color that's aready assumed will not be output.''')
+p.add_argument('-C',dest='comment_mode',action='store_true',default=False,
   help='''Turns on comment mode, which inserts the comment pattern (see --comment) at the start of the pattern list. This marks any line whose first non-space character is '#', which is very commonly a comment line. Use the --comment option to change the pattern used to idententify comments.''')
-op.add_option('--columns',dest='columns',action='store',default=None,
+p.add_argument('--columns',dest='columns',action='store',default=None,
   help='''This option turns on fixed-column mode and accepts a comma-separated list of column numbers as its argument. Each given column number identifies the beginning of a column in each line of the input data. This option cannot be used with other highlighting modes. The first column is numbered 1.''')
-op.add_option('--comment-format',dest='comment_format',action='store',default='^\s*(#|--|//).*',
-  help='''Specifies the pattern used to identify comment lines, which is '%default' by default.''')
-op.add_option('--after-context',dest='after',action='store',type='int',default=None,
+p.add_argument('--comment-format',dest='comment_format',action='store',default='^\s*(#|--|//).*',
+  help='''Specifies the pattern used to identify comment lines, which is '%(default)s' by default.''')
+p.add_argument('--after-context',dest='after',action='store',type=int,default=None,
   help='''Print NUM lines of leading context before matching lines. Places a line containing -- between contiguous groups of matches.''')
-op.add_option('--before-context',dest='before',action='store',type='int',default=None,
+p.add_argument('--before-context',dest='before',action='store',type=int,default=None,
   help='''Print NUM lines of trailing context before matching lines. Places a line containing -- between contiguous groups of matches.''')
-op.add_option('--context',dest='context',action='store',type='int',default=None,
+p.add_argument('--context',dest='context',action='store',type=int,default=None,
   help='''Print NUM lines of leading and trailing context before matching lines. Places a line containing -- between contiguous groups of matches. The context options are only useful in combination whth the --grep option.''')
-op.add_option('--csv',dest='csv',action='store_true',default=False,
+p.add_argument('--csv',dest='csv',action='store_true',default=False,
   help='''For use with -f, this option specifies that the data is in CSV format.''')
-op.add_option('-d','--delimiter',dest='delim',default=None,
+p.add_argument('-d','--delimiter',dest='delim',default=None,
   help='''For use with -f, this option specifies a regular expression that matches field delimiters. The default is '\s+', which matches one or more whitespace characters.''')
-op.add_option('-D','--diff',dest='diff',action='store_true',default=False,
+p.add_argument('-D','--diff',dest='diff',action='store_true',default=False,
   help='''Turns on diff mode, which colors lines removed differently from lines added.''')
-op.add_option('--discard',dest='discard',metavar='RE',action='store',default=None,
+p.add_argument('--discard',dest='discard',metavar='RE',action='store',default=None,
   help='''Discards any lines matching the given RE and keeps all others. Discarding lines of CSV data has not yet been implemented. This option is for filtering only and has no effect on colarization. (Cannot be used with --keep.)''')
-op.add_option('-f','--fields',dest='fields',action='store',default=None,
+p.add_argument('-f','--fields',dest='fields',action='store',default=None,
   help='''Specifies which fields are to be marked. Field ranges are separated by commas and take the form "m[-[n]]" or "[[m]-]n" where m is the first column in the range (counted from 1) and n is the last. Each field *range* gets its own color. E.g., "-f 1-3,6" says to mark fields 1-3 with the first color in the current palette and to color field 6 with the second. See --csv and -d for data parsing options.''')
-op.add_option('--file',dest='file',action='store',default=None,
+p.add_argument('--file',dest='file',action='store',default=None,
   help='''Read from the given file rather than standard input.''')
-op.add_option('-g','--grep',dest='grep',action='store_true',default=False,
+p.add_argument('-g','--grep',dest='grep',action='store_true',default=False,
   help='''Output only lines that match at least one color filter.''')
-op.add_option('-i',dest='ignore_case',action='store_true',default=False,
+p.add_argument('-i',dest='ignore_case',action='store_true',default=False,
   help='''Ignore case when matching patterns. This applies both to RE arguments to be matched and to any argument to --discard or --keep.''')
-op.add_option('-I','--input',dest='input_from',action='store',choices=('diff','du'),default=None,
+p.add_argument('-I','--input',dest='input_from',action='store',choices=('diff','du'),default=None,
   help='''Use sets of pattern known to be helpful for marking the output of certain programs. Valid values are diff and du.''')
-op.add_option('--keep',dest='keep',metavar='RE',action='store',default=None,
+p.add_argument('--keep',dest='keep',metavar='RE',action='store',default=None,
   help='''Keep any lines matching the given RE and discards all others. Keeping lines of CSV data has not yet been implemented. This option is for filtering only and has no effect on colarization. (Cannot be used with --discard.)''')
-op.add_option('-L',dest='log_mode',action='store_true',default=False,
+p.add_argument('-L',dest='log_mode',action='store_true',default=False,
   help='''Turns on log mode, which marks error, warning, info, and debug output in addition to the time, host, and process conent. Also see --log-format. NOT YET FULLY IMPLEMENTED.''')
-op.add_option('--log-format',dest='log_format',action='store',default=r'''
+p.add_argument('--log-format',dest='log_format',action='store',default=r'''
 (?P<time>\w+ \d+ \d+:\d+:\d+)
 \s+
 (?P<host>\S+)
@@ -152,25 +186,26 @@ op.add_option('--log-format',dest='log_format',action='store',default=r'''
 :\s*
 (?P<message>.*)
 ''',
-  help="Set the format to expect for log text, which is a regular expression that matches and names the various parts of each line of log data when the -L option is used. (default=%default) NOT YET FULLY IMPLEMENTED.")
-op.add_option('--palette',dest='palette',action='store',default='dark',
-  help='''Comma-delimited list of color specifications to use to highlight matches for patterns. Each spec is of the form "[ATTR] FG [on BG]" where ATTR is any of bold, italics, underscore, or strikethrough, and FG and BG may be any of black, red, green, yellow, blue, magenta, cyan, or white. Two other possible values for a colorspec can be "normal" and "reverse", which don't make sence with other ATTR, FB, or BG values. You should also know that ATTR, FG, and BG values are persistent from one spec to the next, so, for example "red on black,green,yellow" specifies that matches for the first pattern should be red, second pattern are green, third are yellow, and that all have black backgrounds. Since the palette syntax tends to be verbose, you can also use --palette=dark or --palette=light to use colors generally suitable for dark or light terminal backgrounds, respectively. Since only red, blue, and magenta are used on light backgrounds, using -w is often a good idea with --palette=light. The default setting is "%default".''')
-op.add_option('-r','--reverse',dest='reverse',action='store_true',default=False,
+  help="Set the format to expect for log text, which is a regular expression that matches and names the various parts of each line of log data when the -L option is used. (default=%(default)s) NOT YET FULLY IMPLEMENTED.")
+p.add_argument('--palette',dest='palette',action='store',default='dark',
+  help='''Comma-delimited list of color specifications to use to highlight matches for patterns. Each spec is of the form "[ATTR] FG [on BG]" where ATTR is any of bold, italics, underscore, or strikethrough, and FG and BG may be any of black, red, green, yellow, blue, magenta, cyan, or white. Two other possible values for a colorspec can be "normal" and "reverse", which don't make sence with other ATTR, FB, or BG values. You should also know that ATTR, FG, and BG values are persistent from one spec to the next, so, for example "red on black,green,yellow" specifies that matches for the first pattern should be red, second pattern are green, third are yellow, and that all have black backgrounds. Since the palette syntax tends to be verbose, you can also use --palette=dark or --palette=light to use colors generally suitable for dark or light terminal backgrounds, respectively. Since only red, blue, and magenta are used on light backgrounds, using -w is often a good idea with --palette=light. The default setting is "%(default)s".''')
+p.add_argument('-r','--reverse',dest='reverse',action='store_true',default=False,
   help='''Reverse foreground and background colors of highlighted sections.''')
-op.add_option('--re-help',dest='re_help',action='store_true',default=False,
+p.add_argument('--re-help',dest='re_help',action='store_true',default=False,
   help='''Display a brief description of Python regular expressions. Then quit.''')
-op.add_option('-s','--stanzas',dest='stanzas',action='store_true',default=False,
+p.add_argument('-s','--stanzas',dest='stanzas',action='store_true',default=False,
   help='''In "stanzas" mode, the the RE arguments are matched against input lines. Output lines are colored according to the most recent RE matched. If only one RE is given, output lines will alternate between the first two colors in thte palette every time the input line matches the RE.'''),
-op.add_option('--stripe',metavar='N',dest='stripe',type='int',default=None,
+p.add_argument('--stripe',metavar='N',dest='stripe',type=int,default=None,
   help='''Color each group of N lines of text a different color, rotating through the default or given pallete as we go.''')
-op.add_option('-w',dest='wrap',action='store_true',default=False,
+p.add_argument('-w',dest='wrap',action='store_true',default=False,
   help='''Turn on color wrapping mode. By default, for n colors in the palette, the match for any pattern beyond the nth pattern simply uses the last color in the palette. Wrapping mode changes this behavior so the first color is used for the n+1st pattern, the second for the n+2nd, and so on.''')
+p.add_argument('patterns',nargs=argparse.REMAINDER)
 
 #re_columnList=re.compile(r'(?:\s*(\d+)\s*,)*(?:\s*(\d+)\s*)')
 re_number=re.compile(r'\d+')
 
 try:
-  opt,pat=op.parse_args()
+  opt=p.parse_args()
 except IOError,e:
   errno,errmsg=e.args
   if errmsg=='Broken pipe':
@@ -208,7 +243,7 @@ if opt.columns:
     opt.columns.insert(0,0)
   if opt.fields:
     die('-f (--fields) may not be used with --columns.')
-  if pat:
+  if opt.patterns:
     die('patterns may not be used with --columns')
   if opt.comment_mode:
     die('-C cannot be used with --columns')
@@ -238,20 +273,20 @@ if opt.fields:
 if opt.comment_mode:
   if opt.diff:
     die('-D (--diff) and -C cannot be used together.')
-  pat.insert(0,opt.comment_format)
+  opt.patterns.insert(0,opt.comment_format)
 elif opt.diff:
-  pat.insert(0,'^==================+')
-  pat.insert(0,'^[+>].*')
-  pat.insert(0,'^[-<].*')
+  opt.patterns.insert(0,'^==================+')
+  opt.patterns.insert(0,'^[+>].*')
+  opt.patterns.insert(0,'^[-<].*')
 elif opt.input_from=='diff':
-  pat.insert(0,'^==================+')
-  pat.insert(0,'^[+>].*')
-  pat.insert(0,'^[-<].*')
+  opt.patterns.insert(0,'^==================+')
+  opt.patterns.insert(0,'^[+>].*')
+  opt.patterns.insert(0,'^[-<].*')
 elif opt.input_from=='du':
-  pat.insert(0,'^\s*[0-9.]+K') # Blue
-  pat.insert(0,'^\s*[0-9.]+G') # Yellow
-  pat.insert(0,'^\s*[0-9.]+M') # Green
-  pat.insert(0,'^\s*[0-9.]+T') # Red
+  opt.patterns.insert(0,'^\s*[0-9.]+K') # Blue
+  opt.patterns.insert(0,'^\s*[0-9.]+G') # Yellow
+  opt.patterns.insert(0,'^\s*[0-9.]+M') # Green
+  opt.patterns.insert(0,'^\s*[0-9.]+T') # Red
 if opt.discard and opt.keep:
   die('--discard and --keep cannot be used together.')
 if opt.discard:
@@ -261,8 +296,8 @@ if opt.keep:
 if opt.stripe!=None and opt.stripe<1:
   die('--stripe requires an integer greater than 0.')
 
-if pat:
-  for p in pat:
+if opt.patterns:
+  for p in opt.patterns:
     try:
       x=re.compile(p)
     except re.error,e:
@@ -369,13 +404,13 @@ if opt.columns:
       raise
 elif opt.stanzas:
   # Compile our regular expressions.
-  patcount=len(pat)
-  if pat: # Combine and compile our patterns into a single regular expression.
-    pat=re.compile('|'.join(['(%s)'%x.replace('(','(?:') for x in pat]),opt.re_flags)
+  patcount=len(opt.patterns)
+  if opt.patterns: # Combine and compile our patterns into a single regular expression.
+    opt.patterns=re.compile('|'.join(['(%s)'%x.replace('(','(?:') for x in opt.patterns]),opt.re_flags)
   if patcount>1:
     # Assign color based on which RE most recently matched.
     for s in get_input_lines(opt.file):
-      m=pat.search(s)
+      m=opt.patterns.search(s)
       if m!=None:
         g=m.groups()
         if g:
@@ -391,7 +426,7 @@ elif opt.stanzas:
     # Alternate between first two palette entries every time RE is matched.
     i=1
     for s in get_input_lines(opt.file):
-      m=pat.search(s)
+      m=opt.patterns.search(s)
       if m!=None:
         i=1-i
         sys.stdout.write(colorOf(i))
@@ -436,25 +471,25 @@ elif opt.fields:
       writer.writerow(flist)
       sys.stdout.flush()
 elif opt.log_mode:
-  pat=re.compile(opt.log_format)
+  opt.patterns=re.compile(opt.log_format)
   output_format=string.Template('$time $host $prog$level: $message')
   for s in get_input_lines(opt.file):
-    m=pat.search(s)
+    m=opt.patterns.search(s)
     if m!=None and not opt.grep:
       d=m.groupdict('')
       print output_format.safe_substitute(d)
 else:
   # Highlight based on RE matching.
-  if pat: # Combine and compile our patterns into a single regular expression.
-    pat='|'.join(['(%s)'%x.replace('(','(?:') for x in pat])
+  if opt.patterns: # Combine and compile our patterns into a single regular expression.
+    opt.patterns='|'.join(['(%s)'%x.replace('(','(?:') for x in opt.patterns])
     try:
-      pat=re.compile(pat,opt.re_flags)
+      opt.patterns=re.compile(opt.patterns,opt.re_flags)
     except re.error,e:
-      die('Internal RE error (%s): %r'%(' '.join(e.args),pat))
+      die('Internal RE error (%s): %r'%(' '.join(e.args),opt.patterns))
 
   for s in get_input_lines(opt.file):
     # Scan each line for matches to our patterns and insert highlighting.
-    m=pat.search(s)
+    m=opt.patterns.search(s)
     if m!=None or not opt.grep:
       while m:
         g=m.groups()
@@ -470,6 +505,6 @@ else:
         j,k=m.span()
         #print 'j=%d k=%d match=%r'%(j,k,g[i])
         s=s[:j]+highlight+s[j:k]+str(ansi.norm)+s[k:]
-        m=pat.search(s,k+len(highlight)+len(str(ansi.norm)))
+        m=opt.patterns.search(s,k+len(highlight)+len(str(ansi.norm)))
       sys.stdout.write(s)
       sys.stdout.flush()
