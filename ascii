@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import optparse,os,sys
+from math import ceil
 from OptionParserFormatters import IndentedHelpFormatterWithNL
 
 # default_padding[radix]=number of digits to allow for.
@@ -8,6 +9,13 @@ default_padding={
   8:3,
   10:3,
   16:2
+}
+
+column_breaks={
+  2:4,
+  8:4,
+  10:5,
+  16:4
 }
 
 # Set up for outputting an ASCII table.
@@ -93,26 +101,33 @@ def based_integer(n,b,prefix='',pad=0):
   return prefix+''.join(chars)
 
 if opt.table:
-  if opt.radix not in (8,10,16):
+  if opt.radix not in default_padding:
     sys.stderr.write("I'm really not set up to output an ASCII table with radix=%d.\n"%opt.radix)
     sys.exit(1)
-  cw=4
   if default_padding[opt.radix]==2:
     prefix='  '
   else:
     prefix=' '
+  if opt.radix==2:
+    cw=8
+    columns=8
+  else:
+    cw=3
+    columns=opt.radix
   sys.stdout.write(' '*default_padding[opt.radix]+prefix)
-  for col in range(16):
-    if col%3==0:
-      sys.stdout.write(' ')
-    sys.stdout.write(based_integer(col*16,opt.radix,prefix,default_padding[opt.radix]))
-  for row in range(8):
-    sys.stdout.write('\n'+based_integer(row,opt.radix,prefix,default_padding[opt.radix]))
-    for col in range(16):
-      if col%3==0:
-        sys.stdout.write(' ')
-      ch=row*16+col
-      sys.stdout.write(' '+character3[ch])
+  for col in range(columns):
+#   if col%column_breaks[opt.radix]==0:
+#     sys.stdout.write('  ')
+    sys.stdout.write(based_integer(col,opt.radix,prefix,default_padding[opt.radix]))
+  for row in range(int(ceil(128.0/columns))):
+    sys.stdout.write('\n'+based_integer(row*opt.radix,opt.radix,prefix,default_padding[opt.radix]))
+    for col in range(columns):
+      ch=row*columns+col
+      if ch>=len(character3):
+        break
+#     if col%column_breaks[opt.radix]==0:
+#       sys.stdout.write('  ')
+      sys.stdout.write(' '+('%*s'%(cw,character3[ch])))
   sys.stdout.write('\n')
 else:
   if opt.value_only:
