@@ -2,7 +2,6 @@
 
 import optparse,os,re,sys,time
 import adhoc,pprint
-from addict import Dict
 
 # Components of the current date and time are needed in lots of places
 # in this code, so I'm just making them globally available. So there.
@@ -126,7 +125,6 @@ if args:
   for pat,functions in tf:
     m=pat.search(ts)
     if m:
-      #td=Dict(**(m.groupdict('')))
       td=adhoc.adhoc(**(m.groupdict('')))
       # Figure out what sort of time expression this is.
       for validate,parse in functions:

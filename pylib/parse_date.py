@@ -2,7 +2,6 @@
 
 import re,time
 import datetime as dt
-from addict import Dict
 
 # Day of week data:
 dowl='Monday Tuesday Wednesday Thursday Friday Saturday Sunday'.split()
@@ -125,7 +124,8 @@ def parse_date(datestr):
 
   m=re_relative_date_1.search(datestr)
   if m:
-    g=Dict(m.groupdict())
+    #g=Dict(m.groupdict())
+    g=type('',(),m.groupdict())
 
     if g.n:
       g.n=int(g.n)
