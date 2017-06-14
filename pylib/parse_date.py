@@ -130,6 +130,9 @@ class IndexedNames(object):
           break
 
   def __repr__(self):
+    """Return a string that could be passed to eval() to recreate this
+      object."""
+
     return '%s(%r, start=%r, step=%r)'%(self.__class__.__name__,self.name_list,self.start,self.step)
 
   def __contains__(self,key):
