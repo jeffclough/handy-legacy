@@ -4,3 +4,6 @@
 [submodule "externals/pyipinfodb"]
 	path = externals/pyipinfodb
 	url = https://github.com/mossberg/pyipinfodb.git
+[submodule "externals/pyparsing"]
+	path = externals/pyparsing
+	url = https://github.com/greghaskins/pyparsing.git
