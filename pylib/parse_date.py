@@ -204,8 +204,7 @@ class IndexedNames(object):
 dow=IndexedNames('Monday Tuesday Wednesday Thursday Friday Saturday Sunday'.split())
 moy=IndexedNames('January February March April May June July August September October November December'.split(),1)
 
-
-# [int ](day|week)[s] (ago|before DAY|from DAY|(in the )(past|future))
+# [int ](day|week|fortnight|month|year)[s] (ago|hence|(before|from) DAY)
 # DAY := yesterday|now|today|tomorrow|DOW
 # DOW := any day of the week
 re_relative_date_1=re.compile(
@@ -215,7 +214,6 @@ re_relative_date_1=re.compile(
   r'(?P<dir>(ago|(before|from|after)\s+\w+|in\s+the\s+(past|future)))'
   r'$'
 )
-
 
 def parse_date(datestr):
   """Return a datetime.date object containing the date expressed
@@ -280,6 +278,175 @@ def parse_date(datestr):
     return today+dt.timedelta(g.n*g.dir+offset)
   return None
 
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# The new way begins here.
+
+downum=dict(
+  monday=0,
+  tuesday=1,
+  wednesday=2,
+  thursday=3,
+  friday=4,
+  saturday=5,
+  sunday=6
+)
+
+moynum=dict(
+  january=1,
+  february=2,
+  march=3,
+  april=4,
+  may=5,
+  june=6,
+  july=7,
+  august=8,
+  september=9,
+  october=10,
+  november=11,
+  december=12
+)
+
+import time,pyparsing as pyp
+
+SUNDAY=pyp.oneOf('sunday sunda sund sun su',True).setParseAction(pyp.replaceWith('sunday'))
+MONDAY=pyp.oneOf('monday monda mond mon mo m',True).setParseAction(pyp.replaceWith('monday'))
+TUESDAY=pyp.oneOf('tuesday tuesda tuesd tues tue tu',True).setParseAction(pyp.replaceWith('tuesday'))
+WEDNESDAY=pyp.oneOf('wednesday wednesda wednesd wednes wedne wedn wed we w',True).setParseAction(pyp.replaceWith('wednesday'))
+THURSDAY=pyp.oneOf('thursday thursda thursd thurs thur thu th',True).setParseAction(pyp.replaceWith('thursday'))
+FRIDAY=pyp.oneOf('friday frida frid fri fr f',True).setParseAction(pyp.replaceWith('friday'))
+SATURDAY=pyp.oneOf('saturday saturda saturd satur satu sat sa').setParseAction(pyp.replaceWith('saturday'))
+specific_day=SUNDAY|MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY
+
+YESTERDAY=pyp.CaselessKeyword('yesterday')
+TODAY=pyp.oneOf('today now',True).setParseAction(pyp.replaceWith('today'))
+TOMORROW=pyp.CaselessKeyword('tomorrow')
+relative_day=YESTERDAY|TODAY|TOMORROW
+
+day=relative_day|specific_day
+
+
+class DateParser(object):
+  def __init__(self,syntax):
+    """The subclass must implement __init__(), which must set
+    self.syntax to some pyparsing.ParserElement derivative."""
+
+    raise NoteImplemented("DateParser must not be instantiated on its own.")
+
+  def __call__(self,s):
+    """Parse the given string according to this DateParser's syntax. If
+    the syntax matches the string, return the corresponding
+    datetime.date value. Otherwise, return None."""
+
+    try:
+      tokens=self.syntax.parseString(s)
+      #print 'DEBUG: tokens=%r'%(tokens,)
+    except pyp.ParseException:
+      return None
+    self.now=dt.date.today()
+    return self.convert(tokens)
+
+  def convert(self,tokens):
+    raise NotImplemented("DateParser.convert() must be implemented in a subclass.")
+
+
+class DateParser_1(DateParser):
+  """
+
+  rel_day := YESTERDAY | TODAY | NOW | TOMORROW
+  spec_day := SUNDAY | MONDAY | TUESDAY | WEDNESDAY | THURSDAY | FRIDAY | SATURDAY
+  day := rel_day | spec_day
+
+  """
+
+  def __init__(self):
+    self.syntax=day
+
+  def convert(self,tokens):
+    """Convert the list of tokens matching the "day" syntax to a
+    datetime.date value."""
+
+    t=self.now.timetuple()
+    dayname=tokens[0]
+    #print 'DEBUG: dayname=%r'%dayname
+    d=downum.get(dayname)
+    if d!=None:
+      if d<=t.tm_wday:
+        d+=7
+      delta=dt.timedelta(d-t.tm_wday)
+    elif dayname=='yesterday':
+      delta=dt.timedelta(-1)
+    elif dayname=='tomorrow':
+      delta=dt.timedelta(1)
+    else:
+      delta=dt.timedelta(0)
+    #print 'DEBUG: ds=%r'%ds
+    return self.now+delta
+
+integer=pyp.Word(pyp.nums)
+count=pyp.Optional(integer,default=1)
+count.setParseAction(lambda s,l, t: int(t[0]))
+
+DAY=pyp.oneOf('days day',True).setParseAction(pyp.replaceWith('day'))
+WEEK=pyp.oneOf('weeks week',True).setParseAction(pyp.replaceWith('week'))
+FORTNIGHT=pyp.oneOf('fortnights fortnight',True).setParseAction(pyp.replaceWith('fortnight'))
+MONTH=pyp.oneOf('months month',True).setParseAction(pyp.replaceWith('month'))
+YEAR=pyp.oneOf('years year',True).setParseAction(pyp.replaceWith('year'))
+unit=DAY|WEEK|FORTNIGHT|MONTH|YEAR
+
+AGO=pyp.CaselessLiteral('ago').setName('AGO').setParseAction(pyp.replaceWith('ago'))
+HENCE=pyp.CaselessLiteral('hence').setName('HENCE').setParseAction(pyp.replaceWith('hence'))
+BEFORE=pyp.CaselessLiteral('before').setName('BEFORE').setParseAction(pyp.replaceWith('before'))
+AFTER=pyp.CaselessLiteral('after').setName('AFTER').setParseAction(pyp.replaceWith('after'))
+FROM=pyp.CaselessLiteral('from').setName('FROM').setParseAction(pyp.replaceWith('from'))
+direction_ago=(AGO|(BEFORE+TODAY)).setName('direction_ago').setParseAction(pyp.replaceWith('ago'))
+direction_hence=(HENCE|(AFTER+TODAY)).setName('direction_hence').setParseAction(pyp.replaceWith('hence'))
+direction_from_now=direction_ago|direction_hence
+
+counted_relative_day=count+unit+(AGO|HENCE)
+
+class DateParser_2(DateParser):
+  """
+
+  relday := [integer] unit direction
+  unit := {DAY[S]|WEEK[S]|FORTNIGHT[S]|MONTH[S]|YEAR[S]}
+  direction := {AGO|HENCE}
+
+  """
+
+  def __init__(self):
+    self.syntax=counted_relative_day
+
+  def convert(self,tokens):
+    "Convert out tokens to a datetime.date object."""
+
+    count,unit,direction=tokens
+    #print 'DEBUG: count=%r, unit=%r, direction=%r'%(count,unit,direction)
+    if direction=='ago':
+      count=-count
+    if unit=='day':
+      delta=dt.timedelta(days=count)
+    elif unit=='week':
+      delta=dt.timedelta(days=count*7)
+    elif unit=='fortnight':
+      delta=dt.timedelta(days=count*14)
+    elif unit=='month':
+      delta=dt.timedelta(days=count*30)
+    elif unit=='year':
+      delta=dt.timedelta(days=count*365)
+    return self.now+delta
+
+date_parsers=[
+  DateParser_1(),
+  DateParser_2(),
+]
+
+def pd(s):
+  for parser in date_parsers:
+    d=parser(s)
+    if d:
+      return d
+  return None
 
 if __name__=="__main__":
   import doctest
@@ -291,17 +458,26 @@ if __name__=="__main__":
       print '%s is %s'%(parse_date(sample),sample)
     else:
       for sample in (
+        'sunday',
+        'monday',
+        'tuesday',
+        'wednesday',
+        'thursday',
+        'friday',
+        'saturday',
+        'yesterday',
         'now',
         'today',
-        'yesterday',
+        'tomorrow',
         'day ago',
         'day before today',
         'day after today',
-        'tomorrow',
         'day from now',
         'day from today',
         '1 day ago',
         '3 days ago',
+        '1 day hence',
+        '3 days hence',
         '1 day from now',
         '2 days from now',
         '3 days from today',
@@ -321,5 +497,9 @@ if __name__=="__main__":
         '1 week from sat',
         '1 week from sun',
         '2 weeks before monday',
+        'fortnight hence',
+        'month ago',
+        'year hence',
       ):
-        print '%s is %s'%(parse_date(sample),sample)
+#       print '%s is %s'%(parse_date(sample),sample)
+        print '%s is %s'%(pd(sample),sample)
