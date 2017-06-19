@@ -309,23 +309,6 @@ moynum=dict(
 
 import time,pyparsing as pyp
 
-SUNDAY=pyp.oneOf('sunday sunda sund sun su',True).setParseAction(pyp.replaceWith('sunday'))
-MONDAY=pyp.oneOf('monday monda mond mon mo m',True).setParseAction(pyp.replaceWith('monday'))
-TUESDAY=pyp.oneOf('tuesday tuesda tuesd tues tue tu',True).setParseAction(pyp.replaceWith('tuesday'))
-WEDNESDAY=pyp.oneOf('wednesday wednesda wednesd wednes wedne wedn wed we w',True).setParseAction(pyp.replaceWith('wednesday'))
-THURSDAY=pyp.oneOf('thursday thursda thursd thurs thur thu th',True).setParseAction(pyp.replaceWith('thursday'))
-FRIDAY=pyp.oneOf('friday frida frid fri fr f',True).setParseAction(pyp.replaceWith('friday'))
-SATURDAY=pyp.oneOf('saturday saturda saturd satur satu sat sa').setParseAction(pyp.replaceWith('saturday'))
-specific_day=SUNDAY|MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY
-
-YESTERDAY=pyp.CaselessKeyword('yesterday')
-TODAY=pyp.oneOf('today now',True).setParseAction(pyp.replaceWith('today'))
-TOMORROW=pyp.CaselessKeyword('tomorrow')
-relative_day=YESTERDAY|TODAY|TOMORROW
-
-day=relative_day|specific_day
-
-
 class DateParser(object):
   def __init__(self,syntax):
     """The subclass must implement __init__(), which must set
@@ -349,6 +332,40 @@ class DateParser(object):
   def convert(self,tokens):
     raise NotImplemented("DateParser.convert() must be implemented in a subclass.")
 
+SUNDAY=pyp.oneOf('sunday sunda sund sun su',True).setParseAction(pyp.replaceWith('sunday'))
+MONDAY=pyp.oneOf('monday monda mond mon mo m',True).setParseAction(pyp.replaceWith('monday'))
+TUESDAY=pyp.oneOf('tuesday tuesda tuesd tues tue tu',True).setParseAction(pyp.replaceWith('tuesday'))
+WEDNESDAY=pyp.oneOf('wednesday wednesda wednesd wednes wedne wedn wed we w',True).setParseAction(pyp.replaceWith('wednesday'))
+THURSDAY=pyp.oneOf('thursday thursda thursd thurs thur thu th',True).setParseAction(pyp.replaceWith('thursday'))
+FRIDAY=pyp.oneOf('friday frida frid fri fr f',True).setParseAction(pyp.replaceWith('friday'))
+SATURDAY=pyp.oneOf('saturday saturda saturd satur satu sat sa').setParseAction(pyp.replaceWith('saturday'))
+specific_day=SUNDAY|MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY
+
+YESTERDAY=pyp.CaselessKeyword('yesterday')
+TODAY=pyp.oneOf('today now',True).setParseAction(pyp.replaceWith('today'))
+TOMORROW=pyp.CaselessKeyword('tomorrow')
+relative_day=YESTERDAY|TODAY|TOMORROW
+
+day=relative_day|specific_day
+
+def relativeDay(s,reference=dt.date.today()):
+  """Given a day name, return the corresponding datetime.date objects.
+  The given string can be a day of the week, yesterday, today, now, or
+  tomorrow."""
+
+  t=reference.timetuple()
+  d=downum.get(s)
+  if d!=None:
+    if d<=t.tm_wday:
+      d+=7
+    delta=dt.timedelta(d-t.tm_wday)
+  elif s=='yesterday':
+    delta=dt.timedelta(-1)
+  elif s=='tomorrow':
+    delta=dt.timedelta(1)
+  elif s in ('today','now'):
+    delta=dt.timedelta(0)
+  return reference+delta
 
 class DateParser_1(DateParser):
   """
@@ -363,25 +380,29 @@ class DateParser_1(DateParser):
     self.syntax=day
 
   def convert(self,tokens):
-    """Convert the list of tokens matching the "day" syntax to a
-    datetime.date value."""
-
-    t=self.now.timetuple()
     dayname=tokens[0]
-    #print 'DEBUG: dayname=%r'%dayname
-    d=downum.get(dayname)
-    if d!=None:
-      if d<=t.tm_wday:
-        d+=7
-      delta=dt.timedelta(d-t.tm_wday)
-    elif dayname=='yesterday':
-      delta=dt.timedelta(-1)
-    elif dayname=='tomorrow':
-      delta=dt.timedelta(1)
-    else:
-      delta=dt.timedelta(0)
-    #print 'DEBUG: ds=%r'%ds
-    return self.now+delta
+    return relativeDay(dayname)
+
+# def convert(self,tokens):
+#   """Convert the list of tokens matching the "day" syntax to a
+#   datetime.date value."""
+#
+#   t=self.now.timetuple()
+#   dayname=tokens[0]
+#   #print 'DEBUG: dayname=%r'%dayname
+#   d=downum.get(dayname)
+#   if d!=None:
+#     if d<=t.tm_wday:
+#       d+=7
+#     delta=dt.timedelta(d-t.tm_wday)
+#   elif dayname=='yesterday':
+#     delta=dt.timedelta(-1)
+#   elif dayname=='tomorrow':
+#     delta=dt.timedelta(1)
+#   else:
+#     delta=dt.timedelta(0)
+#   #print 'DEBUG: ds=%r'%ds
+#   return self.now+delta
 
 integer=pyp.Word(pyp.nums)
 count=pyp.Optional(integer,default=1)
@@ -396,12 +417,6 @@ unit=DAY|WEEK|FORTNIGHT|MONTH|YEAR
 
 AGO=pyp.CaselessLiteral('ago').setName('AGO').setParseAction(pyp.replaceWith('ago'))
 HENCE=pyp.CaselessLiteral('hence').setName('HENCE').setParseAction(pyp.replaceWith('hence'))
-BEFORE=pyp.CaselessLiteral('before').setName('BEFORE').setParseAction(pyp.replaceWith('before'))
-AFTER=pyp.CaselessLiteral('after').setName('AFTER').setParseAction(pyp.replaceWith('after'))
-FROM=pyp.CaselessLiteral('from').setName('FROM').setParseAction(pyp.replaceWith('from'))
-direction_ago=(AGO|(BEFORE+TODAY)).setName('direction_ago').setParseAction(pyp.replaceWith('ago'))
-direction_hence=(HENCE|(AFTER+TODAY)).setName('direction_hence').setParseAction(pyp.replaceWith('hence'))
-direction_from_now=direction_ago|direction_hence
 
 counted_relative_day=count+unit+(AGO|HENCE)
 
@@ -436,9 +451,48 @@ class DateParser_2(DateParser):
       delta=dt.timedelta(days=count*365)
     return self.now+delta
 
+
+BEFORE=pyp.CaselessLiteral('before').setName('BEFORE').setParseAction(pyp.replaceWith('before'))
+AFTER=pyp.oneOf('after from').setName('AFTER').setParseAction(pyp.replaceWith('after'))
+refday=(BEFORE|AFTER)+day
+
+counted_relative_from_refday=count+unit+refday
+
+class DateParser_3(DateParser):
+  """
+
+  relday := [integer] unit direction ref_day
+  unit := DAY[S]|WEEK[S]|FORTNIGHT[S]|MONTH[S]|YEAR[S]
+  refday := {BEFORE|AFTER|FROM} day
+  day := specific_day|relative_day
+
+  """
+
+  def __init__(self):
+    self.syntax=counted_relative_from_refday
+
+  def convert(self,tokens):
+    count,unit,direction,refday=tokens
+    if direction=='before':
+      count=-count
+    refday=relativeDay(refday)
+    if unit=='day':
+      delta=dt.timedelta(days=count)
+    elif unit=='week':
+      delta=dt.timedelta(days=count*7)
+    elif unit=='fortnight':
+      delta=dt.timedelta(days=count*14)
+    elif unit=='month':
+      delta=dt.timedelta(days=count*30)
+    elif unit=='year':
+      delta=dt.timedelta(days=count*365)
+    return refday+delta
+
+
 date_parsers=[
   DateParser_1(),
   DateParser_2(),
+  DateParser_3(),
 ]
 
 def pd(s):
