@@ -261,18 +261,30 @@ class DateParser_3(DateParser):
     return refday+delta
 
 
-date_parsers=[
-  DateParser_1(),
-  DateParser_2(),
-  DateParser_3(),
-]
+def add_parser(*args):
+  """Accept one or more instances of a DateParser-dreived class, and
+  append them to the list of date parsers."""
 
-def pd(s):
-  for parser in date_parsers:
+  for p in args:
+    if isinstance(p,DateParser):
+      _parsers.append(p)
+    else:
+      raise TypeError('Cannot add object of type %s as a date parser.'%(p.__class__.__name__,))
+
+def parse(s):
+  for parser in _parsers:
     d=parser(s)
     if d:
       return d
   return None
+
+# Add our standard date parsers.
+_parsers=[]
+add_parser(
+  DateParser_1(),
+  DateParser_2(),
+  DateParser_3()
+)
 
 if __name__=="__main__":
   import doctest
@@ -332,5 +344,4 @@ if __name__=="__main__":
         '1 month ago',
         '1 year hence',
       ):
-#       print '%s is %s'%(parse_date(sample),sample)
-        print '%s is %s'%(pd(sample),sample)
+        print '%s is %s'%(parse(sample),sample)
