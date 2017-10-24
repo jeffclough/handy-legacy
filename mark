@@ -197,6 +197,8 @@ p.add_argument('-s','--stanzas',dest='stanzas',action='store_true',default=False
   help='''In "stanzas" mode, the the RE arguments are matched against input lines. Output lines are colored according to the most recent RE matched. If only one RE is given, output lines will alternate between the first two colors in thte palette every time the input line matches the RE.'''),
 p.add_argument('--stripe',metavar='N',dest='stripe',type=int,default=None,
   help='''Color each group of N lines of text a different color, rotating through the default or given pallete as we go.''')
+p.add_argument('--traffic',dest='traffic',action='store_true',default=False,
+  help='''Mark instances of the words red, yellow, and green in their respective colors.''')
 p.add_argument('-w',dest='wrap',action='store_true',default=False,
   help='''Turn on color wrapping mode. By default, for n colors in the palette, the match for any pattern beyond the nth pattern simply uses the last color in the palette. Wrapping mode changes this behavior so the first color is used for the n+1st pattern, the second for the n+2nd, and so on.''')
 p.add_argument('patterns',nargs=argparse.REMAINDER)
@@ -295,6 +297,12 @@ if opt.keep:
   opt.keep=re.compile(opt.keep,opt.re_flags)
 if opt.stripe!=None and opt.stripe<1:
   die('--stripe requires an integer greater than 0.')
+if opt.traffic:
+  opt.patterns.insert(0,r'\b[Yy][Ee][Ll]{2}[Oo][Ww]\b')
+  opt.patterns.insert(0,r'\b[Gg][Rr][Ee]{2}[Nn]\b')
+  opt.patterns.insert(0,r'\b[Rr][Ee][Dd]\b')
+
+print 'DEBUG: opt.patterns=%r'%(opt.patterns,)
 
 if opt.patterns:
   for p in opt.patterns:
