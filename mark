@@ -302,8 +302,6 @@ if opt.traffic:
   opt.patterns.insert(0,r'\b[Gg][Rr][Ee]{2}[Nn]\b')
   opt.patterns.insert(0,r'\b[Rr][Ee][Dd]\b')
 
-print 'DEBUG: opt.patterns=%r'%(opt.patterns,)
-
 if opt.patterns:
   for p in opt.patterns:
     try:
