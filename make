@@ -38,6 +38,7 @@ CPROGS=( # Compile these targets from C source files.
 )
 
 SCRIPTS=( # These targets are simply copied during installation.
+  'ad-userAccountControl',
   'ansi',
   'ascii',
   'args',
