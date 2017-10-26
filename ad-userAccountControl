@@ -1,0 +1,64 @@
+#!/usr/bin/env python
+
+import os,sys
+from math import log
+
+# Shamelessly taken from https://support.microsoft.com/en-us/help/305144/how-to-use-the-useraccountcontrol-flags-to-manipulate-user-account-pro.
+attr=dict(
+  SCRIPT                        =   0x0001,
+  ACCOUNTDISABLE                =   0x0002,
+  HOMEDIR_REQUIRED              =   0x0008,
+  LOCKOUT                       =   0x0010,
+  PASSWD_NOTREQD                =   0x0020,
+  PASSWD_CANT_CHANGE            =   0x0040,
+  ENCRYPTED_TEXT_PWD_ALLOWED    =   0x0080,
+  TEMP_DUPLICATE_ACCOUNT        =   0x0100,
+  NORMAL_ACCOUNT                =   0x0200,
+  INTERDOMAIN_TRUST_ACCOUNT     =   0x0800,
+  WORKSTATION_TRUST_ACCOUNT     =   0x1000,
+  SERVER_TRUST_ACCOUNT          =   0x2000,
+  DONT_EXPIRE_PASSWORD          =  0x10000,
+  MNS_LOGON_ACCOUNT             =  0x20000,
+  SMARTCARD_REQUIRED            =  0x40000,
+  TRUSTED_FOR_DELEGATION        =  0x80000,
+  NOT_DELEGATED                 = 0x100000,
+  USE_DES_KEY_ONLY              = 0x200000,
+  DONT_REQ_PREAUTH              = 0x400000,
+  PASSWORD_EXPIRED              = 0x800000,
+  TRUSTED_TO_AUTH_FOR_DELEGATION=0x1000000,
+  PARTIAL_SECRETS_ACCOUNT       =0x4000000,
+)
+
+# Now reverse the above look-up and convert 2**x values to x.
+attr=dict([(int(log(v,2)),a) for a,v in attr.items()])
+
+def bits_in(i):
+  "Iterate over 1-bit positions in i, LSB first."
+
+  assert isinstance(i,int)
+  h=int(log(i,2)+1)
+  b=0
+  while b<h:
+    if i&(2**b)!=0:
+      yield b
+    b+=1
+
+# Main code.
+if len(sys.argv)<2:
+  prog=os.path.basename(sys.argv[0])
+  print """usage: %s value ..."
+
+Interpret userAccountControl values from AD. These value may be expressed as
+octal, decimal, or hexadecimal. For example:
+
+    $ ad-userAccountControl 66048 0x10200
+    66048   NORMAL_ACCOUNT DONT_EXPIRE_PASSWORD
+    0x10200 NORMAL_ACCOUNT DONT_EXPIRE_PASSWORD"""%prog
+else:
+  for arg in sys.argv[1:]:
+    try:
+      val=int(arg,0)
+    except:
+      print >>sys.stderr,"Error: %r is not a valid integer value"%(arg,)
+      sys.exit(1)
+    print '%s\t%s'%(arg,' '.join([attr[b] for b in bits_in(val)]))
