@@ -48,7 +48,7 @@ if len(sys.argv)<2:
   prog=os.path.basename(sys.argv[0])
   print """usage: %s value ..."
 
-Interpret userAccountControl values from AD. These value may be expressed as
+Interpret userAccountControl values from AD. These values may be expressed as
 octal, decimal, or hexadecimal. For example:
 
     $ ad-userAccountControl 66048 0x10200
