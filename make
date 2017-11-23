@@ -26,7 +26,6 @@ if make.OS_NAME=='Darwin':
 
 CPROGS=( # Compile these targets from C source files.
   'datecycle',
-  'dump',
   'freq',
   'mix',
   'numlines',
@@ -49,6 +48,7 @@ SCRIPTS=( # These targets are simply copied during installation.
   'csv',
   'cutcsv',
 #  'decode64',
+  'dump',
 #  'encode64',
   'factors',
   'gensig/gensig',
@@ -87,7 +87,6 @@ PYTHON_LIB_DIR=make.expand_all('$HOME/my/lib/python')
 
 # Define some targets of different types and their dependencies.
 make.CExecutable('datecycle','datecycle.c',objs='ls_class.o')
-make.CExecutable('dump','dump.c',opts='-lm')
 make.CObjectFile('ls_class.o','ls_class.c','ls_class.h')
 make.CObjectFile('ls_class_test','ls_class.c','ls_class.h',opts='-DTEST')
 make.CExecutable('freq','freq.c',opts='-lm')
