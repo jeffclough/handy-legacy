@@ -1,7 +1,6 @@
 *.o
 *.pyc
 datecycle
-dump
 freq
 mix
 numlines

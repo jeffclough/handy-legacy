@@ -1,0 +1,142 @@
+#!/usr/bin/env python
+
+import argparse,os,sys
+import ansi
+from math import ceil,log
+
+ctl=str(ansi.Color('yellow on red'))
+blank=str(ansi.Color('black on blue'))
+norm=str(ansi.norm)
+
+def getTerminalSize():
+  "Return a (rows,columns) tuple giving the dimensions of the current terminal."
+
+  log.debug('Running "stty size" ...')
+  x,y=([int(x) for x in os.popen('stty size','r').read().split()])
+  log.debug('Screen size is %d rows by %d columns.'%(x,y))
+  return x,y
+
+def die(msg,stream=sys.stderr):
+  stream.write('%s: %s\n'%(ap.prog,msg))
+  sys.exit(1)
+
+def read_chunks(f,size):
+  """Generator function that returns UP TO size bytes at a time."""
+
+  buf=f.read(size)
+  while buf!='':
+    # print 'D: read %d bytes from %s'%(len(buf),f.name)
+    yield buf
+    buf=f.read(size)
+
+def dump(inf,base=16,outf=sys.stdout,start=None,stop=None):
+  """Write dump information for this file."""
+
+  # print 'D: dump(%r,base=%r,outf=%r,start=%r,stop=%r)'%(inf.name,base,outf.name,start,stop)
+
+  BUFSIZE=1024 # We'll read this many bytes at a time.
+  loc=0     # The file location the most recent buffer was read from.
+  bpl=16    # Bytes Per Line of output.
+
+  inf.seek(0,2)
+  size=inf.tell() # Remember the size of this file.
+  inf.seek(0)
+  if start==None: start=0
+  if stop==None: stop=size
+  if start<0: start=0
+  if stop>size: stop=size
+  if stop<=start or start>size:
+    return # Nothing to do.
+  aw=min(4,int(ceil(log(size,base)))) # Address digits needed for this file.
+  # print 'D: dump(%r,base=%r,outf=%r,start=%r,stop=%r)'%(inf.name,base,outf.name,start,stop)
+
+  # Set our address and byte format strings and column width according to base.
+  afmt,bfmt,cw={
+     8:('%%0%do'%aw,'%03o',4),
+    10:('%%0%dd'%aw, '%3d',4),
+    16:('%%0%dX'%aw,'%02x',3),
+  }[base]
+
+  # Start reading the file and dumping the contents.
+  for buf in read_chunks(inf,BUFSIZE):
+    blen=len(buf) # Get the number of bytes actually read.
+    off=0 # We're at the start of this buffer.
+    if start>loc+blen:
+      # Keep reading chunks until we get the buffer containing the start byte.
+      loc+=blen
+      continue
+    if start>loc:
+      # If this chunk contains the start byte, go go straight there.
+      off=start-loc
+      if (loc+off)%bpl!=0:
+        # Fill in the start of this line of output.
+        outf.write(afmt%((loc+off)/bpl)*bpl)
+        outf.write(blank+(' '*((cw+1)*(loc+off)%bpl))+norm)
+        text=blank+(' '*((loc+off)%bpl))+norm
+    else:
+      off=0
+      text=''
+
+    while off<blen:
+      # print 'D: loc=%d off=%d loc+off=%d'%(loc,off,loc+off)
+      if off%bpl==0:
+        if loc+off>0:
+          if text:
+            outf.write('  '+text)
+            text=''
+          outf.write('\n')
+        # Print the address of the first byte in this output line.
+        addr=((loc+off)/bpl)*bpl
+        # print 'D: Writing address: %d'%addr
+        outf.write(afmt%addr)
+      if loc+off<stop:
+        ch=ord(buf[off])
+        if opt.color and ch<32:
+          outf.write(' '+ctl+(bfmt%ch)+norm)
+        else:
+          outf.write(' '+bfmt%ch)
+        if ch<32:
+          if opt.color:
+            text+=ctl+'.'+norm
+          else:
+            text+='.'
+        else:
+          text+=buf[off]
+      off+=1
+    else:
+      left=bpl-((loc+off)%bpl)
+      if left<bpl:
+        if opt.color:
+          outf.write(' '+blank+(' '*((cw*left)-1))+norm)
+        else:
+          outf.write(' '*(cw*left))
+      if text:
+        outf.write('  '+text)
+        if opt.color and left<bpl:
+          outf.write(blank+(' '*left)+norm)
+      # print '\nD: left=%r'%left
+
+    # Get ready to read the next chunk.
+    # print 'D: Finished with buffer at %d'%loc
+    loc+=blen
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+ap=argparse.ArgumentParser()
+ap.add_argument('--base','-b',type=int,choices=(8,10,16),default=16,help="Base for numeric output. (default: %(default)s)")
+ap.add_argument('--color','-c',action='store_true',default=False,help="Highlight control characters.")
+ap.add_argument('filenames',metavar='file',nargs='+',help="One or more input files to be dumped.")
+opt=ap.parse_args()
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+for fn in opt.filenames:
+  try:
+    f=open(fn,'rb')
+    # print 'D: Opened %s for dumping.'%f.name
+    dump(f)
+    f.close()
+  except IOError,e:
+    die('%s: "%s"'%(e.args[1],fn))
