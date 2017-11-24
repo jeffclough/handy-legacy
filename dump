@@ -65,15 +65,14 @@ def write_byte(f,fmt,val,offset):
     else:
       text+=ch
 
-def dump(inf,base=16,outf=sys.stdout,start=None,stop=None):
+def dump(inf,base=16,outf=sys.stdout,start=None,stop=None,bpl=16):
   """Write dump information for this file."""
 
   global text
   # print 'D: dump(%r,base=%r,outf=%r,start=%r,stop=%r)'%(inf.name,base,outf.name,start,stop)
 
-  BUFSIZE=1024 # We'll read this many bytes at a time.
-  loc=0     # The file location the most recent buffer was read from.
-  bpl=16    # Bytes Per Line of output.
+  BUFSIZE=bpl*16 # MUST be a multiple of bpl.
+  loc=0 # The file location the most recent buffer was read from.
 
   inf.seek(0,2)
   size=inf.tell() # Remember the size of this file.
@@ -116,7 +115,7 @@ def dump(inf,base=16,outf=sys.stdout,start=None,stop=None):
       off=0
       text=''
 
-    while off<blen:
+    while off<blen and loc+off<stop:
       if off%bpl==0:
         if loc+off>0:
           # Print any text content from the previous line.
@@ -136,6 +135,7 @@ def dump(inf,base=16,outf=sys.stdout,start=None,stop=None):
     else:
       # Compute how many bytes short of a line (if any) we are.
       bytes_short=(bpl-((loc+off)%bpl))%bpl
+      #print "\nD: bytes_short=%d"%bytes_short
       while bytes_short>0:
         write_byte(outf,bfmt,None,off)
         off+=1
@@ -148,9 +148,29 @@ def dump(inf,base=16,outf=sys.stdout,start=None,stop=None):
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-ap=argparse.ArgumentParser()
+def multibase_int(n):
+  "Interpret octal, decimal, and hexadecimal integers."
+
+  return int(n,0)
+
+def multiple_of_4(n):
+  "Enforce the multiple-of-4 rule for --bytes-per-line."
+
+  n=int(n,0)
+  if n&3!=0:
+    raise argparse.ArgumentTypeError("%d is not a multiple of 4!"%n)
+  return n
+
+ap=argparse.ArgumentParser(
+  usage="%(prog)s [OPTIONS] file ..."
+)
 ap.add_argument('--base','-b',type=int,choices=(8,10,16),default=16,help="Base for numeric output. (default: %(default)s)")
+ap.add_argument('-d',dest='base',action='store_const',const=10,help="Same as --base 10.")
+ap.add_argument('-o',dest='base',action='store_const',const=8,help="Same as --base 8.")
 ap.add_argument('--color','-c',action='store_true',default=False,help="Highlight control characters.")
+ap.add_argument('--bytes-per-line','-l',dest='bpl',type=multiple_of_4,default=16,help="Number of bytes per line in the output, which MUST be a multiple of 4. (default: %(default)s)")
+ap.add_argument('--start',type=multibase_int,default=0,help="Offset location where the dump is to begin (inclusive).")
+ap.add_argument('--stop',type=multibase_int,default=None,help="Offset location where the dump is to end (non-inclusive).")
 ap.add_argument('filenames',metavar='file',nargs='+',help="One or more input files to be dumped.")
 opt=ap.parse_args()
 
@@ -161,7 +181,7 @@ for fn in opt.filenames:
   try:
     f=open(fn,'rb')
     # print 'D: Opened %s for dumping.'%f.name
-    dump(f)
+    dump(f,base=opt.base,bpl=opt.bpl,start=opt.start,stop=opt.stop)
     f.close()
   except IOError,e:
     die('%s: "%s"'%(e.args[1],fn))
