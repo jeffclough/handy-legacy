@@ -4,9 +4,12 @@ import argparse,os,sys
 import ansi
 from math import ceil,log
 
-ctl=str(ansi.Color('yellow on red'))
-blank=str(ansi.Color('black on blue'))
-norm=str(ansi.norm)
+col_ctl=str(ansi.Color('yellow on red'))
+col_high=str(ansi.Color('bold red on white'))
+col_blank=str(ansi.Color('black on blue'))
+col_norm=str(ansi.norm)
+
+text='.'
 
 def getTerminalSize():
   "Return a (rows,columns) tuple giving the dimensions of the current terminal."
@@ -29,9 +32,43 @@ def read_chunks(f,size):
     yield buf
     buf=f.read(size)
 
+def write_byte(f,fmt,val,offset):
+
+  global text
+  if offset%4==0:
+    f.write('  ')
+  else:
+    f.write(' ')
+  if val==None:
+    s=' '*len(fmt%0)
+    ch=' '
+  else:
+    s=fmt%val
+    ch=chr(val)
+  if opt.color:
+    if val==None:
+      f.write(col_blank+s+col_norm)
+      text+=col_blank+ch+col_norm
+    elif val<32:
+      f.write(col_ctl+s+col_norm)
+      text+=col_ctl+'.'+col_norm
+    elif val>126:
+      f.write(col_high+s+col_norm)
+      text+=col_high+'.'+col_norm
+    else:
+      f.write(s)
+      text+=ch
+  else:
+    f.write(s)
+    if val<32 or val>126:
+      text+='.'
+    else:
+      text+=ch
+
 def dump(inf,base=16,outf=sys.stdout,start=None,stop=None):
   """Write dump information for this file."""
 
+  global text
   # print 'D: dump(%r,base=%r,outf=%r,start=%r,stop=%r)'%(inf.name,base,outf.name,start,stop)
 
   BUFSIZE=1024 # We'll read this many bytes at a time.
@@ -44,10 +81,12 @@ def dump(inf,base=16,outf=sys.stdout,start=None,stop=None):
   if start==None: start=0
   if stop==None: stop=size
   if start<0: start=0
+  start=(start/bpl)*bpl # Back start up to the beginning of an output line.
   if stop>size: stop=size
   if stop<=start or start>size:
     return # Nothing to do.
-  aw=min(4,int(ceil(log(size,base)))) # Address digits needed for this file.
+  aw=int(ceil(log(size,base))) # Address digits needed for this file.
+  if aw<4: aw=4                # But use at least 4 digits, even for small files.
   # print 'D: dump(%r,base=%r,outf=%r,start=%r,stop=%r)'%(inf.name,base,outf.name,start,stop)
 
   # Set our address and byte format strings and column width according to base.
@@ -78,47 +117,33 @@ def dump(inf,base=16,outf=sys.stdout,start=None,stop=None):
       text=''
 
     while off<blen:
-      # print 'D: loc=%d off=%d loc+off=%d'%(loc,off,loc+off)
       if off%bpl==0:
         if loc+off>0:
+          # Print any text content from the previous line.
           if text:
             outf.write('  '+text)
             text=''
+          # End the previous line with a newline character.
           outf.write('\n')
-        # Print the address of the first byte in this output line.
+        # Print the address of this new line.
         addr=((loc+off)/bpl)*bpl
-        # print 'D: Writing address: %d'%addr
         outf.write(afmt%addr)
-      if loc+off<stop:
-        ch=ord(buf[off])
-        if opt.color and ch<32:
-          outf.write(' '+ctl+(bfmt%ch)+norm)
-        else:
-          outf.write(' '+bfmt%ch)
-        if ch<32:
-          if opt.color:
-            text+=ctl+'.'+norm
-          else:
-            text+='.'
-        else:
-          text+=buf[off]
+      # Here begins the handling of the byte values:
+      ch=buf[off]
+      val=ord(ch)
+      write_byte(outf,bfmt,val,off)
       off+=1
     else:
-      left=bpl-((loc+off)%bpl)
-      if left<bpl:
-        if opt.color:
-          outf.write(' '+blank+(' '*((cw*left)-1))+norm)
-        else:
-          outf.write(' '*(cw*left))
-      if text:
-        outf.write('  '+text)
-        if opt.color and left<bpl:
-          outf.write(blank+(' '*left)+norm)
-      # print '\nD: left=%r'%left
+      # Compute how many bytes short of a line (if any) we are.
+      bytes_short=(bpl-((loc+off)%bpl))%bpl
+      while bytes_short>0:
+        write_byte(outf,bfmt,None,off)
+        off+=1
+        bytes_short-=1
+      outf.write('  '+text)
+      loc+=blen
 
-    # Get ready to read the next chunk.
-    # print 'D: Finished with buffer at %d'%loc
-    loc+=blen
+  outf.write('\n')
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
