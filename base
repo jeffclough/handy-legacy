@@ -1,20 +1,40 @@
 #!/usr/bin/env python
+import argparse,base64,math,os,re,sys
 
-import optparse,os,re,sys
+class BaseError(Exception):
+  def __init__(self,msg):
+    super(self.__class__,self).__init__(msg)
 
- # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-#
-# Set up our alphabets. Base 16 is a special case not represented as an
-# explicit alphabet.
-#
-alphabet=dict([(len(s),s) for s in (
-  'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
-  'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567',
-  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/+',
-  '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~'
-)])
-possible_bases=tuple(sorted([16]+alphabet.keys()))
+def die(msg):
+  global cmd
+  sys.stderr.write('%s: %s'%(cmd,msg)+'\n')
+  sys.exit(1)
+
+def read_chunks(f,size):
+  """This fake iterator yields size bytes from the input file f on every
+  iteration."""
+
+  buf=f.read(size)
+  while buf:
+    yield buf
+    buf=f.read(size)
+
+def decode(function,bpl,inf,outf):
+  "Decode the input file to the output file using the given function."
+
+  for s in inf:
+    if bpl!=-1:
+      s=s.rstrip()
+    #print >>sys.stderr,'D: s=%r'%s
+    outf.write(function(s))
+
+def encode(function,bpl,inf,outf):
+  "Encode the input file to the output file using the given function."
+
+  for buf in read_chunks(inf,bpl):
+    outf.write(function(buf))
+    if bpl!=-1:
+      outf.write('\n')
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -25,124 +45,72 @@ possible_bases=tuple(sorted([16]+alphabet.keys()))
 # given. 
 #
 
+valid_bases=(16,32,64)
 cmd=os.path.basename(sys.argv[0])
-cmd_parser=re.compile(r'^(base|decode|encode)(%s)?$'%('|'.join([str(b) for b in possible_bases])))
+cmd_parser=re.compile(r'^(base|decode|encode)(%s)?$'%('|'.join([str(b) for b in valid_bases])))
 m=cmd_parser.match(cmd)
 if not m:
   sys.stderr.write('Improper command name (%s) not recognized by "base" command.'%(cmd,))
   sys.exit(1)
-print m.groups()
 
 default_action=('encode','decode')[m.groups()[0]=='decode']
 default_base=m.groups()[1]
-if not default_base:
-  default_base=0
+base_required=default_base==None
 
-op=optparse.OptionParser(
-  add_help_option=False,
-  usage='%s [OPTION ...] [INPUT_FILE]'%cmd,
-  description="""With no FILE, or when FILE is -, read standard input.
+ap=argparse.ArgumentParser(
+  usage="%(prog)s [OPTIONS] [infile [outfile]]",
+  description="Base 16 encodes 1 byte into two characters. Base 32 encodes 5 bytes into 8 characters. Base 64 encodes 3 bytes into 4 characters. We like base 64."
+)
+ap.add_argument('--base','-b',type=int,choices=valid_bases,default=default_base,required=base_required,help="Use this base for encoding or decoding. (default: %(default)s)")
+ap.add_argument('--encode','-e',dest='action',action='store_const',const='encode',default=default_action,help="Encode binary data to output.")
+ap.add_argument('--decode','-d',dest='action',action='store_const',const='decode',help="Decode previously encoded data to output.")
+ap.add_argument('--wrap','-w',metavar='N',type=int,nargs='?',help="Wrap encoded output lines to fit within N characters (plus a new-line character). This is currently only implemented for base 64.")
+ap.add_argument('--alt',default=None,help="Give two characters to use in the base 64 alphabet rather than / and +.")
+ap.add_argument('infile',nargs='?',default=None,help="If given, input is read from this file. Otherwise, input is read from standard input.")
+ap.add_argument('outfile',nargs='?',default=None,help="If given, output is written to this file. Otherwise, output is written to standard output.")
+opt=ap.parse_args()
 
-The data are encoded as described for the base64 alphabet in RFC 3548. When decoding, the input may contain newlines in addition to the bytes of the formal base64 alphabet. Use --ignore-garbage to attempt to recover from any other non-alphabet bytes in the encoded stream."""
-)
-
-op.add_option(
-  '-d','--decode',dest='action',action='store_const',const='decode',default=default_action,
-  help="Decode previously encoded ASCII input to (possibly) binary output. (%s by default.)"%(('Off','On')[default_action=='decode'])
-)
-op.add_option(
-  '-e','--encode',dest='action',action='store_const',const='encode',
-  help="Encode (possibly) binary input data to ASCII output. (%s by default.)"%(('Off','On')[default_action=='encode'])
-)
-op.add_option(
-  '-i','--ignore-garbage',dest='ignore_garbage',action='store_true',default=False,
-  help="When decoding, ignore non-alphabet characters. (default: %default)"
-)
-op.add_option(
-  '-w','--wrap',dest='wrap',metavar='COLS',action='store',type='int',default=76,
-  help="Wrap encoded lines after COLS character (default 76). Use 0 to disable line wrapping. (default: %default)"
-)
-#op.add_option(
-#  '-i','--input',dest='input',action='store',default=None,
-#  help="Read input from this file. Default is stdin; passing - also represents stdin."
-#)
-op.add_option(
-  '-o','--output',dest='output',metavar='FILENAME',action='store',default=None,
-  help="Write output to this file.  Default is stdout; passing - also represents stdout. (default: stdout)"
-)
-op.add_option(
-  '-b','--base',dest='base',action='store',type='int',default=default_base,
-  help="Specify what base %r to encode or decode with. If the name used to invoke this command (e.g. base64) doesn't give a base, this option MUST be used to specify one. (default: %%default)"%(possible_bases,)
-)
-op.add_option(
-  '-h','--help',dest='help',action='store_true',default=False,
-  help="Show this help message, and exit."
-)
-opt,args=op.parse_args()
-
-if args:
-  if len(args)>1:
-    sys.stderr.write("Too many input files given to %s: %s"%(cmd,' '.join([repr(s) for s in args])))
-    sys.exit(1)
-  opt.input=args[0]
-else:
-  opt.input='-'
-
-if opt.output==None:
-  opt.output='-'
-
-if opt.help:
-  op.print_help()
+if opt.infile==None and os.isatty(sys.stdin.fileno()):
+  ap.print_help()
   sys.exit(0)
 
-print 'DEBUG: opt.action=%r'%(opt.action,)
-print 'DEBUG: opt.ignore_garbage=%r'%(opt.ignore_garbage,)
-print 'DEBUG: opt.wrap=%r'%(opt.wrap,)
-print 'DEBUG: opt.output=%r'%(opt.output,)
-print 'DEBUG: opt.base=%r'%(opt.base,)
-
-if opt.base==0:
-  sys.stderr.write('%s was called with no -b (--base) option.'%cmd)
-  sys.exit(1)
-
- # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-#
-# Open input and output files in modes conducive to whatever operation we're
-# performing. If writing to standard output, be sure to append.
-#
-
-fin=fout=None
-if opt.output=='-':
-  fout_mode='a' # append if we're writing to standard output.
+# Set up encoding or decoding and what base64 module function to use.
+if opt.action==None:
+  opt.action='encode'
+func=eval('base64.b%d%s'%(opt.base,opt.action))
+if opt.action=='decode':
+  opt.action=decode
 else:
-  fout_mode='w'
-if opt.action=='encode':
-  fin_mode='rb'
+  opt.action=encode
+
+# Figure the buffer size that will give us the requested wrapping limit.
+# The buffer size should be the largest multible to b that yields no more
+# than opt.wrap characters of output per line.
+try:
+  if opt.wrap:
+    if opt.base==16:
+      raise BaseError('--wrap option cannot be used with base %d.'%opt.base)
+      b,c=1,2
+    elif opt.base==32:
+      raise BaseError('--wrap option cannot be used with base %d.'%opt.base)
+      b,c=5,8
+    elif opt.base==64:
+      b,c=3,4
+    buffer_size=int(float(opt.wrap)/c*b)/b*b
+  else:
+    buffer_size=-1 # Read the whole file.
+except BaseError,e:
+  die(e.message)
+
+# Open our input and output files.
+if opt.infile:
+  inf=open(opt.infile,'rb')
 else:
-  fin_mode='r'
-  fout_mode+='b'
-if opt.input=='-':
-  fin=os.fdopen(sys.stdin.fileno(),fin_mode)
+  inf=os.fdopen(sys.stdin.fileno(),'rb')
+if opt.outfile:
+  outf=open(opt.outfile,'wb')
 else:
-  fin=open(opt.input,fin_mode)
-if opt.output=='-':
-  fout=os.fdopen(sys.stdout.fileno(),fin_mode)
-else:
-  fout=open(opt.output,fout_mode)
+  outf=os.fdopen(sys.stdout.fileno(),'wb')
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
- # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-# TODO: Now do what we came here to do.
-
-def decode(inf,outf,alphabet):
-  pass
-
-def encode(inf,outf,alphabet):
-  pass
-
-if opt.action=='encode':
-  pass
-else: # decode
-  pass
+# Do whatever it is that we've set ourselves up to do.
+opt.action(func,buffer_size,inf,outf)
