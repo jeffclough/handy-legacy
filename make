@@ -72,9 +72,9 @@ SCRIPTS=( # These targets are simply copied during installation.
 # Add all the base*, decode*, and encode* variants to SCRIPTS.
 SCRIPTS=tuple(
   [x for x in SCRIPTS]
-  +['base%d'%b for b in (16,26,32,64,85)]
-  +['decode%d'%b for b in (16,26,32,64,85)]
-  +['encode%d'%b for b in (16,26,32,64,85)]
+  +['base%d'%b for b in (16,32,64)]
+  +['decode%d'%b for b in (16,32,64)]
+  +['encode%d'%b for b in (16,32,64)]
 )
 
 DATA=( # Copy these data files to make.opt.prefix/etc.
