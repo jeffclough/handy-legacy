@@ -160,7 +160,7 @@ if args:
 
   # Match one of our timestamp input formats.
   #pprint.pprint(tf)
-  parsed=False
+  tstruct=None
   for desc,pat,functions in tf:
     #print 'D: trying %r'%(pat.pattern,)
     m=pat.search(ts)
@@ -179,12 +179,11 @@ if args:
       for validate,parse in functions:
         if validate(td):
           tstruct=parse(td)
-          parsed=True
           break
-      if parsed:
+      if tstruct!=None:
         break
-  if not m:
-    print >>sys.stdout,'Unrecognized time format in argument: %r'%ts
+  if tstruct==None:
+    print >>sys.stderr,'Unrecognized time format in argument: %r'%ts
     sys.exit(1)
   # Convert our parset time.time_struct object to a Unix Epoch time value.
   t=int(time.mktime(tstruct))
