@@ -29,7 +29,6 @@ CPROGS=( # Compile these targets from C source files.
   'freq',
   'mix',
   'numlines',
-  'ph',
   'portname',
   'randword',
   'secdel',
@@ -60,6 +59,7 @@ SCRIPTS=( # These targets are simply copied during installation.
   'not',
   'now',
   'pa',
+# 'ph',  # Don't install this one until it's working.
   'pretty-json',
   'pwgen',
   'pygrep',
