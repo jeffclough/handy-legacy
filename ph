@@ -159,7 +159,7 @@ if __name__=='__main__':
       csv.writer(sys.stdout).writerows(entries)
     elif arg.format=='python':
       for ent in q.responses():
-        print repr(ent)
+        print repr(ent.d)
     elif arg.format=='raw':
       for line in q.rawResponses():
         sys.stdout.write(line)
