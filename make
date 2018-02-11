@@ -59,7 +59,7 @@ SCRIPTS=( # These targets are simply copied during installation.
   'not',
   'now',
   'pa',
-# 'ph',  # Don't install this one until it's working.
+  'ph',  # Don't install this one until it's working.
   'pretty-json',
   'pwgen',
   'pygrep',
