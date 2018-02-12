@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 
 ##
-## If make this file a Python module by renaming it to have a .py extension,
-## you can use it to as a CCSO Python API.
+## If you make this file a Python module by renaming it to have a .py
+## extension (or maybe just symlink a .py directory entry to it), you
+## can use it as a CCSO Python API.
 ##
 ## See the code at the bottom of this file for examples of how to use the
 ## Search and Entry classes defined below.
@@ -20,7 +21,8 @@ class Error(Exception):
 
 class Entry(object):
   """This thin wrapper around a dictionary holds a single item's data and
-  and is returned from the Search.responses() generator function."""
+  and is returned from the Search.responses() generator function.
+  """
 
   def __init__(self,field_dict):
     self.d=field_dict
@@ -34,6 +36,22 @@ class Entry(object):
     return '\n'.join(['%*s: %s'%(w,f,self.d[f]) for f in fields])
 
   def __repr__(self):
+    """Return a string that eval() could use to re-create this object. My
+    own desire that equal Entry objects produce identical repr() strings is
+    the only reason the code below is so complicated.
+
+    >>> a=Entry(dict(name='X',email='Y@Z',title='ABC'))
+    >>> b=Entry(dict(name='X',title='ABC',email='Y@Z'))
+    >>> c=Entry(dict(email='Y@Z',name='X',title='ABC'))
+    >>> repr(a)
+    "Entry({'email': 'Y@Z', 'name': 'X', 'title': 'ABC'})"
+    >>> repr(b)
+    "Entry({'email': 'Y@Z', 'name': 'X', 'title': 'ABC'})"
+    >>> repr(c)
+    "Entry({'email': 'Y@Z', 'name': 'X', 'title': 'ABC'})"
+    """
+
+
     return '%s(%s)'%(
       self.__class__.__name__,
       '{%s}'%', '.join(['%r: %r'%(f,self.d[f]) for f in sorted(self.d.keys())])
@@ -112,13 +130,21 @@ if __name__=='__main__':
 
   import argparse,csv,json,sys
 
+  if sys.argv[0].endswith('.py'):
+    # Run our unit tests if this file looks like a Python module.
+    import doctest
+    failed,tested=doctest.testmod()
+    if failed:
+      sys.exit(1)
+    # Continue to process whatever's on the command line if all tests pass.
+
   p=argparse.ArgumentParser(
     description="This is a PH (a.k.a. CCSO) command line client. See RFC 2378 for technical details. The default output format is very human-readable, but JSON, CSV, Python, and raw output are also available. See the various values of the --format option.\n"
   )
   #p.add_argument('-v',dest='verbose',action='count',default=0,help="Enables diagnostic output.")
   p.add_argument('--host',dest='host',action='store',default='ph.gatech.edu',help="Name of PH server. (default: %(default)s)")
   p.add_argument('--port',dest='port',action='store',type=int,default=105,help="Port the PH server is listening on. (default: %(default)s)")
-  p.add_argument('--format',dest='format',choices=('human','csv','json','json-pretty','python','raw'),default='human',help="Output format. Most of these are self-explanatory, but \"raw\" writes the unprocessed CCSO response to standard output. (default: %(default)s)")
+  p.add_argument('-f','--format',dest='format',choices=('human','csv','json','json-pretty','python','raw'),default='human',help="Output format. Most of these are self-explanatory, but \"raw\" writes the unprocessed CCSO response to standard output. (default: %(default)s)")
   p.add_argument('name',nargs=argparse.REMAINDER,help="Name of the person to be looked up, optionally followed by the word \"return\" and either a list of either field names or the word \"all\".")
   arg=p.parse_args()
   arg.name=' '.join([x.strip() for x in arg.name])

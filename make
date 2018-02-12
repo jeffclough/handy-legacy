@@ -107,6 +107,7 @@ make.Installer(
   make.path(make.opt.prefix,'lib','python'),
   make.path('pylib','*'),
 )
+make.symlink('../../bin/ph',make.path(make.opt.prefix,'lib','python','ccso.py'))
 
 for target in make.args:
   if target=='clean':

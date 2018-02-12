@@ -521,6 +521,29 @@ def make(target_name):
   for target in getTargetsByName(target_name):
     target.build()
 
+def symlink(target,link):
+  """Create a symlink from link to target. If link already exists and is a
+  symlink to link, no action is taken. Otherwise, target (whether it is a
+  symlink or a regular file) is replaced with a symlink to link."""
+
+  if os.path.lexists(link):
+    if os.path.islink(link):
+      ltarget=os.path.abspath(os.readlink(link))
+      if ltarget==os.path.abspath(target):
+        # The symlink already points to where it should go.
+        return
+      # Remove this miscreant symlink.
+      print 'Removing %s --> %s'%(link,os.readlink(link))
+      if not opt.dryrun:
+        os.remove(link)
+    elif os.path.isdir(link):
+      raise Error('%s exists but is a directory.'%link)
+    else:
+      os.remvoe(link)
+  print 'Creating %s --> %s'%(link,target)
+  if not opt.dryrun:
+    os.symlink(target,link)
+
 # I'd like to be able to call make.path() rather than os.path.join() ...
 # so here you go.
 path=os.path.join
