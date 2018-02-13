@@ -128,7 +128,7 @@ class Search(object):
 if __name__=='__main__':
   # The code below runs ONLY if this file is executed directly.
 
-  import argparse,csv,json,sys
+  import argparse,csv,sys
 
   if sys.argv[0].endswith('.py'):
     # Run our unit tests if this file looks like a Python module.
@@ -163,6 +163,11 @@ if __name__=='__main__':
       if i>0:
         print '-----------------------------'
     elif arg.format.startswith('json'):
+      try:
+        import json
+      except:
+        sys.stderr.write('Your default version of Python does not support JSON. Update to Python 2.6 if you need JSON support.\n')
+        sys.exit(1)
       data=dict(
         responses=[ent.d for ent in q.responses()],
         result=q.result # <--- Meaningful ONLY after q.responses() iterator finishes!
@@ -190,5 +195,10 @@ if __name__=='__main__':
       for line in q.rawResponses():
         sys.stdout.write(line)
   except Exception,e:
-    sys.stderr.write(str(e)+'\n')
-    sys.exit(1)
+    if isinstance(e,SystemExit):
+      # Respect the deeper code's exit status.
+      sys.exit(e.code)
+    else:
+      # Report whatever went wrong and die.
+      sys.stderr.write(str(e)+'\n')
+      sys.exit(1)
