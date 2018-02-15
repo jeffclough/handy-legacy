@@ -2,7 +2,6 @@
 *.pyc
 datecycle
 freq
-mix
 numlines
 portname
 randword
