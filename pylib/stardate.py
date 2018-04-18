@@ -15,32 +15,32 @@ spsd=(time.mktime(DT(2400,1,1).timetuple())-time.mktime(DT(2000,1,1).timetuple()
 class Error(Exception):
   pass
 
-class StarDate(object):
+class Stardate(object):
 
   __slots__=('t',)
 
   def __init__(self,t=None):
-    "See StarDate.set()."
+    "See Stardate.set()."
 
     self.set(t)
 
   def __repr__(self):
-    return "StarDate(%r)"%(self.toDatetime())
+    return "Stardate(%r)"%(self.toDatetime())
 
   def __str__(self):
-    return 'stardate %0.1f'%self.t
+    return '%0.1f'%self.t
 
   def set(self,t):
-    """Set this StarDate object from any of several time types:
+    """Set this Stardate object from any of several time types:
 
-    StarDate
+    Stardate
     datetime.date
     datetime.datetime
     Unix Epoch integer - Number of seconds since 1970-01-01
-    None               - New StarDate object gets the current time.
+    None               - New Stardate object gets the current time.
     """
 
-    if isinstance(t,StarDate):
+    if isinstance(t,Stardate):
       # Copy the stardate right out of the other object.
       self.t=t.t
     else:
@@ -54,7 +54,7 @@ class StarDate(object):
         # Convert either date or datetime to stardate
         self.t=(time.mktime(t.timetuple())-sdzero)/spsd
       else:
-        raise Error("StarDate can't be set from %r."%(t,))
+        raise Error("Stardate can't be set from %r."%(t,))
 
   def toUnixEpoch(self):
     "Return the Unix Epoch value of this stardate."
@@ -85,8 +85,8 @@ class StarDate(object):
 
   def __cmp__(self,other): return self.t-other.t
 
-  def __add__(self,other): return StarDate(self.t+float(other))
-  def __sub__(self,other): return StarDate(self.t-float(other))
+  def __add__(self,other): return Stardate(self.t+float(other))
+  def __sub__(self,other): return Stardate(self.t-float(other))
 
   def __iadd__(self,other):
     self.t+=float(other)
