@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import csv,optparse,os,re,sys
+import csv,errno,optparse,os,re,sys
 import OptionParserFormatters
 try:
   import xlrd
@@ -126,6 +126,12 @@ help="Specify the CSV writer's dialect, using the same syntax as for --reader. (
 op.add_option('--worksheet',dest='worksheet',action='store',default=0,
 help="""Set the number or name of the worksheet to read from the Excel spreadsheet, assuming we're reading and XLS file.""")
 
+op.add_option('--icond',dest='icond',action='store',default=None,
+help="""A Python expression evaluated just after each input record is read. That record will be processed only of the expression evaluates to a value Python regards as True.""") 
+
+op.add_option('--ocond',dest='ocond',action='store',default=None,
+help="""A Python expression evaluated just before each output record is written. That record will be written only of the expression evaluates to a value Python regards as True.""") 
+
 #op.add_option('--debug',dest='debug',action='store_true',default=False,
 #help="You don't need this.")
 
@@ -148,6 +154,9 @@ except CsvDialectError,e:
   die("Bad CSV writer dialect: %r"%e.dialect_spec)
 except:
   raise
+
+if opt.icond:
+  opt.icond=compile(opt.icond,'icond','eval')
 
 # Validate our field stripping specification.
 for ch in opt.strip:
@@ -172,13 +181,13 @@ def parseRangeList(s):
     else:
       n,m=r
       if n=='':
-	n=0
+        n=0
       else:
-	n=int(n)-1
+        n=int(n)-1
       if m=='':
-	m=None
+        m=None
       else:
-	m=int(m)
+        m=int(m)
     f.append((n,m))
   return f
 
@@ -259,59 +268,82 @@ re_excel_filename=re.compile(r'\.xls[^.]*$')
 # Prepare for CSV output.
 writer=csv.writer(open('/dev/stdout','wb'),dialect=opt.writer)
 
-for filename in args:
-  if filename=='-':
-    filename='/dev/stdin'
-  else:
-    filename=os.path.expanduser(filename) # Expands '~' to $HOME.
-  if re_excel_filename.search(filename):
-    if XLRD:
-      reader=xlsreader(filename,opt.worksheet)
+ORN=0 # Output line number
+IRN=0 # Input line number
+OREC=[]
+IREC=[]
+try:
+  for filename in args:
+    if filename=='-':
+      filename='/dev/stdin'
     else:
-      print >>sys.stderr,'%s: Cannot process Excel files without the xlrd module.'%progname
-      sys.exit(1)
-      
-  else:
-    reader=csv.reader(open(filename,'rb'),dialect=opt.reader)
+      filename=os.path.expanduser(filename) # Expands '~' to $HOME.
+    if re_excel_filename.search(filename):
+      if XLRD:
+        reader=xlsreader(filename,opt.worksheet)
+      else:
+        print >>sys.stderr,'%s: Cannot process Excel files without the xlrd module.'%progname
+        sys.exit(1)
+        
+    else:
+      reader=csv.reader(open(filename,'rb'),dialect=opt.reader)
 
-  #print 'opt.fields=%r'%opt.fields
-  #print 'opt.joinfields=%r'%opt.joinfields
-  #if opt.joinfields:
-  #  print 'opt.joinchar=%r'%opt.joinchar
-  #sys.exit(0)
+    #print 'opt.fields=%r'%opt.fields
+    #print 'opt.joinfields=%r'%opt.joinfields
+    #if opt.joinfields:
+    #  print 'opt.joinchar=%r'%opt.joinchar
+    #sys.exit(0)
 
-  input_line=0
-  for row in reader:
-    # Skip initial lines according to opt.skip.
-    input_line+=1
-    if input_line<=opt.skip:
-      continue
+    IRN=0
+    for IREC in reader:
+      # Skip initial lines according to opt.skip.
+      IRN+=1
+      if IRN<=opt.skip:
+        continue
 
-    # Join any field ranges we've been told to.
-    for n,m in opt.joinfields:
-      row[n:m]=[opt.joinchar.join([x for x in row[n:m] if x])]
+      # Enforce the input condition if available.
+      if opt.icond and not eval(opt.icond):
+        continue
 
-    # Make list of only the fields we want to keep.
-    fields=[]
-    for n,m in opt.fields:
-      fields.extend(row[n:m])
+      # Join any field ranges we've been told to.
+      for n,m in opt.joinfields:
+        IREC[n:m]=[opt.joinchar.join([x for x in IREC[n:m] if x])]
 
-    # Apply any stripping options the user specified.
-    if opt.strip:
-      fields=[stripfield(x,opt.strip) for x in fields]
+      # Make list of only the fields we want to keep.
+      OREC=[]
+      for n,m in opt.fields:
+        OREC.extend(IREC[n:m])
 
-    # Output the data as the user requested.
-    if opt.fmt: # Output formatted field values.
-      s=opt.fmt
-      field_indices=range(len(fields))
-      field_indices.reverse()
-      for i in field_indices:
-	s=s.replace('%'+str(i+1),fields[i])
-      print s
-    elif (opt.vars): # Output shell-executable variable assignments.
-      fields=[re_escape.sub(r'\\\1',f) for f in fields]
-      if (opt.vars)>len(fields): # Protect against initialization issues.
-        fields.extend(['']*(len(opt.vars)-len(fields)))
-      print ';'.join(['%s="%s"'%(v,f) for v,f in zip(opt.vars,fields)])
-    else: # Output CSV.
-      writer.writerows([fields])
+      # Apply any stripping options the user specified.
+      if opt.strip:
+        OREC=[stripfield(x,opt.strip) for x in OREC]
+
+      # Output the data as the user requested, depending on the output
+      # condition if available.
+      ORN+=1
+      if opt.ocond and not eval(opt.ocond):
+        continue
+      # Encode as utf-8 our resulting list of string field values.
+      OREC=[val.encode('utf-8') for val in OREC]
+      # Figure out how we're supposed to output this record.
+      if opt.fmt: # Output formatted field values.
+        s=opt.fmt
+        field_indices=range(len(OREC))
+        field_indices.reverse()
+        for i in field_indices:
+          s=s.replace('%'+str(i+1),OREC[i])
+        print s
+      elif (opt.vars): # Output shell-executable variable assignments.
+        OREC=[re_escape.sub(r'\\\1',f) for f in OREC]
+        if (opt.vars)>len(OREC): # Protect against initialization issues.
+          OREC.extend(['']*(len(opt.vars)-len(OREC)))
+        print ';'.join(['%s="%s"'%(v,f) for v,f in zip(opt.vars,OREC)])
+      else: # Output CSV.
+          writer.writerows([OREC])
+except IOError,e:
+  print >>sys.stderr,'%s: %s'%(sys.argv[0],e)
+  sys.exit(2)
+except:
+  print >>sys.stderr,'\n%s %d: %r'%(filename,IRN,IREC)
+  print >>sys.stderr,'OREC: %r'%(OREC)
+  raise
