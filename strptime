@@ -6,6 +6,8 @@ import time as _time
 
 now=datetime.today()
 sametime=timedelta(0)
+oneday=timedelta(1)
+oneweek=timedelta(7)
 
 class TimeZone(tzinfo):
   # Keep a dictionary of every TimeZone object that's created.
@@ -148,6 +150,17 @@ def get_month_by_name(month_name):
       return i+1
   return None
 
+def beginning_of_day(dt):
+  """Return dt with the time components set to midnight."""
+
+  return datetime(dt.year,dt.month,dt.day,0,0,0,0,dt.tzinfo)
+
+def end_of_day(dt):
+  """Return dt with the time components set to the last "instant" of
+  that day."""
+
+  return datetime(dt.year,dt.month,dt.day,23,59,59,999999,dt.tzinfo)
+
 class ParserBase(object):
   """This is the base class of all other time parsers. Treat it as an
   abstract base class."""
@@ -157,15 +170,64 @@ class ParserBase(object):
 
   # This is a sequence of compiled REs. This parser can parse only strings
   # that match one of these REs in their entirety.
-  patterns=(
-  )
+  #patterns=(
+  #)
 
   # Parse the given string and return an object representing that time. If
   # the string cannot be parsed, return None.
-  def parse(time_string):
+  def parse(self,time_string):
     return None
 
+class EnglishTimeParser(ParserBase):
+  """
+  [(this time | end of)] (now | today | tomorrow | yesterday)
+  """
+
+  name="English Time Reference"
+
+  def parse(self,time_string):
+    # Regualarize whitespace characters in our time string.
+    ts=' '.join([s.strip() for s in time_string.split()])
+
+    # We don't care about case.
+    ts=ts.lower()
+
+    # Remember whether the called applied a "this time" or "end of" operator.
+    this_time=end_of=False
+    if ts.startswith('this time '):
+      this_time=True
+      ts=ts[len('this time '):]
+    elif ts.startswith('end of '):
+      end_of=True
+      ts=ts[len('end of '):]
+    dt=datetime.now()
+
+    # See what relative day this phrase expresses.
+    if ts in ('this time','now'):
+      # A naked "this time" operator also means "now".
+      this_time=True # Yes. Even if "this time " is missing.
+    elif ts=='today':
+      pass # Same as now, but rely on "this time " phrase to keep time of day.
+    elif ts=='yesterday':
+      dt-=oneday
+    elif ts=='tomorrow':
+      dt+=oneday
+    else:
+      dt=None
+
+    # Adjust for "end of" or don't adjust for "this time" operators.
+    if end_of:
+      dt=end_of_day(dt)
+    elif not this_time:
+      dt=beginning_of_day(dt)
+    return dt
+
 class DateTimeParser(ParserBase):
+  """
+  YYYY-mm-dd HH:MM:SS
+  [dow] mmm dd hh:mm:ss [tz] yyyy
+  """
+
   name="Full Date and Time"
   patterns=(
     # YYYY-mm-dd HH:MM:SS
@@ -213,6 +275,7 @@ class DateTimeParser(ParserBase):
 
 parsers=(
   DateTimeParser(),
+  EnglishTimeParser(),
 )
 
 if args:
