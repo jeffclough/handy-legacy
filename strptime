@@ -4,7 +4,18 @@ import optparse,os,re,sys
 from datetime import *
 import time as _time
 
-now=datetime.today()
+def warn(msg):
+  sys.stderr.write(os.path.basename(sys.argv[0])+': '+msg+'\n')
+
+def die(msg,rc=1):
+  warn(msg)
+  sys.exit(rc)
+
+def delta_seconds(td):
+  return td.seconds+td.days*86400
+
+tsnow=_time.time()
+now=datetime.fromtimestamp(tsnow)
 sametime=timedelta(0)
 oneday=timedelta(1)
 oneweek=timedelta(7)
@@ -12,22 +23,59 @@ oneweek=timedelta(7)
 class TimeZone(tzinfo):
   # Keep a dictionary of every TimeZone object that's created.
   zones={} # key=time zone name, value=TimeZone instance
+
+  # Remember our local time zone when we see it.
+  localtz_offset=int(
+    _time.mktime(now.timetuple())-_time.mktime(datetime.utcfromtimestamp(tsnow).timetuple())
+  )
+  localtz=None
   
+  @classmethod
+  def byName(cls,tzname):
+    """Find and return a class of the given name, ignoring case. If
+    none is found, return None."""
+
+    if not tzname:
+      tzname=''
+    return cls.zones.get(tzname.lower(),cls.localtz)
+
   def __init__(self,std_name,std_minutes,dst_name,dst_minutes):
-    "Initialize and remember this TimeZone object."
+    "Initialize this TimeZone object and register its names."
 
     self.std_name=std_name
     self.std_offset=timedelta(minutes=std_minutes)
     self.dst_name=dst_name
     self.dst_offset=timedelta(minutes=std_minutes+dst_minutes)
+
+    # Register the names of TimeZone instance.
     TimeZone.zones[self.std_name.lower()]=self
     TimeZone.zones[self.dst_name.lower()]=self
+
+    # If we haven't seen our local time zone yet, see if this is it.
+    if TimeZone.localtz==None:
+      if TimeZone.localtz_offset==delta_seconds(self.utcoffset(datetime.now())):
+        TimeZone.localtz=self
 
   def __del__(self):
     "Remove this dying object from TimeZone.zones."
 
     del TimeZone.zones[self.std_name.lower()]
     del TimeZone.zones[self.dst_name.lower()]
+
+  def __repr__(self):
+    "Return a string that could reconstruct this object."
+
+    return 'TimeZone(%r,%r,%r,%r)'%(
+      self.std_name,
+      delta_seconds(self.std_offset)/60,
+      self.dst_name,
+      delta_seconds(self.dst_offset-self.std_offset)/60
+    )
+
+  def __str__(self):
+    "Return a humanly readable representation of this object's value."
+
+    return self.tzname()
 
   def utcoffset(self,dt):
     """Return a timedelta object holding the difference from UTC to this
@@ -71,16 +119,44 @@ class TimeZone(tzinfo):
   def _is_dst(self,dt=None):
     if dt==None:
       dt=datetime.today()
-    return _time.localtime(_time.mktime(dt.timetuple())).tm_isdst==1
+    #t=dt.timetuple()
+    t=(dt.year,dt.month,dt.day,dt.hour,dt.minute,dt.second,0,0,-1)
+    t=_time.mktime(t)
+    t=_time.localtime(t)
+    return t.tm_isdst==1
 
-tz_utc=TimeZone('UTC',0,'UTC',0)
-tz_us_atlantic=TimeZone('AST',-4*60,'ADT',60)
-tz_us_eastern=TimeZone('EST',-5*60,'EDT',60)
-tz_us_central=TimeZone('CST',-6*60,'CDT',60)
-tz_us_mountain=TimeZone('MST',-7*60,'MDT',60)
-tz_us_pacific=TimeZone('PST',-8*60,'PDT',60)
+# Time Zones
 tz_us_aleutian=TimeZone('HAST',-10*60,'HADT',60)
+tz_us_pacific=TimeZone( 'PST',  -8*60,'PDT', 60)
+tz_us_mountain=TimeZone('MST',  -7*60,'MDT', 60)
+tz_us_central=TimeZone( 'CST',  -6*60,'CDT', 60)
+tz_us_eastern=TimeZone( 'EST',  -5*60,'EDT', 60)
+tz_us_atlantic=TimeZone('AST',  -4*60,'ADT', 60)
+tz_utc=TimeZone(        'UTC',      0,'UTC',  0)
+tz_gmt=TimeZone(        'GMT',      0,'GMT',  0)
+tz_eu_western=TimeZone( 'WET',      0,'WEST',60) # Western European Time
+tz_eu_central=TimeZone( 'CET',     60,'CEST',60) # Central European Time
+tz_eu_eastern=TimeZone( 'EET',   2*60,'EEST',60) # Eastern European Time
 
+# Figure out which one is our local time zone.
+#localtz=int(
+#  _time.mktime(now.timetuple())-_time.mktime(datetime.utcfromtimestamp(tsnow).timetuple())
+#)
+#for tz in TimeZone.zones.values():
+#  if localtz==delta_seconds(tz.utcoffset(now)):
+#    localtz=tz
+#    break
+#else:
+
+if TimeZone.localtz==None:
+  # Kludge for unknown local time zone
+  TimeZone('LST',localtz/60,'LDT',60)
+  warn('WARNING: Cannot determine local time zone. Using %r'%(TimeZone.localtz,))
+
+# Make our global now variable offset-aware.
+now=datetime.now(TimeZone.localtz)
+
+# There should be only one, but ... we have several to choose from.
 epochs=dict(
   microsoft=datetime(1,1,1,0,0,0,0,tz_utc),
   ad=datetime(1601,1,1,0,0,0,0,tz_utc),
@@ -96,20 +172,26 @@ epoch_names=sorted(epochs.keys())
 op=optparse.OptionParser(
   usage="%prog [OPTIONS] arguments expressing date and time"
 )
-op.add_option('--age',metavar='UNITS',dest='age',choices=('seconds','minutes','hours','days','time'),help="Request the age of the given date and time, and give the desired units (days, hours, minutes, or seconds). The 'time' units value gives an output format of '[-][DAYSd ]%HH:%MM:%SS'. Only integer values are returned, and there is no rounding. Future times return a negative age.")
-op.add_option('--epoch',dest='epoch',choices=epoch_names,help="Output the number of seconds elapsed from the beginning of given epoch to the given time. Negative values are given for times that predate the epoch. Epoch choices: %s"%(', '.join(epoch_names)))
+op.add_option('--age',metavar='UNITS',dest='age',choices=('seconds','minutes','hours','days','time'),help="Request the age of the given date and time, and give the desired units (days, hours, minutes, or seconds). The 'time' units value gives an output format of '[-][DAYSd ]%HH:%MM:%SS'. Only integer values are returned, and there is no rounding. Future times return a negative values.")
+op.add_option('--youth',metavar='UNITS',dest='youth',choices=('seconds','minutes','hours','days','time'),help="This is exactly like --age above, but the sign of the result is inverted. So future times return a positive values.")
+op.add_option('--epoch',dest='epoch',choices=epoch_names,help="Output the number of seconds elapsed from the beginning of given epoch to the given time. Negative values are given for times that predate the epoch. (Epoch choices: %s) The --age option can be used to change the reported epoch value from seconds to something else. And the --youth option will invert the sign of the result in its usual fashion."%(', '.join(epoch_names)))
 op.add_option('-f',dest='format',action='store',default='%Y-%m-%d %H:%M:%S',help="Set the output format. See 'man strptime' for the format syntax. (default: %default)")
 opt,args=op.parse_args()
+
+if opt.age and opt.youth:
+  op.error("The --age and --youth cannot both be used.")
+
+if opt.youth!=None:
+  opt.age=opt.youth
+  opt.invert=True # Invert --age's result.
+else:
+  opt.invert=False
 
 if opt.epoch!=None:
   opt.epoch=epochs[opt.epoch]
   if opt.age==None:
     # Because the --age logic is going to do most of --epoch's work.
     opt.age='seconds'
-
-def die(msg,rc=1):
-  sys.stderr.write(os.path.basename(sys.argv[0])+': '+msg+'\n')
-  sys.exit(rc)
 
 months=(
   'january',
@@ -224,8 +306,9 @@ class EnglishTimeParser(ParserBase):
 
 class DateTimeParser(ParserBase):
   """
-  YYYY-mm-dd HH:MM:SS
+  YYYY-mm-dd HH:MM:SS [tz]
   [dow] mmm dd hh:mm:ss [tz] yyyy
+  [dow] mmm dd hh:mm:ss yyyy [tz]
   """
 
   name="Full Date and Time"
@@ -238,6 +321,17 @@ class DateTimeParser(ParserBase):
       r'(?P<hour>\d+):'
       r'(?P<minute>\d+):'
       r'(?P<second>\d+)'
+    ),
+    # [dow] mmm dd hh:mm:ss yyyy [tz]
+    re.compile(
+      r'((?P<dow>\w+)\s+)?'
+      r'(?P<month>\w+)\s'
+      r'(?P<day>\d+)\s+'
+      r'(?P<hour>\d+):'
+      r'(?P<minute>\d+):'
+      r'(?P<second>\d+)\s+'
+      r'((?P<year>\d+)\s+)'
+      r'(?P<tz>\w+)?'
     ),
     # [dow] mmm dd hh:mm:ss [tz] yyyy
     re.compile(
@@ -266,8 +360,9 @@ class DateTimeParser(ParserBase):
         d.minute=int(d.minute)
         d.second=int(d.second)
         d.year=int(d.year)
+        d.tz=TimeZone.byName(d.tz)
         try:
-          dt=datetime(d.year,d.month,d.day,d.hour,d.minute,d.second)
+          dt=datetime(d.year,d.month,d.day,d.hour,d.minute,d.second,0,d.tz)
           return dt
         except ValueError,e:
           die("""Error in "%s", parsed by "%s": %s"""%(time_string,p.pattern,str(e)))
@@ -279,12 +374,12 @@ parsers=(
 )
 
 if args:
-  if (' '.join(args)).strip()=='test':
+  time_string=' '.join([x.strip() for x in ' '.join(args).split()])
+  if time_string=='test':
     print 'Time Zones:'
     for tz in sorted(TimeZone.zones.keys()):
       print TimeZone.zones[tz].tzname()
     sys.exit(0)
-  time_string=' '.join(args)
 else:
   # Use the current time if none is given.
   time_string=str(datetime.today().strftime('%Y-%m-%d %H:%M:%S'))
@@ -297,13 +392,16 @@ for p in parsers:
       ##
       ## Handle --epoch, which is really just some pre-processing for --age.
       ##
-      delta=int((dt-opt.epoch).total_seconds())
+      #delta=int((dt-opt.epoch).total_seconds())
+      delta=delta_seconds(dt-opt.epoch)
     if opt.age!=None:
       ##
       ## Handle --age.
       ##
       if delta==None:
-        delta=int((now-dt).total_seconds())
+        delta=delta_seconds(now-dt)
+      if opt.invert:
+        delta=-delta
       if delta<0:
         output='-'
         delta=-delta
