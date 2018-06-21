@@ -235,12 +235,16 @@ def get_month_by_name(month_name):
 def beginning_of_day(dt):
   """Return dt with the time components set to midnight."""
 
+  if dt==None:
+    return None
   return datetime(dt.year,dt.month,dt.day,0,0,0,0,dt.tzinfo)
 
 def end_of_day(dt):
   """Return dt with the time components set to the last "instant" of
   that day."""
 
+  if dt==None:
+    return None
   return datetime(dt.year,dt.month,dt.day,23,59,59,999999,dt.tzinfo)
 
 class ParserBase(object):
@@ -373,6 +377,7 @@ parsers=(
   EnglishTimeParser(),
 )
 
+rc=0
 if args:
   time_string=' '.join([x.strip() for x in ' '.join(args).split()])
   if time_string=='test':
@@ -428,5 +433,7 @@ for p in parsers:
       output=dt.strftime(opt.format)
     break
 else:    
-  output='UNRECOGNIZED DATE/TIME: %r'%time_string
+  output='unrecognized date/time: %r'%time_string
+  rc=1
 print output
+sys.exit(rc)
