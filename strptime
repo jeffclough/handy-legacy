@@ -36,7 +36,7 @@ class TimeZone(tzinfo):
     none is found, return None."""
 
     if not tzname:
-      tzname=''
+      return TimeZone.localtz
     return cls.zones.get(tzname.lower(),cls.localtz)
 
   def __init__(self,std_name,std_minutes,dst_name,dst_minutes):
@@ -172,8 +172,8 @@ epoch_names=sorted(epochs.keys())
 op=optparse.OptionParser(
   usage="%prog [OPTIONS] arguments expressing date and time"
 )
-op.add_option('--age',metavar='UNITS',dest='age',choices=('seconds','minutes','hours','days','time'),help="Request the age of the given date and time, and give the desired units (days, hours, minutes, or seconds). The 'time' units value gives an output format of '[-][DAYSd ]%HH:%MM:%SS'. Only integer values are returned, and there is no rounding. Future times return a negative values.")
-op.add_option('--youth',metavar='UNITS',dest='youth',choices=('seconds','minutes','hours','days','time'),help="This is exactly like --age above, but the sign of the result is inverted. So future times return a positive values.")
+op.add_option('--age',metavar='UNITS',dest='age',action='store',help="Request the age of the given date and time, and give the desired units (days, hours, minutes, or seconds). You can also give 'time' as units, which gives an output format of '[-][DAYSd ]%HH:%MM:%SS'. Only integer values are returned, and there is no rounding. Future times return a negative values. By default, units are whole integers and are truncated, so an age of 90 seconds becomes 1 minute. If fractional units are desired, place a decimal point and a number expressing the precision you want at the end of the units.")
+op.add_option('--youth',metavar='UNITS',dest='youth',action='store',help="This is exactly like --age above, but the sign of the result is inverted. So future times return a positive values.")
 op.add_option('--epoch',dest='epoch',choices=epoch_names,help="Output the number of seconds elapsed from the beginning of given epoch to the given time. Negative values are given for times that predate the epoch. (Epoch choices: %s) The --age option can be used to change the reported epoch value from seconds to something else. And the --youth option will invert the sign of the result in its usual fashion."%(', '.join(epoch_names)))
 op.add_option('-f',dest='format',action='store',default='%Y-%m-%d %H:%M:%S',help="Set the output format. See 'man strptime' for the format syntax. (default: %default)")
 opt,args=op.parse_args()
@@ -286,7 +286,7 @@ class EnglishTimeParser(ParserBase):
     elif ts.startswith('end of '):
       end_of=True
       ts=ts[len('end of '):]
-    dt=datetime.now()
+    dt=datetime.now(TimeZone.localtz)
 
     # See what relative day this phrase expresses.
     if ts in ('this time','now'):
@@ -348,6 +348,14 @@ class DateTimeParser(ParserBase):
       r'((?P<tz>\w+)\s+)?'
       r'(?P<year>\d+)'
     ),
+    # mmm dd hh:mm:ss
+    re.compile(
+      r'(?P<month>\w+)\s'
+      r'(?P<day>\d+)\s+'
+      r'(?P<hour>\d+):'
+      r'(?P<minute>\d+):'
+      r'(?P<second>\d+)'
+    ),
   )
 
   def parse(self,time_string):
@@ -363,8 +371,8 @@ class DateTimeParser(ParserBase):
         d.hour=int(d.hour)
         d.minute=int(d.minute)
         d.second=int(d.second)
-        d.year=int(d.year)
-        d.tz=TimeZone.byName(d.tz)
+        d.year=now.year
+        d.tz=TimeZone.byName(getattr(d,'tz',''))
         try:
           dt=datetime(d.year,d.month,d.day,d.hour,d.minute,d.second,0,d.tz)
           return dt
@@ -387,7 +395,9 @@ if args:
     sys.exit(0)
 else:
   # Use the current time if none is given.
+  #print 'DEBUG: using current time'
   time_string=str(datetime.today().strftime('%Y-%m-%d %H:%M:%S'))
+  #print 'DEBUG: time_string=%r'%(time_string,)
 for p in parsers:
   dt=p.parse(time_string)
   if dt!=None:
@@ -412,20 +422,40 @@ for p in parsers:
         delta=-delta
       else:
         output=''
-      if opt.age=='seconds':
-        output+=str(delta)
-      elif opt.age=='minutes':
-        output+=str(delta/60)
-      elif opt.age=='hours':
-        output+=str(delta/360)
-      elif opt.age=='days':
-        output+=str(delta/86400)
+      delta+=1 # Because we're timing from the beginning of the second.
+      if '.' in opt.age:
+        units,prec=opt.age.split('.',1)
+        if not prec:
+          prec=3
+        elif prec.isdigit():
+          prec=int(prec)
+        else:
+          die('Bad precision in age units: %r'%(opt.age,))
       else:
+        units=opt.age
+        prec=0
+      if units=='seconds':
+        #output+=str(delta)
+        delta=float(delta)
+      elif units=='minutes':
+        #output+=str(delta/60)
+        delta/=60.0
+      elif units=='hours':
+        #output+=str(delta/3600)
+        delta/=3600.0
+      elif units=='days':
+        #output+=str(delta/86400)
+        delta/=86400.0
+      elif units=='time':
         if delta>=86400:
           output+='%dd '%(delta/86400)
           delta%=86400
         output+='%02d:%02d:%02d'%(delta/3600,(delta%3600)/60,delta%60)
         break
+      else:
+        die('Bad age units spec: %r'%(opt.age,))
+      #print 'DEBUG: prec=%r delta=%r'%(prec,delta)
+      output='%.*f'%(prec,delta,)
     else:
       ##
       ## Output the reformated time that we've parsed.
