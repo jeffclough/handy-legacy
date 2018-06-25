@@ -242,14 +242,15 @@ def stripfield(s,sides):
   '''Return s stripped of left and/or right white space depending on
   whether sides includes l and/or r.'''
 
-  l='l' in sides
-  r='r' in sides
-  if l and r:
-    s=s.strip()
-  elif l:
-    s=s.lstrip()
-  elif r:
-    s=s.rstrip()
+  if isinstance(s,basestring):
+    l='l' in sides
+    r='r' in sides
+    if l and r:
+      s=s.strip()
+    elif l:
+      s=s.lstrip()
+    elif r:
+      s=s.rstrip()
   return s
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -324,7 +325,12 @@ try:
       if opt.ocond and not eval(opt.ocond):
         continue
       # Encode as utf-8 our resulting list of string field values.
-      OREC=[val.encode('utf-8') for val in OREC]
+      for i in range(len(OREC)):
+        if isinstance(OREC[i],basestring):
+          OREC[i]=OREC[i].encode('utf-8')
+        elif isinstance(OREC[i],float) and OREC[i]==int(OREC[i]):
+          OREC[i]=int(OREC[i])
+      #OREC=[val.encode('utf-8') for val in OREC if isinstance(val,basestring)]
       # Figure out how we're supposed to output this record.
       if opt.fmt: # Output formatted field values.
         s=opt.fmt
