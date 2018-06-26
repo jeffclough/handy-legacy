@@ -4,30 +4,33 @@ import optparse,os,re,sys
 from datetime import *
 import time as _time
 
-def warn(msg):
-  sys.stderr.write(os.path.basename(sys.argv[0])+': '+msg+'\n')
-
-def die(msg,rc=1):
-  warn(msg)
-  sys.exit(rc)
+class TimeError(Exception):
+  def __init__(self,message):
+    super(TimeError,self).__init__(message)
 
 def delta_seconds(td):
+  "Because datetime.timedelta.total_seconds() is a little too recent."
+
   return td.seconds+td.days*86400
 
-tsnow=_time.time()
-now=datetime.fromtimestamp(tsnow)
-sametime=timedelta(0)
-oneday=timedelta(1)
-oneweek=timedelta(7)
+# Some timedelta constants.
+SAMETIME=timedelta(0)
+ONEDAY=timedelta(1)
+ONEWEEK=timedelta(7)
 
 class TimeZone(tzinfo):
+  """
+  >>> TimeZone.localtz
+  TimeZone('EST',-300,'EDT',60)
+  >>> dt=datetime(2018,6,15,12,0,0,0,TimeZone.localtz)
+  >>> dt
+  datetime.datetime(2018, 6, 15, 12, 0, tzinfo=TimeZone('EST',-300,'EDT',60))
+  """
+
   # Keep a dictionary of every TimeZone object that's created.
   zones={} # key=time zone name, value=TimeZone instance
 
   # Remember our local time zone when we see it.
-  localtz_offset=int(
-    _time.mktime(now.timetuple())-_time.mktime(datetime.utcfromtimestamp(tsnow).timetuple())
-  )
   localtz=None
   
   @classmethod
@@ -53,7 +56,12 @@ class TimeZone(tzinfo):
 
     # If we haven't seen our local time zone yet, see if this is it.
     if TimeZone.localtz==None:
-      if TimeZone.localtz_offset==delta_seconds(self.utcoffset(datetime.now())):
+      tsnow=_time.time()
+      now=datetime.fromtimestamp(tsnow)
+      localtz_offset=int(
+        _time.mktime(now.timetuple())-_time.mktime(datetime.utcfromtimestamp(tsnow).timetuple())
+      )
+      if localtz_offset==delta_seconds(self.utcoffset(datetime.now())):
         TimeZone.localtz=self
 
   def __del__(self):
@@ -114,7 +122,7 @@ class TimeZone(tzinfo):
     if self._is_dst(dt):
       return self.dst_offset-self.std_offset
     else:
-      return sametime
+      return SAMETIME
 
   def _is_dst(self,dt=None):
     if dt==None:
@@ -138,20 +146,9 @@ tz_eu_western=TimeZone( 'WET',      0,'WEST',60) # Western European Time
 tz_eu_central=TimeZone( 'CET',     60,'CEST',60) # Central European Time
 tz_eu_eastern=TimeZone( 'EET',   2*60,'EEST',60) # Eastern European Time
 
-# Figure out which one is our local time zone.
-#localtz=int(
-#  _time.mktime(now.timetuple())-_time.mktime(datetime.utcfromtimestamp(tsnow).timetuple())
-#)
-#for tz in TimeZone.zones.values():
-#  if localtz==delta_seconds(tz.utcoffset(now)):
-#    localtz=tz
-#    break
-#else:
-
 if TimeZone.localtz==None:
-  # Kludge for unknown local time zone
+  # A complete kludge for unknown local time zone
   TimeZone('LST',localtz/60,'LDT',60)
-  warn('WARNING: Cannot determine local time zone. Using %r'%(TimeZone.localtz,))
 
 # Make our global now variable offset-aware.
 now=datetime.now(TimeZone.localtz)
@@ -176,6 +173,7 @@ op.add_option('--age',metavar='UNITS',dest='age',action='store',help="Request th
 op.add_option('--youth',metavar='UNITS',dest='youth',action='store',help="This is exactly like --age above, but the sign of the result is inverted. So future times return a positive values.")
 op.add_option('--epoch',dest='epoch',choices=epoch_names,help="Output the number of seconds elapsed from the beginning of given epoch to the given time. Negative values are given for times that predate the epoch. (Epoch choices: %s) The --age option can be used to change the reported epoch value from seconds to something else. And the --youth option will invert the sign of the result in its usual fashion."%(', '.join(epoch_names)))
 op.add_option('-f',dest='format',action='store',default='%Y-%m-%d %H:%M:%S',help="Set the output format. See 'man strptime' for the format syntax. (default: %default)")
+op.add_option('--test',dest='test',action='store_true',default=False,help="Run some internal tests (like after updating this code).")
 opt,args=op.parse_args()
 
 if opt.age and opt.youth:
@@ -295,9 +293,9 @@ class EnglishTimeParser(ParserBase):
     elif ts=='today':
       pass # Same as now, but rely on "this time " phrase to keep time of day.
     elif ts=='yesterday':
-      dt-=oneday
+      dt-=ONEDAY
     elif ts=='tomorrow':
-      dt+=oneday
+      dt+=ONEDAY
     else:
       dt=None
 
@@ -308,7 +306,7 @@ class EnglishTimeParser(ParserBase):
       dt=beginning_of_day(dt)
     return dt
 
-class DateTimeParser(ParserBase):
+class TimeStampParser(ParserBase):
   """
   YYYY-mm-dd HH:MM:SS [tz]
   [dow] mmm dd hh:mm:ss [tz] yyyy
@@ -371,48 +369,67 @@ class DateTimeParser(ParserBase):
         d.hour=int(d.hour)
         d.minute=int(d.minute)
         d.second=int(d.second)
-        d.year=now.year
+        if hasattr(d,'year'):
+          d.year=int(d.year)
+        else:
+          d.year=datetime.now().year
         d.tz=TimeZone.byName(getattr(d,'tz',''))
         try:
           dt=datetime(d.year,d.month,d.day,d.hour,d.minute,d.second,0,d.tz)
           return dt
         except ValueError,e:
-          die("""Error in "%s", parsed by "%s": %s"""%(time_string,p.pattern,str(e)))
+          raise TimeError("""Error in "%s", parsed by "%s": %s"""%(time_string,p.pattern,str(e)))
     return None
 
 parsers=(
-  DateTimeParser(),
+  TimeStampParser(),
   EnglishTimeParser(),
 )
 
-rc=0
-if args:
+def parse_time(*args):
+  """Return the datetime.datetime value of the phrase in *args."""
+
+  # Join the pieces of our phrase into one string.
   time_string=' '.join([x.strip() for x in ' '.join(args).split()])
-  if time_string=='test':
+  for p in parsers:
+    dt=p.parse(time_string)
+    if dt!=None:
+      return dt
+  else:    
+    raise TimeError('unrecognized date/time: %r'%time_string)
+    
+if __name__=='__main__':
+  rc=0
+  if opt.test:
+    # Run this modules unit tests.
+    import doctest
     print 'Time Zones:'
     for tz in sorted(TimeZone.zones.keys()):
       print TimeZone.zones[tz].tzname()
-    sys.exit(0)
-else:
-  # Use the current time if none is given.
-  #print 'DEBUG: using current time'
-  time_string=str(datetime.today().strftime('%Y-%m-%d %H:%M:%S'))
-  #print 'DEBUG: time_string=%r'%(time_string,)
-for p in parsers:
-  dt=p.parse(time_string)
-  if dt!=None:
-    if opt.epoch==None:
-      delta=None
+    doctest.testmod()
+    sys.exit(rc)
+
+  try:
+    # We might need to know what time time it is.
+    now=datetime.now(TimeZone.localtz)
+
+    # Parse the time from the caller's time phrase or use the current time.
+    if args:
+      dt=parse_time(*args)
     else:
-      ##
-      ## Handle --epoch, which is really just some pre-processing for --age.
-      ##
-      #delta=int((dt-opt.epoch).total_seconds())
-      delta=delta_seconds(dt-opt.epoch)
-    if opt.age!=None:
-      ##
-      ## Handle --age.
-      ##
+      dt=now
+
+    if opt.age==None:
+      # Output the reformated time that we've parsed.
+      output=dt.strftime(opt.format)
+    else:
+      if opt.epoch==None:
+        delta=None
+      else:
+        # Handle --epoch, which is really just some pre-processing for --age.
+        delta=delta_seconds(dt-opt.epoch)
+
+      # Handle --age and --youth (which is now coded into opt.invert.
       if delta==None:
         delta=delta_seconds(now-dt)
       if opt.invert:
@@ -430,40 +447,31 @@ for p in parsers:
         elif prec.isdigit():
           prec=int(prec)
         else:
-          die('Bad precision in age units: %r'%(opt.age,))
+          raise TimeError('Bad precision in age units: %r'%(opt.age,))
       else:
         units=opt.age
         prec=0
       if units=='seconds':
-        #output+=str(delta)
-        delta=float(delta)
+        divisor=1
       elif units=='minutes':
-        #output+=str(delta/60)
-        delta/=60.0
+        divisor=60
       elif units=='hours':
-        #output+=str(delta/3600)
-        delta/=3600.0
+        divisor=3600
       elif units=='days':
-        #output+=str(delta/86400)
-        delta/=86400.0
+        divisor=86400
       elif units=='time':
         if delta>=86400:
           output+='%dd '%(delta/86400)
           delta%=86400
         output+='%02d:%02d:%02d'%(delta/3600,(delta%3600)/60,delta%60)
-        break
       else:
-        die('Bad age units spec: %r'%(opt.age,))
-      #print 'DEBUG: prec=%r delta=%r'%(prec,delta)
-      output='%.*f'%(prec,delta,)
-    else:
-      ##
-      ## Output the reformated time that we've parsed.
-      ##
-      output=dt.strftime(opt.format)
-    break
-else:    
-  output='unrecognized date/time: %r'%time_string
-  rc=1
-print output
-sys.exit(rc)
+        raise TimeError('Bad age units spec: %r'%(opt.age,))
+      if prec:
+        divisor=float(divisor)
+      output='%.*f'%(prec,delta/divisor,)
+  except TimeError,e:
+    sys.stderr.write(os.path.basename(sys.argv[0])+': '+str(e)+'\n')
+    rc=1
+  print output
+  sys.exit(rc)
+
