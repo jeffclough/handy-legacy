@@ -62,6 +62,7 @@ SCRIPTS=( # These targets are simply copied during installation.
   'pa',
   'ph',  # Don't install this one until it's working.
   'pretty-json',
+  'progress',
   'pwgen',
   'pygrep',
   'slice',
@@ -116,4 +117,5 @@ for target in make.args:
   else:
     make.make(target)
 
+make.symlink('../../bin/progress',make.path(make.opt.prefix,'lib','python','progress.py'))
 make.symlink('../../bin/ph',make.path(make.opt.prefix,'lib','python','ccso.py'))

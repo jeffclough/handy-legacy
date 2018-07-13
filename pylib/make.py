@@ -539,7 +539,7 @@ def symlink(target,link):
     elif os.path.isdir(link):
       raise Error('%s exists but is a directory.'%link)
     else:
-      os.remvoe(link)
+      os.remove(link)
   print 'Creating %s --> %s'%(link,target)
   if not opt.dryrun:
     os.symlink(target,link)
