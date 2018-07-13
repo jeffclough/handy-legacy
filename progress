@@ -169,7 +169,7 @@ class PercentProgress(Progress):
 
 class ByteSizeProgress(Progress):
   """This is just like the Progress class, but the default format is
-  '(%d %s)' and the position in the progress string is expressed in
+  '(%0.2f %s)' and the position in the progress string is expressed in
   terms of B, KB, MB, GB, TB, EB, ZB, or YB."""
 
   units=('B','KB','MB','GB','TB','EB','ZB','YB')
