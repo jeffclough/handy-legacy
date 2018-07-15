@@ -25,8 +25,8 @@ class Progress(object):
   progress=progress.Progress(finish)
   for i in range(finish+1):
     if i%100==0:
-      sys.stdout.write('\r'+str(progress(i)'))
-  print '\r'+str(progress(i))
+      sys.stdout.write('\\r'+str(progress(i)'))
+  print '\\r'+str(progress(i))
   """
 
   def __init__(self,limit,**kwargs):

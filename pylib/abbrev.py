@@ -103,7 +103,7 @@ class IndexedNames(object):
     ])
     # num_dict[key]=(i,start+step*i)
 
-    # Verify that no two names match and that no name is abbreviation for any
+    # Verify that no two names match and that no name is an abbreviation for any
     # other name.
     klist=self.num_dict.keys()
     for i in range(len(self.name_list)):
@@ -216,8 +216,14 @@ class AbbrevDict(dict):
     super(AbbrevDict,self).__init__(args,kwargs)
 
   def __getitem__(self,key):
+    if self.keymod:
+      key=self.keymod(key)
+    super(AbbrevDict,self).__getitem__(key)
 
   def __setitem__(self,key,val):
+    if self.keymod:
+      key=self.keymod(key)
+    super(AbbrevDict,self).__setitem__(key,val)
 
   def __contains__(self,key):
     if self.keymod:
@@ -229,4 +235,4 @@ class AbbrevDict(dict):
       key=self.keymod(key)
     super(AbbrevDict,self).__del__(key)
 
-  def 
+  ### NOT FINISHED
