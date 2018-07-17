@@ -5,8 +5,8 @@ from datetime import *
 import time as _time
 
 class TimeError(Exception):
-  def __init__(self,message):
-    super(TimeError,self).__init__(message)
+  def __init__(self,msg):
+    super(TimeError,self).__init__(msg)
 
 def delta_seconds(td):
   "Because datetime.timedelta.total_seconds() is a little too recent."
@@ -191,19 +191,9 @@ if opt.epoch!=None:
     # Because the --age logic is going to do most of --epoch's work.
     opt.age='seconds'
 
-months=(
-  'january',
-  'february',
-  'march',
-  'april',
-  'may',
-  'june',
-  'july',
-  'august',
-  'september'
-  'october',
-  'november',
-  'december'
+months=tuple(
+  'january february march april may june july'
+  'august september october november december'.split()
 )
 
 def get_month_by_name(month_name):
@@ -220,11 +210,11 @@ def get_month_by_name(month_name):
       return none
   except:
     pass
+
   n=len(month_name)
   if n<3:
     return None
   m=month_name.lower()
-
   for i in range(len(months)):
     if m==months[i][:n]:
       return i+1
@@ -246,8 +236,8 @@ def end_of_day(dt):
   return datetime(dt.year,dt.month,dt.day,23,59,59,999999,dt.tzinfo)
 
 class ParserBase(object):
-  """This is the base class of all other time parsers. Treat it as an
-  abstract base class."""
+  """This is the base class of all other time parsers. This is an abstract
+  base class. Do not attempt to instantiate it directly."""
 
   # This is the name of the format this parser parses.
   name=''
@@ -257,14 +247,22 @@ class ParserBase(object):
   #patterns=(
   #)
 
+  def __init__(self):
+    assert self.__class__.__name__!='ParserBase', "ParserBase is an abstract base class and must not be instantiated directly."
+
   # Parse the given string and return an object representing that time. If
   # the string cannot be parsed, return None.
   def parse(self,time_string):
+    """Parse the given string and return an object representing that time
+    as a datetime.datetime object. If the string cannot be parsed, return
+    None."""
+
     return None
 
 class EnglishTimeParser(ParserBase):
-  """
-  [(this time | end of)] (now | today | tomorrow | yesterday)
+  """Recognizes some simple english phrases that designate times.
+
+      [(this time | end of)] (now | today | tomorrow | yesterday)
   """
 
   name="English Time Reference"
@@ -307,10 +305,12 @@ class EnglishTimeParser(ParserBase):
     return dt
 
 class TimeStampParser(ParserBase):
-  """
-  YYYY-mm-dd HH:MM:SS [tz]
-  [dow] mmm dd hh:mm:ss [tz] yyyy
-  [dow] mmm dd hh:mm:ss yyyy [tz]
+  """Recognizes the following date/time formats. The first match wins.
+
+      YYYY-mm-dd HH:MM:SS
+      [dow] mmm dd hh:mm:ss yyyy [tz]
+      [dow] mmm dd hh:mm:ss [tz] yyyy
+      mmm dd hh:mm:ss
   """
 
   name="Full Date and Time"
@@ -369,7 +369,7 @@ class TimeStampParser(ParserBase):
         d.hour=int(d.hour)
         d.minute=int(d.minute)
         d.second=int(d.second)
-        if hasattr(d,'year'):
+        if hasattr(d,'year') and d.year!=None:
           d.year=int(d.year)
         else:
           d.year=datetime.now().year
@@ -472,6 +472,7 @@ if __name__=='__main__':
   except TimeError,e:
     sys.stderr.write(os.path.basename(sys.argv[0])+': '+str(e)+'\n')
     rc=1
-  print output
+  else:
+    print output
   sys.exit(rc)
 
