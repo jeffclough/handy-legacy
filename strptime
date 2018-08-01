@@ -4,6 +4,14 @@ import optparse,os,re,sys
 from datetime import *
 import time as _time
 
+debug_indenture=0
+
+def debug(msg,indent=0):
+  global debug_indenture
+  debug_indenture+=indent
+  if True:
+    sys.stderr.write('DEBUG: '+('  '*debug_indenture)+msg+'\n')
+
 class TimeError(Exception):
   def __init__(self,msg):
     super(TimeError,self).__init__(msg)
@@ -192,7 +200,7 @@ if opt.epoch!=None:
     opt.age='seconds'
 
 months=tuple(
-  'january february march april may june july'
+  'january february march april may june july '
   'august september october november december'.split()
 )
 
@@ -200,7 +208,13 @@ def get_month_by_name(month_name):
   """Return a number from 1 to 12 corresponding to the given month name,
   or return None for an unrecognized month name. To make the caller's
   life easier, any string containing a number from 1 to 12 is also
-  returned as the corresponding integer."""
+  returned as the corresponding integer.
+
+  >>> [get_month_by_name(m) for m in months]
+  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  >>> [get_month_by_name(m[:3]) for m in months]
+  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  """
 
   try:
     n=int(month_name)
@@ -215,8 +229,10 @@ def get_month_by_name(month_name):
   if n<3:
     return None
   m=month_name.lower()
+  #debug('m=%r'%(m,))
   for i in range(len(months)):
     if m==months[i][:n]:
+      #debug('months[i=%r][:n=%r]=%r'%(i,n,months[i][:n]))
       return i+1
   return None
 
@@ -311,6 +327,11 @@ class TimeStampParser(ParserBase):
       [dow] mmm dd hh:mm:ss yyyy [tz]
       [dow] mmm dd hh:mm:ss [tz] yyyy
       mmm dd hh:mm:ss
+
+  >>> p=TimeStampParser()
+  >>> dt=p.parse('Sep  7 23:59:59 2018 GMT')
+  >>> print dt
+  datetime.datetime(2018, 9, 7, 23, 59, 59, tzinfo=TimeZone('GMT',0,'GMT',0))
   """
 
   name="Full Date and Time"
@@ -357,7 +378,16 @@ class TimeStampParser(ParserBase):
   )
 
   def parse(self,time_string):
+    """If we recognize the given time_string, return a datetime.datetime
+    object containing the corresponding value. Raise TimeError if there
+    is an error during parsing.
+
+    If we fail to even recognize time_string as a plausable time, simply
+    return None."""
+
+    sys.stderr.write('DEBUG: time_string=%r\n'%(time_string,))
     for p in self.patterns:
+      sys.stderr.write('DEBUG: matching agains %r\n'%(p.pattern,))
       m=p.match(time_string)
       if m:
         # Load our time components into an untyped object as attributes.
@@ -403,9 +433,10 @@ if __name__=='__main__':
   if opt.test:
     # Run this modules unit tests.
     import doctest
-    print 'Time Zones:'
-    for tz in sorted(TimeZone.zones.keys()):
-      print TimeZone.zones[tz].tzname()
+    if False:
+      print 'Time Zones:'
+      for tz in sorted(TimeZone.zones.keys()):
+        print TimeZone.zones[tz].tzname()
     doctest.testmod()
     sys.exit(rc)
 
