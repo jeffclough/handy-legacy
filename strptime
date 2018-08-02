@@ -4,13 +4,11 @@ import optparse,os,re,sys
 from datetime import *
 import time as _time
 
-debug_indenture=0
-
-def debug(msg,indent=0):
-  global debug_indenture
-  debug_indenture+=indent
-  if True:
-    sys.stderr.write('DEBUG: '+('  '*debug_indenture)+msg+'\n')
+# Import our debug module while this code is under development.
+from debug import Boolean,DebugChannel
+debugging=Boolean(False)
+debug=DebugChannel(debugging)
+debug.setFormat('\x1b[1;34m{indent}{message}\x1b[0m\n')
 
 class TimeError(Exception):
   def __init__(self,msg):
@@ -229,10 +227,8 @@ def get_month_by_name(month_name):
   if n<3:
     return None
   m=month_name.lower()
-  #debug('m=%r'%(m,))
   for i in range(len(months)):
     if m==months[i][:n]:
-      #debug('months[i=%r][:n=%r]=%r'%(i,n,months[i][:n]))
       return i+1
   return None
 
@@ -329,9 +325,22 @@ class TimeStampParser(ParserBase):
       mmm dd hh:mm:ss
 
   >>> p=TimeStampParser()
-  >>> dt=p.parse('Sep  7 23:59:59 2018 GMT')
-  >>> print dt
-  datetime.datetime(2018, 9, 7, 23, 59, 59, tzinfo=TimeZone('GMT',0,'GMT',0))
+  >>> p.parse('2018-09-07  23:24:25')
+  datetime.datetime(2018, 9, 7, 23, 24, 25, tzinfo=TimeZone('EST',-300,'EDT',60))
+  >>> p.parse('Fri  Sep  7 23:24:25  2018  GMT')
+  datetime.datetime(2018, 9, 7, 23, 24, 25, tzinfo=TimeZone('GMT',0,'GMT',0))
+  >>> p.parse('Sep  7 23:24:25  2018  GMT')
+  datetime.datetime(2018, 9, 7, 23, 24, 25, tzinfo=TimeZone('GMT',0,'GMT',0))
+  >>> p.parse('Fri  Sep  7 23:24:25  2018')
+  datetime.datetime(2018, 9, 7, 23, 24, 25, tzinfo=TimeZone('EST',-300,'EDT',60))
+  >>> p.parse('Sep  7 23:24:25  2018')
+  datetime.datetime(2018, 9, 7, 23, 24, 25, tzinfo=TimeZone('EST',-300,'EDT',60))
+  >>> p.parse('Fri  Sep  7  23:24:25  GMT  2018')
+  datetime.datetime(2018, 9, 7, 23, 24, 25, tzinfo=TimeZone('GMT',0,'GMT',0))
+  >>> p.parse('Sep  7  23:24:25  GMT  2018')
+  datetime.datetime(2018, 9, 7, 23, 24, 25, tzinfo=TimeZone('GMT',0,'GMT',0))
+  >>> p.parse('Sep  7  23:24:25')
+  datetime.datetime(2018, 9, 7, 23, 24, 25, tzinfo=TimeZone('EST',-300,'EDT',60))
   """
 
   name="Full Date and Time"
@@ -348,7 +357,7 @@ class TimeStampParser(ParserBase):
     # [dow] mmm dd hh:mm:ss yyyy [tz]
     re.compile(
       r'((?P<dow>\w+)\s+)?'
-      r'(?P<month>\w+)\s'
+      r'(?P<month>\w+)\s+'
       r'(?P<day>\d+)\s+'
       r'(?P<hour>\d+):'
       r'(?P<minute>\d+):'
@@ -359,7 +368,7 @@ class TimeStampParser(ParserBase):
     # [dow] mmm dd hh:mm:ss [tz] yyyy
     re.compile(
       r'((?P<dow>\w+)\s+)?'
-      r'(?P<month>\w+)\s'
+      r'(?P<month>\w+)\s+'
       r'(?P<day>\d+)\s+'
       r'(?P<hour>\d+):'
       r'(?P<minute>\d+):'
@@ -369,7 +378,7 @@ class TimeStampParser(ParserBase):
     ),
     # mmm dd hh:mm:ss
     re.compile(
-      r'(?P<month>\w+)\s'
+      r'(?P<month>\w+)\s+'
       r'(?P<day>\d+)\s+'
       r'(?P<hour>\d+):'
       r'(?P<minute>\d+):'
@@ -385,9 +394,10 @@ class TimeStampParser(ParserBase):
     If we fail to even recognize time_string as a plausable time, simply
     return None."""
 
-    sys.stderr.write('DEBUG: time_string=%r\n'%(time_string,))
+    debug('time_string=%r'%(time_string,)).indent(1)
+    dt=None
     for p in self.patterns:
-      sys.stderr.write('DEBUG: matching agains %r\n'%(p.pattern,))
+      debug("matching against '%s'"%(p.pattern,))
       m=p.match(time_string)
       if m:
         # Load our time components into an untyped object as attributes.
@@ -406,10 +416,11 @@ class TimeStampParser(ParserBase):
         d.tz=TimeZone.byName(getattr(d,'tz',''))
         try:
           dt=datetime(d.year,d.month,d.day,d.hour,d.minute,d.second,0,d.tz)
-          return dt
+          break
         except ValueError,e:
           raise TimeError("""Error in "%s", parsed by "%s": %s"""%(time_string,p.pattern,str(e)))
-    return None
+    debug.indent(-1)('returning %r'%(dt,))
+    return dt
 
 parsers=(
   TimeStampParser(),
@@ -506,4 +517,3 @@ if __name__=='__main__':
   else:
     print output
   sys.exit(rc)
-
