@@ -42,9 +42,20 @@ class DebugChannel(object):
 
     self.fmt='DEBUG: {indent}{message}\n'
     self.ind=0
+    self.indstr='  '
 
   def setFormat(self,fmt):
-    """Set the format of our debug statements."""
+    """Set the format of our debug statements. The format defaults to:
+
+        'DEBUG: {indent}{message}\n'
+
+    Fields:
+      {indent}   indention string multiplied by the indention level
+      {message}  the message to be written
+
+    All non-field text is literal text. The '\n' at the end is required
+    if you want a line ending at the end of each message.
+    """
 
     self.fmt=fmt
 
@@ -74,8 +85,8 @@ class DebugChannel(object):
     This lets you decide whether to change indenture before or after the
     message is written."""
 
-    if self.state:
-      indent='  '*self.ind
+    if self.state():
+      indent=self.indstr*self.ind
       self.stream.write(self.fmt.format(**locals()))
     return self
 
@@ -83,3 +94,24 @@ class DebugChannel(object):
     "Just a wrapper for the write() method."
 
     return self.write(message)
+
+if __name__=='__main__':
+  debugging=Boolean(True)
+  print 'debugging=%r'%(debugging(),)
+
+  d=DebugChannel(debugging)
+  d('Message 1')
+  d('Message 2')
+  d('ind=%r'%(d.ind,)).indent(1)
+  d('ind=%r'%(d.ind,)).indent(1).indstr='..'
+  d('ind=%r'%(d.ind,)).indent(1)
+  d.indent(-1)('ind=%r'%(d.ind,))
+  d.indent(-1)('ind=%r'%(d.ind,))
+  d.indent(-1)('ind=%r'%(d.ind,))
+  d.indent(-1)('ind=%r'%(d.ind,))
+  d.indent(-1)('ind=%r'%(d.ind,))
+  debugging(False)
+  d('Message 11')
+  d('Message 12')
+
+  print 'debugging=%r'%(debugging(),)
