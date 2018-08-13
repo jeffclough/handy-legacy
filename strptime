@@ -178,7 +178,7 @@ op=optparse.OptionParser(
 op.add_option('--age',metavar='UNITS',dest='age',action='store',help="Request the age of the given date and time, and give the desired units (days, hours, minutes, or seconds). You can also give 'time' as units, which gives an output format of '[-][DAYSd ]%HH:%MM:%SS'. Only integer values are returned, and there is no rounding. Future times return a negative values. By default, units are whole integers and are truncated, so an age of 90 seconds becomes 1 minute. If fractional units are desired, place a decimal point and a number expressing the precision you want at the end of the units.")
 op.add_option('--youth',metavar='UNITS',dest='youth',action='store',help="This is exactly like --age above, but the sign of the result is inverted. So future times return a positive values.")
 op.add_option('--epoch',dest='epoch',choices=epoch_names,help="Output the number of seconds elapsed from the beginning of given epoch to the given time. Negative values are given for times that predate the epoch. (Epoch choices: %s) The --age option can be used to change the reported epoch value from seconds to something else. And the --youth option will invert the sign of the result in its usual fashion."%(', '.join(epoch_names)))
-op.add_option('-f',dest='format',action='store',default='%Y-%m-%d %H:%M:%S',help="Set the output format. See 'man strptime' for the format syntax. (default: %default)")
+op.add_option('-f',dest='format',action='store',default='%Y-%m-%d %H:%M:%S',help="Set the output format. See 'man strftime' for the format syntax. (default: %default)")
 op.add_option('--test',dest='test',action='store_true',default=False,help="Run some internal tests (like after updating this code).")
 opt,args=op.parse_args()
 
