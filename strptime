@@ -5,9 +5,8 @@ from datetime import *
 import time as _time
 
 # Import our debug module while this code is under development.
-from debug import Boolean,DebugChannel
-debugging=Boolean(False)
-debug=DebugChannel(debugging)
+from debug import DebugChannel
+debug=DebugChannel()
 debug.setFormat('\x1b[1;34m{indent}{message}\x1b[0m\n')
 
 class TimeError(Exception):

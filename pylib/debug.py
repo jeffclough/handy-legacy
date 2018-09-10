@@ -1,48 +1,28 @@
 import sys
 
-class Boolean(object):
-  """Boolean is a very simple wrapper for a single boolean value, which
-  might seem a little silly, but objects of this type are passed by
-  reference because they're objects, as opposed to Python primitive
-  types (like bool). The DebugChannel class makes use of this."""
-
-  def __init__(self,state=False):
-    """Initialize the state to the boolean value of the state argument,
-    which defaults to False."""
-
-    self.state=self(state)
-
-  def __bool__(self):
-    "Return the boolean value of this object's state."
-
-    return bool(self.state)
-
-  def __call__(self,*args):
-    """If at least one argument is given, set our state to the boolean
-    version of that value. Regardless, return the (possibly new) state
-    of this Boolean object."""
-
-    if len(args):
-      self.state=bool(args[0])
-    return self.state
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
 class DebugChannel(object):
-  def __init__(self,state_var,stream=sys.stderr):
+  def __init__(self,enabled=False,stream=sys.stderr):
     """Initialize the stream and on/off state of this new DebugChannel
-    object. The stream defaults to sys.stderr (though any object with a
-    write() method will do), and state defaults to False (off)."""
+    object. The "enabled" state defaults to False, and the stream
+    defaults to sys.stderr (though any object with a write() method will
+    do)."""
 
     assert hasattr(stream,'write'),"DebugChannel REQUIRES a stream object with a write() method."
-    assert isinstance(state_var,Boolean),"DebugChannel REQUIRES a state of type 'Boolean'."
 
     self.stream=stream
-    self.state=state_var
+    self.enabled=enabled
 
     self.fmt='DEBUG: {indent}{message}\n'
     self.ind=0
     self.indstr='  '
+
+  def enable(self,state=True):
+    """Allow this DebugChannel object to write messages if state is
+    True. Return the previous state as a boolean."""
+
+    prev_state=self.enabled
+    self.enabled=bool(state)
+    return prev_state
 
   def setFormat(self,fmt):
     """Set the format of our debug statements. The format defaults to:
@@ -73,7 +53,7 @@ class DebugChannel(object):
     our current format. In any case, return this DebugChannel instance
     so that, for example, things like this will work:
 
-        debug=DebugChannel()
+        debug=DebugChannel(Boolean(True))
         debug('Testing')
 
         def func(arg):
@@ -82,10 +62,10 @@ class DebugChannel(object):
             debug("i=%r"%(i,))
           debug.indent(-1).write("Leaving func()")
 
-    This lets you decide whether to change indenture before or after the
-    message is written."""
+    This lets the caller decide whether to change indenture before or
+    after the message is written."""
 
-    if self.state():
+    if self.enabled:
       indent=self.indstr*self.ind
       self.stream.write(self.fmt.format(**locals()))
     return self
@@ -96,10 +76,8 @@ class DebugChannel(object):
     return self.write(message)
 
 if __name__=='__main__':
-  debugging=Boolean(True)
-  print 'debugging=%r'%(debugging(),)
-
-  d=DebugChannel(debugging)
+  # Create our DebugChannel object that is switched on.
+  d=DebugChannel(True)
   d('Message 1')
   d('Message 2')
   d('ind=%r'%(d.ind,)).indent(1)
@@ -110,8 +88,6 @@ if __name__=='__main__':
   d.indent(-1)('ind=%r'%(d.ind,))
   d.indent(-1)('ind=%r'%(d.ind,))
   d.indent(-1)('ind=%r'%(d.ind,))
-  debugging(False)
-  d('Message 11')
-  d('Message 12')
-
-  print 'debugging=%r'%(debugging(),)
+  prev=d.enable(False)
+  d("Disabled debug output (so you shouldn't see this).")
+  print 'Previous DebugChannel enabled state: %r'%(prev,)
