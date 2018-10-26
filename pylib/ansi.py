@@ -73,8 +73,15 @@ behaves:
 
     python ansi.py
 
-(You'll need a terminal window that's at least 88 columns wide and 34
-lines tall to see the output all at once.)
+You'll need a terminal window that's at least 88 columns wide and 34
+lines tall to see the output all at once.
+
+To test a specific color combination, you can pass it directly on the
+command line:
+
+    python ansi.py blue on yellow
+or
+    python ansi.py bold red on blue
 
 """
 
@@ -243,6 +250,12 @@ class Color(object):
     True
     >>> Color('white on black')('test')=='\x1b[37mtest\x1b[0m'
     True
+    >>> Color('black on white')('test')=='\x1b[30;47mtest\x1b[0m'
+    True
+    >>> Color('black on yellow')('test')=='\x1b[30;43mtest\x1b[0m'
+    True
+    >>> Color('black on green')('test')=='\x1b[30;42mtest\x1b[0m'
+    True
     >>> Color('bold',None,'black')('test')=='\x1b[1mtest\x1b[0m'
     True
     >>> Color('bold','white',None)('test')=='\x1b[1;37mtest\x1b[0m'
@@ -268,6 +281,8 @@ class Color(object):
   def __str__(self):
     """Return the ANSI escape sequence for this object's attribute,
     foreground, and background"""
+
+    global current_background
 
     s='\x1b['
     if current_background in background and self.background==current_background:
@@ -547,40 +562,48 @@ def paint(*args):
 if __name__=='__main__': # TEST CODE TEST CODE TEST CODE TEST CODE TEST CODE
   import doctest,sys
   failed,total=doctest.testmod()
-  if failed==0:
 
-    colors='Black Red Green Yellow Blue Magenta Cyan White'.split()
-    # Print the column headings.
-    print '        '+(' '.join([Color('under','black',c)('%-9s'%c) for c in colors]))
-    # Foreground colors and attributes change from one line to the next.
-    for fg in colors:
-      # The first line of a given foreground color is labeled. Note that the
-      # color name in the row label is given as flattenLists()'s result
-      # initializer.
-      paint(*flattenList(
-        [[Color('norm',fg,bg),'Normal   ',norm,' '] for bg in colors],
-        [Color('bold %s'%fg),'%7s '%fg]
-      ))
-      # The second line shows contrast values for the above foreground and
-      # background combinations.
-      paint(*flattenList(
-        ['%-10.5f'%Color('norm',fg,bg).contrast() for bg in colors],
-        [' '*8]
-      ))
-      paint(*flattenList(
-        [[Color('Bold',fg,bg),'Bold     ',norm,' '] for bg in colors],
-        [' '*8]
-      ))
-      # The fourth line shows contrast values for the above foreground and
-      # background combinations.
-      paint(*flattenList(
-        ['%-10.5f'%Color('bold',fg,bg).contrast() for bg in colors],
-        [' '*8]
-      ))
-      # Show the contrast figures for normal text.
-      # Remaining lines of a given foreground just begin with spaces.
-      for a in ('Italics','Underline'):
+  if failed==0:
+    if len(sys.argv)>1:
+      # Interpret the command line as a color specification string, and output
+      # that string using the attribute and colors it gives.
+      spec=' '.join(sys.argv[1:])
+      c=Color(spec)
+      print c(spec)
+    else:
+      # Show a table of all color and attribute combinations.
+      colors='Black Red Green Yellow Blue Magenta Cyan White'.split()
+      # Print the column headings.
+      print '        '+(' '.join([Color('under','black',c)('%-9s'%c) for c in colors]))
+      # Foreground colors and attributes change from one line to the next.
+      for fg in colors:
+        # The first line of a given foreground color is labeled. Note that the
+        # color name in the row label is given as flattenLists()'s result
+        # initializer.
         paint(*flattenList(
-          [[Color(a,fg,bg),'%-9s'%a,norm,' '] for bg in colors],
+          [[Color('norm',fg,bg),'Normal   ',norm,' '] for bg in colors],
+          [Color('bold %s'%fg),'%7s '%fg]
+        ))
+        # The second line shows contrast values for the above foreground and
+        # background combinations.
+        paint(*flattenList(
+          ['%-10.5f'%Color('norm',fg,bg).contrast() for bg in colors],
           [' '*8]
         ))
+        paint(*flattenList(
+          [[Color('Bold',fg,bg),'Bold     ',norm,' '] for bg in colors],
+          [' '*8]
+        ))
+        # The fourth line shows contrast values for the above foreground and
+        # background combinations.
+        paint(*flattenList(
+          ['%-10.5f'%Color('bold',fg,bg).contrast() for bg in colors],
+          [' '*8]
+        ))
+        # Show the contrast figures for normal text.
+        # Remaining lines of a given foreground just begin with spaces.
+        for a in ('Italics','Underline'):
+          paint(*flattenList(
+            [[Color(a,fg,bg),'%-9s'%a,norm,' '] for bg in colors],
+            [' '*8]
+          ))
