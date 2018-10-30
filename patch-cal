@@ -1,0 +1,82 @@
+#!/usr/bin/env python
+
+import argparse,os,sys
+from datetime import date,timedelta
+
+def month_bounds(year,month):
+  """Return a tuple of two datetime.date instances whose values are the
+  first and last days of the given month."""
+
+  first=date(year,month,1)
+  if month==12:
+    last=date(year+1,1,1)
+  else:
+    last=date(year,month+1,1)
+  last-=timedelta(1)
+
+  return (first,last)
+
+def counted_week_day(year,month,nth,day_of_week):
+  """Return a datetime.date object expressing the nth day_of_week in
+  the given year and month.
+
+  Year and month are simply the numbers of the year and month in
+  question. nth is an integer from 1 to 5. day_of_week is 0 (for Monday)
+  through 6 (for Sunday). So counted_week_day(2018,10,2,1) returns
+  datetime.date(2018,10,9) because that is the 2nd tuesday in October of
+  2018.
+
+  If the nth day_of_week of the given year and month does not exist, a
+  value of None is returned.
+  """
+
+  # Get the first and last days of the given month.
+  first,last=month_bounds(year,month)
+
+  # Compute the position within the month of the nth day_of_week in the
+  # given month.
+  first_day=first.weekday()
+  nth_day=7*(nth-1)+((day_of_week-first_day+7)%7)+1
+  if nth_day<=last.day:
+    result=date(year,month,nth_day)
+  else:
+    result=None
+  return result
+
+def show_patch_groups(year,month):
+  """Send the calendar for the given month to standard output."""
+
+  # Make a (day number)->(day name) dictionary that numbers ordinary
+  # days but assigns patch group names to our "Patch Thursdays." For
+  # the sake of algorithmic regularity, we also need "blank" days
+  # before the first day of the month.
+  first,last=month_bounds(year,month)
+  days=dict([
+    (d,'%2d'%d) for d in range(first.day,last.day+1)
+  ])
+  pt=counted_week_day(year,month,2,1) # Microsoft's "Patch Tuesday."
+  days[(pt+timedelta(2)).day]=' A'
+  days[(pt+timedelta(9)).day]=' B'
+  days[(pt+timedelta(16)).day]=' C'
+  days[(pt+timedelta(21)).day]=' D'
+  days.update(dict([(d,'  ') for d in range(0,-6,-1)]))
+
+  # Write the heading for this month's calendar.
+  print first.strftime('%B').center(21)
+  first_sunday=counted_week_day(year,month,1,6)
+  print ' '.join([d.strftime('%A')[:2] for d in [first_sunday+timedelta(dd) for dd in range(7)]])
+
+  # Write the body of the this month's calendar.
+  skip_days=(first.weekday()+1)%7-1
+  day_list=[days[d] for d in range(-skip_days,last.day+1)]
+  while day_list:
+    print ' '.join(day_list[:7])
+    del day_list[:7]
+  print
+
+
+for month in range(6):
+  show_patch_groups(2018,month+1)
+
+#for month in range(12):
+#  print counted_week_day(2018,month+1,2,1)

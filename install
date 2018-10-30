@@ -60,7 +60,8 @@ SCRIPTS=( # These targets are simply copied during installation.
   'not',
   'now',
   'pa',
-  'ph',  # Don't install this one until it's working.
+  'patch-cal',
+  'ph',
   'pretty-json',
   'progress',
   'pwgen',
