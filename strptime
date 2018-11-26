@@ -7,11 +7,16 @@ import time as _time
 # Import our debug module while this code is under development.
 from debug import DebugChannel
 debug=DebugChannel()
-debug.setFormat('\x1b[1;34m{indent}{message}\x1b[0m\n')
+debug.setFormat('\x1b[1;36m{indent}{message}\x1b[0m\n')
 
 class TimeError(Exception):
   def __init__(self,msg):
     super(TimeError,self).__init__(msg)
+
+def ir(val,low,high):
+  "Return True iff val>=low and val<=high."
+
+  return val>=low and val<=high
 
 def delta_seconds(td):
   "Because datetime.timedelta.total_seconds() is a little too recent."
@@ -178,8 +183,12 @@ op.add_option('--age',metavar='UNITS',dest='age',action='store',help="Request th
 op.add_option('--youth',metavar='UNITS',dest='youth',action='store',help="This is exactly like --age above, but the sign of the result is inverted. So future times return a positive values.")
 op.add_option('--epoch',dest='epoch',choices=epoch_names,help="Output the number of seconds elapsed from the beginning of given epoch to the given time. Negative values are given for times that predate the epoch. (Epoch choices: %s) The --age option can be used to change the reported epoch value from seconds to something else. And the --youth option will invert the sign of the result in its usual fashion."%(', '.join(epoch_names)))
 op.add_option('-f',dest='format',action='store',default='%Y-%m-%d %H:%M:%S',help="Set the output format. See 'man strftime' for the format syntax. (default: %default)")
+op.add_option('--debug',dest='debug',action='store_true',default=False,help="Output debugging information.")
 op.add_option('--test',dest='test',action='store_true',default=False,help="Run some internal tests (like after updating this code).")
 opt,args=op.parse_args()
+
+if opt.debug:
+  debug.enable()
 
 if opt.age and opt.youth:
   op.error("The --age and --youth cannot both be used.")
@@ -218,7 +227,7 @@ def get_month_by_name(month_name):
     if n>=1 and n<=12:
       return n
     else:
-      return none
+      return None
   except:
     pass
 
@@ -315,6 +324,105 @@ class EnglishTimeParser(ParserBase):
       dt=beginning_of_day(dt)
     return dt
 
+def undict(d,unstr=None):
+  """Return an object with attributes of the given dict items. If unstr
+  is not None, it must be a sequence of types that the dictionary string
+  values can be converted into. For instance, unstr=(int,float) will try
+  int(x) conversion and then float(x) conversion of string values of x.
+
+  >>> d=dict(a='1',b='2.5',c='foo',d=True)
+  >>> print tuple([(x,d[x]) for x in 'abcd'])
+  (('a', '1'), ('b', '2.5'), ('c', 'foo'), ('d', True))
+  >>> o=undict(d)
+  >>> print tuple([(x,getattr(o,x)) for x in 'abcd'])
+  (('a', '1'), ('b', '2.5'), ('c', 'foo'), ('d', True))
+  >>> o=undict(d,unstr=(int,float))
+  >>> print tuple([(x,getattr(o,x)) for x in 'abcd'])
+  (('a', 1), ('b', 2.5), ('c', 'foo'), ('d', True))
+  """
+
+  # If we're supposed to try to convert string values to something else,
+  # this is where we do that.
+  if hasattr(unstr,'__iter__'):
+    d=dict(d) # DON'T modify the caller's dictionary. Work on a copy.
+    for var in d:
+      val=d[var]
+      if isinstance(val,basestring):
+        for t in unstr:
+          try:
+            d[var]=t(val)
+            break
+          except:
+            pass
+  return type('',(),d)
+
+class DateParser(ParserBase):
+  """Recognizes the following date formats. The first match wins.
+
+      YYYY-mm-dd
+      mm-dd-YYYY
+      dd-mm-YYYY
+
+  """
+
+  name="Date"
+  patterns=(
+    # YYYY[-/ ]mmm[-/ ]dd
+    # dd[-/ ]mmm[-/ ]YYYY
+    # mmm[-/ ]dd[-/ ]YYYY
+    re.compile(
+      r'(?P<d1>\d+([-/]|\s+))'
+      r'(?P<month>[A-Za-z]+([-/]|\s+))'
+      r'(?P<d2>\d+)'
+    ),
+    # YYYY[-/]mm[-/]dd
+    # dd[-/]mm[-/]YYYY
+    # mm[-/]dd[-/]YYYY
+    re.compile(
+      r'(?P<d1>\d+)[-/]'
+      r'(?P<d2>\d+)[-/]'
+      r'(?P<d3>\d+)$'
+    ),
+  )
+
+  def parse(self,time_string):
+    """If we recognize the given time_string, return a datetime.datetime
+    object containing the corresponding value. Raise TimeError if there
+    is an error during parsing.
+
+    If we fail to even recognize time_string as a plausable time, simply
+    return None."""
+
+    debug('class=%s, time_string=%r'%(self.__class__.__name__,time_string,)).indent(1)
+    dt=None
+    for p in self.patterns:
+      debug("matching against '%s'"%(p.pattern,))
+      m=p.match(time_string)
+      if m:
+        # Load our time components into an untyped object as attributes,
+        # converting from string values where possible.
+        debug("matched: %r"%(m.groupdict(),))
+        d=undict(m.groupdict(),unstr=(int,get_month_by_name))
+        debug(', '.join([
+          '%s=%r'%(var,getattr(d,var)) for var in m.groupdict()
+        ]))
+        if hasattr(d,'month'):
+          if d.month==None:
+            continue
+          if d.d1>31 and ir(d.d2,1,31):
+            dt=datetime(d.d1,d.month,d.d2)
+          elif d.d2>31 and ir(d.d1,1,31):
+            dt=datetime(d.d2,d.month,d.d1)
+        elif hasattr(d,'d3'):
+          if d.d1>31 and ir(d.d2,1,12) and ir(d.d3,1,31):
+            dt=datetime(d.d1,d.d2,d.d3,0,0,0)
+          elif d.d3>31 and ir(d.d1,1,12) and ir(d.d2,1,31):
+            dt=datetime(d.d3,d.d1,d.d2,0,0,0)
+          elif d.d3>31 and ir(d.d2,1,12) and ir(d.d3,1,31):
+            dt=datetime(d.d3,d.d2,d.d1,0,0,0)
+    debug.indent(-1)('returning %r'%(dt,))
+    return dt
+
 class TimeStampParser(ParserBase):
   """Recognizes the following date/time formats. The first match wins.
 
@@ -393,7 +501,8 @@ class TimeStampParser(ParserBase):
     If we fail to even recognize time_string as a plausable time, simply
     return None."""
 
-    debug('time_string=%r'%(time_string,)).indent(1)
+    debug('class=%s, time_string=%r'%(self.__class__.__name__,time_string,)).indent(1)
+    #debug('time_string=%r'%(time_string,)).indent(1)
     dt=None
     for p in self.patterns:
       debug("matching against '%s'"%(p.pattern,))
@@ -423,6 +532,7 @@ class TimeStampParser(ParserBase):
 
 parsers=(
   TimeStampParser(),
+  DateParser(),
   EnglishTimeParser(),
 )
 
