@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import datetime,optparse,os,pipes,re,sys
+from handy import shellify
 
 # Use this expression to recognize and parse log file data.
 log_parser=re.compile(r'(?P<month>\w+)\s+(?P<day>\d+)\s+(?P<time>\d+:\d+:\d+)\s+(?P<host>.*?)\s+(?P<proc>.*?)\[(?P<pid>\d+)\]:\s+(?P<msg>.*)')
@@ -197,9 +198,11 @@ def grepfile(filename,r,also=None):
         groupdict=dict(l)
 
       # Handle any of our special (or general) formatting options.
-      if opt.shell:
-        d=groupdict
-        line= '; '.join(['%s=%s'%(x,shell_value(d[x])) for x in d])
+      if opt.groups=='shell':
+        line='; '.join([
+          '%s=%s'%(x.replace(' ','_'),shellify(groupdict[x]))
+            for x in sorted(groupdict.keys())
+        ])
       elif opt.dictionary:
         keys=groupdict.keys()
         keys.sort()
@@ -242,8 +245,8 @@ def grepfile(filename,r,also=None):
           print '('+')('.join(['%s'%repr(x) for x in groups])+')'
         if opt.groups=='dict' and groupdict:
           d=groupdict
-          print ' '.join(['%s=%s'%(x,repr(d[x])) for x in d])
-        if opt.groups:
+          print ' '.join(['%s=%s'%(x,repr(d[x])) for x in sorted(d.keys())])
+        if opt.groups!='shell':
           print ''
   if opt.list and matches>0:
     if opt.number:
@@ -251,13 +254,6 @@ def grepfile(filename,r,also=None):
     else:
       print filename
   return matches
-
-def shell_value(v):
-  """Return the given value in a string that a Unix shell will parse
-  correctly."""
-
-  if v==None: v=''
-  return pipes.quote(v)
 
 # Handle our command line.
 import OptionParserFormatters
@@ -304,7 +300,8 @@ Combine these flags as you'd like, e.g. --flags=ims.""")
 op.add_option('--flags',dest='flags',action='store',default=None,help="Same as --flag.")
 
 op.add_option('-g',dest='groups',action='store_const',const='tuple',default=None,help="Show the tuple of matching groups for each matching line.")
-op.add_option('-G',dest='groups',action='store_const',const='dict',default=None,help="Show the dictionary of matching named groups for each matching line.")
+op.add_option('-G',dest='groups',action='store_const',const='dict',default=None,help="Useful only if named groups (e.g. '(?P<user>\w+)\s+(?P<dbname>\w+)') are used. Show the dictionary of matching named groups for each matching line.")
+op.add_option('--shell',dest='groups',action='store_const',const='shell',default=None,help="Like -G, but this option outputs shell-executable code to assign matched values to the given names (e.g. 'user=rsmith337; dbname=employees'). All required escape characters are applied to make this safe and reliable to use with the shell's eval command.")
 
 op.add_option('-i',dest='ignore_case',action='store_true',default=False,help="Ingore case. (Same as --flag=i.)")
 
@@ -315,8 +312,6 @@ op.add_option('-l',dest='list',action='store_true',default=False,help="Suppress 
 op.add_option('-m',dest='match',action='store_true',default=False,help="Use the match() function rather than the search() re class method. To over-simplify, match() only finds matches at the beginning of a line, while search() will scan the whole line for a match anywhere within it.")
 
 op.add_option('-n',dest='number',action='store_true',default=False,help="Prefix each line of output with the line number within its input file. See -l for how it modifies -n's behavior.")
-
-op.add_option('--shell',dest='shell',action='store_true',default=False,help="Useful only if named groups (e.g. '(?P<user>\w+)\s+(?P<dbname>\w+)') are used, this option outputs shell-executable code to assign matched values to the given names (e.g. 'user=rsmith337; dbname=employees'). All required escape characters are applied to make this safe and reliable to use with the shell's eval command.")
 
 op.add_option('--strip',dest='strip',action='store_true',default=False,help="Remove any whitespace characters from the beginning and ending of each matched group's value.")
 
