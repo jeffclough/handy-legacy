@@ -69,6 +69,7 @@ SCRIPTS=( # These targets are simply copied during installation.
   'slice',
   'strftime',
   'strptime',
+  'title-case',
   'tread',
   'ts',
 )
@@ -109,7 +110,7 @@ make.Installer('install',make.path(make.opt.prefix,'etc'),DATA)
 make.Installer(
   'install',
   make.path(make.opt.prefix,'lib','python'),
-  make.path('pylib','*'),
+  make.path('pylib','*.py'),
 )
 
 for target in make.args:

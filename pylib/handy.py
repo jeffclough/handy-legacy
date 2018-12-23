@@ -48,6 +48,7 @@ class TitleCase(str):
   lc=set("""
     a an the
     and but nor or
+    is
     about as at by circa for from in into of on onto than till to until unto via with
   """.split())
 
