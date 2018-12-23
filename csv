@@ -2,6 +2,7 @@
 
 import csv,optparse,os,pipes,re,shlex,sys
 import OptionParserFormatters
+from handy import shellify
 
 def die(msg,rc=1):
   if msg:
@@ -213,18 +214,6 @@ if opt.worksheet!=None:
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Create writer classes for out shell and table output formats.
 
-def shellify(val):
-  """Return the given value quotted and escaped as necessary for a Unix
-  shell to interpret it as a single value."""
-
-  if val==None:
-    return ''
-  if isinstance(val,int) or isinstance(val,float):
-    return val
-  if not isinstance(val,basestring):
-    val=str(val)
-  return pipes.quote(val)
-
 class ShellWriter(object):
   """This class has a writerow() method to mimic enough of the interface
   of csv.writer, but out writerow() outputs a line of shell environment
@@ -263,7 +252,7 @@ class ShellWriter(object):
         r.append(val)
       # Write our line of shell environment variable assignments.
       self.outfile.write(';'.join([
-        '%s=%s'%(var,shellify(val)) for var,val in zip(self.vars,r)
+        '%s=%s'%(var.replace(' ','_'),shellify(val)) for var,val in zip(self.vars,r)
       ]))
       self.outfile.write('\n')
 
