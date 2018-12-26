@@ -3,7 +3,8 @@ import os,pipes,re,sys
 def file_walker(root,**kwargs):
   """This is a recursive iterator over the files in a given directory
   (the root), in all subdirectories beneath it, and so forth. The order
-  is an alphabetical, depth-first traversal of the whole directory tree.
+  is an alphabetical and depth-first traversal of the whole directory
+  tree.
 
   Keyword Arguments:
     depth         (default: None) The number of directories this
