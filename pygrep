@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-import datetime,optparse,os,pipes,re,sys
-from handy import shellify
+import datetime,fnmatch,optparse,os,re,sys
+from handy import shellify,file_walker
 
 # Use this expression to recognize and parse log file data.
 log_parser=re.compile(r'(?P<month>\w+)\s+(?P<day>\d+)\s+(?P<time>\d+:\d+:\d+)\s+(?P<host>.*?)\s+(?P<proc>.*?)\[(?P<pid>\d+)\]:\s+(?P<msg>.*)')
@@ -305,7 +305,7 @@ op.add_option('--shell',dest='groups',action='store_const',const='shell',default
 
 op.add_option('-i',dest='ignore_case',action='store_true',default=False,help="Ingore case. (Same as --flag=i.)")
 
-op.add_option('--log-parser',dest='log_parser',action='store_true',default=False,help='''Assume that the input file is a "typical" *nix log file. Parse the month, day, time, host name, process name, process ID and message from each line. For each matching line of input, apply the RE from the command line to the message portion of the log line. This is VERY useful with -f, -g, and -G. (And try out the --dictionary option to the fields --log-parser is finding.)''')
+op.add_option('--log-parser',dest='log_parser',action='store_true',default=False,help='''Assume that the input file is a "typical" *nix log file. Parse the month, day, time, host name, process name, process ID and message from each line. For each matching line of input, apply the RE from the command line to the message portion of the log line. This is VERY useful with -f, -g, -G, and -shell. (And try out the --dictionary option to the fields --log-parser is finding.)''')
 
 op.add_option('-l',dest='list',action='store_true',default=False,help="Suppress normal output; instead print the name of each input file from which any output would normally have been printed. The scanning will stop on the first match. If -n is used with -l, the number of matches in each file is given after the filename, with a colon separating them.")
 
@@ -314,6 +314,10 @@ op.add_option('-m',dest='match',action='store_true',default=False,help="Use the 
 op.add_option('-n',dest='number',action='store_true',default=False,help="Prefix each line of output with the line number within its input file. See -l for how it modifies -n's behavior.")
 
 op.add_option('--strip',dest='strip',action='store_true',default=False,help="Remove any whitespace characters from the beginning and ending of each matched group's value.")
+
+op.add_option('--recurse','-r',dest='recurse',action='store_true',default=False,help="Recurse any directories found on the command line.")
+op.add_option('--depth',dest='depth',metavar='N',action='store',type=int,default=sys.maxsize,help="Restrict the recursive depth to N.")
+op.add_option('--prune',dest='prune',metavar='DIR',action='append',default=[],help="Do not recurse into any directory matching DIR. More than one --prune option may be given.")
 
 op.add_option('-v',dest='invert',action='store_true',default=False,help="Invert the sense of matching so that non-matching lines are selected.")
 
@@ -356,7 +360,7 @@ try:
   # Scan the given files (or stdin) for our regular expression.
   if not args:
     args=['-']
-  if not opt.onefile and len(args)==1:
+  if len(args)==1:
     opt.onefile=True
   for filename in args:
     if opt.log_parser:
