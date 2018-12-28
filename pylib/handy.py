@@ -1,4 +1,39 @@
-import os,pipes,re,sys
+#!/usr/bin/env python
+import fnmatch,os,pipes,re,sys
+from argparse import ArgumentTypeError
+
+def non_negative_int(s):
+  "Return the non-negative integer value of s, or raise ArgumentTypeError."
+
+  try:
+    n=int(s)
+    if n>=0:
+      return n
+  except:
+    pass
+  raise ArgumentTypeError('%r is not a non-negative integer.'%s)
+
+def positive_int(s):
+  "Return the positive integer value of s, or raise ArgumentTypeError."
+
+  try:
+    n=int(s)
+    if n>0:
+      return n
+  except:
+    pass
+  raise ArgumentTypeError('%r is not a non-negative integer.'%s)
+
+def first_match(s,patterns,flags=0):
+  """Find the firsts pattern in the patterns sequence that matches s. If
+  found, return the (pattern,match) tuple. Otherwise, return
+  (None,None)."""
+
+  for p in patterns:
+    m=p.match(s,flags)
+    if m:
+      return p,m
+  return None,None
 
 def file_walker(root,**kwargs):
   """This is a recursive iterator over the files in a given directory
@@ -16,10 +51,10 @@ def file_walker(root,**kwargs):
                   This iterator guards against processing the same
                   directory twice, even if there's a symlink loop, so
                   it's always safe to leave this set to True.
-    prune         (default: []) A list of regular expressions (either
-                  strings or _sre.SRE_Pattern objects). If any of these
-                  REs matches the name of an encountered directory, that
-                  directory is ignored.
+    prune         (default: []) A list of filespecs, regular
+                  expressions (prefixed by 're:'), or pre-compiled RE
+                  objects. If any of these matches the name of an
+                  encountered directory, that directory is ignored.
     include_dirs  (default: False) True if each directory encountered is
                   to be included in this iterator's values immediately before
                   the filename found in that directory. Directory names end
@@ -38,12 +73,18 @@ def file_walker(root,**kwargs):
   follow_links=kwargs.get('follow_links',True)
   prune=list(kwargs.get('prune',[]))
   include_dirs=kwargs.get('include_dirs',False)
-  been_there=set([])
   stack=[(0,root)] # Prime our stack with root (at depth 0).
+  been_there=set([os.path.abspath(os.path.realpath(root))])
 
-  # Compile any strings in prune to regular expressions.
+  # Convert filespecs to regular expressions, remove the 're:' prefix
+  # from from the caller's regular expressions, and compile RE strings
+  # to RE objects, leaving only RE objects in the prune list.
   for i in range(len(prune)):
     if isinstance(prune[i],basestring):
+      if prune[i].startswith('re:'):
+        prune[i]=prune[i][2:]
+      else:
+        prune[i]=fnmatch.translate(prune[i])
       prune[i]=re.compile(prune[i])
 
   while stack:
@@ -70,21 +111,31 @@ def file_walker(root,**kwargs):
         if os.path.islink(p) and not follow_links:
           # Nope. We're not following symlinks.
           continue
-        rp=os.path.realpath(p)
+        rp=os.path.abspath(os.path.realpath(p))
+        print 'DEBUG: rp=%r'%(rp,)
         if rp in been_there:
           # Nope. We've already seen this path (and possibly processed it).
           continue
         m=None
-        # Because of the way it's structured, this test MUST come last.
-        for pat in prune:
-          m=pat.match(fn)
-          if m:
-            # Nope. This directory name matches something in our prune list.
-            break
-        if not m:
-          # Remember this path so we can visit it later.
-          been_there.add(rp)
-          stack.append((depth+1,p))
+        pat,mat=first_match(fn,prune)
+        if pat:
+          # Nope. This directory matches one of the prune patterns.
+          continue
+        # We have a keeper! Record the path and push it onto the stack.
+        been_there.add(rp)
+        print 'DEBUG: Added %r to been_there'%(rp,)
+        stack.append((depth+1,p))
+
+        ## Because of the way it's structured, this test MUST come last.
+        #for pat in prune:
+        #  m=pat.match(fn)
+        #  if m:
+        #    # Nope. This directory name matches something in our prune list.
+        #    break
+        #if not m:
+        #  # Remember this path so we can visit it later.
+        #  been_there.add(rp)
+        #  stack.append((depth+1,p))
 
 def shellify(val):
   """Return the given value quotted and escaped as necessary for a Unix
@@ -152,7 +203,30 @@ class TitleCase(str):
     return str.__new__(cls,value)
 
 if __name__=='__main__':
-  import doctest,sys
-  t,f=doctest.testmod()
-  if f>0:
-    sys.exit(1)
+  import argparse,doctest,sys
+
+  import argparse
+  ap=argparse.ArgumentParser()
+  sp=ap.add_subparsers()
+
+  sp_test=sp.add_parser('test',help="Run all doctests for this module.")
+  sp_test.set_defaults(cmd='test')
+
+  sp_find=sp.add_parser('find',help="Call file_walker() with the given path and options.")
+  sp_find.set_defaults(cmd='find')
+  sp_find.add_argument('path',action='store',default='.',help="The path to be searched.")
+  sp_find.add_argument('--depth',action='store',type=non_negative_int,default=sys.maxsize,help="The number of directories to decend below the given path when traversing the directory structure.")
+  sp_find.add_argument('--follow',action='store_true',help="Follow symlinks to directories during recursion. This is done in a way that's safe from symlink loops.")
+  sp_find.add_argument('--prune',metavar='DIR',action='store',nargs='*',default=[],help="A list of filespecs and/or regular expressions (prefixed with 're:') that itentify directories NOT to be recursed into.")
+  sp_find.add_argument('--dirs',action='store_true',help="Output the path (with a %s suffix) immediately before listing the files in that directory. Directory names are ordinarilly suppressed.")
+
+  opt=ap.parse_args()
+  print repr(opt)
+
+  if opt.cmd=='test':
+    t,f=doctest.testmod()
+    if f>0:
+      sys.exit(1)
+  elif opt.cmd=='find':
+    for fn in file_walker(opt.path,depth=opt.depth,follow_links=opt.follow,prune=opt.prune,include_dirs=opt.dirs):
+      print fn
