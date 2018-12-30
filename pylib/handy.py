@@ -35,6 +35,22 @@ def first_match(s,patterns,flags=0):
       return p,m
   return None,None
 
+def compile_filename_patterns(pattern_list):
+  """Given a sequence of filespecs, regular expressions (prefixed with
+  're:'), and compiled regular expressions, convert them all to compiled
+  RE objects. The original pattern_list is not modified. The compiled
+  REs are returned in a new list."""
+
+  pats=list(pattern_list)
+  for i in range(len(pats)):
+    if isinstance(pats[i],basestring):
+      if pats[i].startswith('re:'):
+        pats[i]=pats[i][2:]
+      else:
+        pats[i]=fnmatch.translate(pats[i])
+      pats[i]=re.compile(pats[i])
+  return pats
+
 def file_walker(root,**kwargs):
   """This is a recursive iterator over the files in a given directory
   (the root), in all subdirectories beneath it, and so forth. The order
@@ -55,6 +71,8 @@ def file_walker(root,**kwargs):
                   expressions (prefixed by 're:'), or pre-compiled RE
                   objects. If any of these matches the name of an
                   encountered directory, that directory is ignored.
+    ignore        (default: []) This works just like prune, but it
+                  excludes files rather than directories.
     include_dirs  (default: False) True if each directory encountered is
                   to be included in this iterator's values immediately before
                   the filename found in that directory. Directory names end
@@ -71,21 +89,11 @@ def file_walker(root,**kwargs):
   if max_depth==None:
     max_depth=sys.maxsize # I don't think we'll hit this limit in practice.
   follow_links=kwargs.get('follow_links',True)
-  prune=list(kwargs.get('prune',[]))
+  prune=compile_filename_patterns(kwargs.get('prune',[]))
+  ignore=compile_filename_patterns(kwargs.get('ignore',[]))
   include_dirs=kwargs.get('include_dirs',False)
   stack=[(0,root)] # Prime our stack with root (at depth 0).
   been_there=set([os.path.abspath(os.path.realpath(root))])
-
-  # Convert filespecs to regular expressions, remove the 're:' prefix
-  # from from the caller's regular expressions, and compile RE strings
-  # to RE objects, leaving only RE objects in the prune list.
-  for i in range(len(prune)):
-    if isinstance(prune[i],basestring):
-      if prune[i].startswith('re:'):
-        prune[i]=prune[i][2:]
-      else:
-        prune[i]=fnmatch.translate(prune[i])
-      prune[i]=re.compile(prune[i])
 
   while stack:
     depth,path=stack.pop()
@@ -101,7 +109,9 @@ def file_walker(root,**kwargs):
         # Just add this to this path's list of directories for now.
         dlist.insert(0,fn)
         continue
-      yield p
+      pat,mat=first_match(fn,ignore)
+      if not pat:
+        yield p
     # Don't dig deeper than we've been told to.
     if depth<max_depth:
       # Now, let's deal with the directories we found.
@@ -112,7 +122,6 @@ def file_walker(root,**kwargs):
           # Nope. We're not following symlinks.
           continue
         rp=os.path.abspath(os.path.realpath(p))
-        print 'DEBUG: rp=%r'%(rp,)
         if rp in been_there:
           # Nope. We've already seen this path (and possibly processed it).
           continue
@@ -123,19 +132,7 @@ def file_walker(root,**kwargs):
           continue
         # We have a keeper! Record the path and push it onto the stack.
         been_there.add(rp)
-        print 'DEBUG: Added %r to been_there'%(rp,)
         stack.append((depth+1,p))
-
-        ## Because of the way it's structured, this test MUST come last.
-        #for pat in prune:
-        #  m=pat.match(fn)
-        #  if m:
-        #    # Nope. This directory name matches something in our prune list.
-        #    break
-        #if not m:
-        #  # Remember this path so we can visit it later.
-        #  been_there.add(rp)
-        #  stack.append((depth+1,p))
 
 def shellify(val):
   """Return the given value quotted and escaped as necessary for a Unix
