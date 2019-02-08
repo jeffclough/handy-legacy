@@ -1,21 +1,22 @@
 #!/usr/bin/env python
-import exceptions,socket,struct,types
+import exceptions,socket,struct
 from string import *
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 class IPAddrError(exceptions.Exception):
-  '''This is the type of exception thrown from IPAddr and IPSubnet.'''
+  '''This is the type of exception thrown from IP4Addr and IPSubnet.'''
 
   def __init__(self,args=None):
     self.args=args
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class IPAddr:
-  '''IPAddr is a class that encapsulates an IP address. While only a 32-bit
-  integer is stored internally, IPAddr objects may be coerced into strings
-  (dotted decimal) and lists and tuples.'''
+class IP4Addr:
+  '''IP4Addr is a class that encapsulates an IP address. While only a
+  32-bit integer is stored internally, IP4Addr objects may be coerced
+  into strings (dotted decimal) and lists and tuples.'''
+
   addr=0
 
   def __init__(self,s=None):
@@ -45,7 +46,7 @@ class IPAddr:
   def __repr__(self):
     '''Return a string that eval() can use to create a copy of this object.'''
 
-    return 'IPAddr((%d,%d,%d,%d))'%self.to_tuple()
+    return 'IP4Addr((%d,%d,%d,%d))'%self.to_tuple()
 
   def __str__(self):
     '''Return a string that holds the value of this object in display format.'''
@@ -57,7 +58,7 @@ class IPAddr:
     return '.'.join(['%02x'%o for o in self.to_tuple()])
 
   def getMask(self):
-    '''Return an IPAddr object containing a network mask appropriate for
+    '''Return an IP4Addr object containing a network mask appropriate for
     this IP address.'''
 
     a,b,c,d=self.to_tuple()
@@ -72,7 +73,7 @@ class IPAddr:
     else: # Looback, broadcast, or just a plain crazy address
       h=0
     mask=(0xffffffff<<h)&0xffffffff
-    return IPAddr(mask)
+    return IP4Addr(mask)
 
   def to_list(self):
     '''Return a list containing the 4 octets of this IP address.'''
@@ -94,7 +95,7 @@ class IPAddr:
   def setval(self,other,nbo=False):
     '''Given a string (dotted decimal format), a list or tuple (of 4
     octet values), or an integer (a host byte order 32-bit IP address),
-    set the value of this IPAddr object accordingly.
+    set the value of this IP4Addr object accordingly.
 
     If an integer value is given and the nbo argument is True, the
     integer is assumed to be given in network byte order. In this case
@@ -102,40 +103,40 @@ class IPAddr:
     internally in host byte order.'''
 
     # Convert from a list or tuple of octet values.
-    if isinstance(other,types.ListType) or isinstance(other,types.TupleType):
+    if isinstance(other,list) or isinstance(other,tuple):
       self.addr=0
-      if len(other)<4 and not isinstance(other,types.ListType):
-	other=list(other)
+      if len(other)<4 and not isinstance(other,list):
+        other=list(other)
       while len(other)<4:
-	other.append(0)
+        other.append(0)
       if len(other)>4:
-	raise IPAddrError,'Too many octets in IPAddress: %s'%str(other)
+        raise IPAddrError,'Too many octets in IPAddress: %s'%str(other)
       for o in other:
-	if o=='':
-	  o=0
-	try:
+        if o=='':
+          o=0
+        try:
           if isinstance(o,basestring):
             n=int(o,0)
           else:
             n=int(o)
-	except:
-	  raise TypeError('Bad octet %r in IP address: %r'%(o,other))
-	if n<0 or n>255:
+        except:
+          raise TypeError('Bad octet %r in IP address: %r'%(o,other))
+        if n<0 or n>255:
           raise ValueError('Bad octet %r in IP address: %r'%(n,other))
-	self.addr=(self.addr<<8)|n
+        self.addr=(self.addr<<8)|n
       return self
-    if isinstance(other,types.StringType):
+    if isinstance(other,basestring):
       l=other.split('.')
       return self.setval(l)
-    if isinstance(other,types.IntType) or isinstance(other,types.LongType):
+    if isinstance(other,int) or isinstance(other,long):
       self.addr=int(other&0xffffffff)
       if nbo:
         self.addr=ntohl(self.addr)
       return self
-    if isinstance(other,IPAddr):
+    if isinstance(other,IP4Addr):
       self.addr=other.addr
       return self
-    raise TypeErorr('Attempted to coerce unsupported type %s with value %r to IPAddr'%(type(other),other))
+    raise TypeErorr('Attempted to coerce unsupported type %s with value %r to IP4Addr'%(type(other),other))
 
   def __len__(self):
     '''All IP addresses (as far as this implementation is concerned) are
@@ -147,7 +148,7 @@ class IPAddr:
     '''Return the ith (cardinally speaking) octet of our IP address.'''
 
     if i&~3:
-      raise IndexError,'IPAddr index out of range'
+      raise IndexError,'IP4Addr index out of range'
     return (self.addr>>(8*(3-i))) & 0xff
 
   def __setitem__(self,i,val):
@@ -155,13 +156,13 @@ class IPAddr:
     left-most octet is at index 0.'''
 
     if i&~3:
-      raise IndexError('IPAddr index out of range: %r'%i)
+      raise IndexError('IP4Addr index out of range: %r'%i)
     try:
       n=int(val,0)
     except:
-      raise TypeErorr('Attempted to coerce unsupported type %s with value %r to IPAddr octet'%(type(val),val))
+      raise TypeErorr('Attempted to coerce unsupported type %s with value %r to IP4Addr octet'%(type(val),val))
     if n&~0xff:
-      raise ValueErorr('IPAddr octet value out of range: %r'%n)
+      raise ValueErorr('IP4Addr octet value out of range: %r'%n)
     shft=8*(3-i)
     mask=~(0xff<<shft)
     self.addr=(self.addr|mask)|(n<<shft)
@@ -172,11 +173,11 @@ class IPAddr:
     return self.to_tuple()[i:j]
 
   def __cmp__(self,other):
-    '''Compare this IP address with another, which might be either an IPAddr
+    '''Compare this IP address with another, which might be either an IP4Addr
     object or a value that can be coerced into one.'''
 
-    if not isinstance(other,IPAddr):
-      other=IPAddr(other)
+    if not isinstance(other,IP4Addr):
+      other=IP4Addr(other)
     addr=other.addr
     # Now perform an unsigned comparison between two 32-bit integers.
     if (self.addr^addr)&0x80000000:
@@ -186,52 +187,52 @@ class IPAddr:
     return n
 
   def __lt__(self,other):
-    if not isinstance(other,IPAddr):
-      other=IPAddr(other)
+    if not isinstance(other,IP4Addr):
+      other=IP4Addr(other)
     return self.addr<other.addr
 
   def __le__(self,other):
-    if not isinstance(other,IPAddr):
-      other=IPAddr(other)
+    if not isinstance(other,IP4Addr):
+      other=IP4Addr(other)
     return self.addr<=other.addr
 
   def __eq__(self,other):
-    if not isinstance(other,IPAddr):
-      other=IPAddr(other)
+    if not isinstance(other,IP4Addr):
+      other=IP4Addr(other)
     return self.addr==other.addr
 
   def __ne__(self,other):
-    if not isinstance(other,IPAddr):
-      other=IPAddr(other)
+    if not isinstance(other,IP4Addr):
+      other=IP4Addr(other)
     return self.addr!=other.addr
 
   def __ge__(self,other):
-    if not isinstance(other,IPAddr):
-      other=IPAddr(other)
+    if not isinstance(other,IP4Addr):
+      other=IP4Addr(other)
     return self.addr>=other.addr
 
   def __gt__(self,other):
-    if not isinstance(other,IPAddr):
-      other=IPAddr(other)
+    if not isinstance(other,IP4Addr):
+      other=IP4Addr(other)
     return self.addr>other.addr
 
   def __nonzero__(self):
     return self.addr!=0
 
   def __coerce__(self,other):
-    if not isinstance(other,IPAddr):
-      other=IPAddr(other)
+    if not isinstance(other,IP4Addr):
+      other=IP4Addr(other)
     return self,other
 
   def __add__(self,other):
-    return IPAddr(self.addr+other.addr)
+    return IP4Addr(self.addr+other.addr)
 
   def __iadd__(self,other):
     self.addr+=other.addr
     return self
 
   def __sub__(self,other):
-    return IPAddr(self.addr-other.addr)
+    return IP4Addr(self.addr-other.addr)
 
   def __isub__(self,other):
     self.addr-=other.addr
@@ -240,11 +241,11 @@ class IPAddr:
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 class IPSubnet:
-  '''The IPSubnet class encapsulates an IP network address and a subnet mask.
-  It stores these in two IPAddr objects internally.'''
+  '''The IPSubnet class encapsulates an IP network address and a subnet
+  mask. It stores these in two IP4Addr objects internally.'''
 
-  net=IPAddr()
-  mask=IPAddr()
+  net=IP4Addr()
+  mask=IP4Addr()
 
   def __init__(self,s=None):
     if s:
@@ -260,18 +261,18 @@ class IPSubnet:
     return '%s/%s'%(hex(self.net),hex(self.mask))
 
   def __contains__(self,obj):
-    '''Given an IPAddr object, or some value that that can be coerced into
-    an IPAddr object, return true if that IP address resides on our subnet.
-    Otherwise, return False.'''
+    '''Given an IP4Addr object, or some value that that can be coerced
+    into an IP4Addr object, return true if that IP address resides on
+    our subnet. Otherwise, return False.'''
 
-    if not isinstance(obj,IPAddr):
-      obj=IPAddr(obj)
+    if not isinstance(obj,IP4Addr):
+      obj=IP4Addr(obj)
     return (obj.addr&self.mask.addr)==self.net.addr
 
   def setval(self,other):
-    '''Set the value of this IPSubnet object as specified by other. The other
-    parameter may be a string, list, or tuple. If a string is used, it may be
-    formatted as:
+    '''Set the value of this IPSubnet object as specified by other. The
+    other parameter may be a string, list, or tuple. If a string is
+    used, it may be formatted as:
 
     d.d.d.d 
       or
@@ -279,16 +280,16 @@ class IPSubnet:
       or
     d.d.d.d/size
 
-    If other is a list or tuple, it must contain one or two values that can
-    be coerced to IPAddr values. The first is the network address and the
-    second is the subnet mask. If the subnet mask is omitted, it will be
-    computed from the network address by translating any non-zero octets to
-    a value of 255.'''
+    If other is a list or tuple, it must contain one or two values that
+    can be coerced to IP4Addr values. The first is the network address
+    and the second is the subnet mask. If the subnet mask is omitted, it
+    will be computed from the network address by translating any
+    non-zero octets to a value of 255.'''
 
-    if isinstance(other,types.StringType):
+    if isinstance(other,basestring):
       if other.find('/')==-1:
         # Guess the subnet mask from the given IP address.
-        addr=IPAddr(other)
+        addr=IP4Addr(other)
         self.setval((addr,addr.getMask()))
       else:
         # We've been given a specific subnet mask ...
@@ -298,21 +299,21 @@ class IPSubnet:
           n=int(mask,0)
           if n<0 or n>32:
             raise ValueError('Bad mask size (%r) used in IPSubnet %r'%(n,other))
-          mask=IPAddr((-1<<(32-n))&0xffffffff)
+          mask=IP4Addr((-1<<(32-n))&0xffffffff)
         except:
           # or the actual bit pattern of the mask.
           pass
         self.setval((addr,mask))
       return self
-    if isinstance(other,types.ListType) or isinstance(other,types.TupleType):
+    if isinstance(other,list) or isinstance(other,tuple):
       if len(other)<1 or len(other)>2:
-	raise IPAddrError,'Malformed subnet component list.'
-      self.net=IPAddr(other[0])
+        raise IPAddrError,'Malformed subnet component list.'
+      self.net=IP4Addr(other[0])
       if len(other)>1:
-	self.mask=IPAddr(other[1])
+        self.mask=IP4Addr(other[1])
       else:
         self.mask=self.net.getMask()
-	l=self.net.to_list()
+        l=self.net.to_list()
       self.net.addr&=self.mask.addr
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -320,40 +321,41 @@ class IPSubnet:
  # # # # # # # # # # # #  U N I T   T E S T   C O D E  # # # # # # # # # # # #
 
 if __name__=='__main__':
+  import pprint
   tlist=[('130.207.165',
-	  '130.207.164.254',
-	  '130.207.164.255',
-	  [130,207,165,0],
-	  (130,207,165,1),
-	  0x82cfa5fe, # 130.207.165.254
-	  '130.207.165.255',
-	  '130.207.166.0',
-	  '130.207.166.1'),
-	 ('10.0.0.0',
-	  '9.0.255.254',
-	  '9.0.255.255',
-	  '10.0.0.1',
-	  '10.0.1.0',
-	  '10.0.255.254',
-	  '10.0.255.255',
-	  '10.1.0.0',
-	  '11.0.0.0',
-	  '11.0.0.1'),
-	 ]
-  # Test construction of IPAddr and IPSubnet and subnet containership.
+          '130.207.164.254',
+          '130.207.164.255',
+          [130,207,165,0],
+          (130,207,165,1),
+          0x82cfa5fe, # 130.207.165.254
+          '130.207.165.255',
+          '130.207.166.0',
+          '130.207.166.1'),
+         ('10.0.0.0',
+          '9.0.255.254',
+          '9.0.255.255',
+          '10.0.0.1',
+          '10.0.1.0',
+          '10.0.255.254',
+          '10.0.255.255',
+          '10.1.0.0',
+          '11.0.0.0',
+          '11.0.0.1'),
+         ]
+  # Test construction of IP4Addr and IPSubnet and subnet containership.
   for t in tlist:
     subnet=IPSubnet(t[0])
     print 'Subnet=%s'%str(subnet)
     for a in t[1:]:
-      addr=IPAddr(a)
+      addr=IP4Addr(a)
       if addr in subnet:
-	print '\t%s\tin'%str(addr)
+        print '\t%s\tin'%str(addr)
       else:
-	print '\t%s\tout'%str(addr)
+        print '\t%s\tout'%str(addr)
 
   # Test more construction variations, repr() and eval() compatibilty,
-  # comparison of IPAddr objects with various types of values, etc.
-  x=IPAddr('1.2.3.4')
+  # comparison of IP4Addr objects with various types of values, etc.
+  x=IP4Addr('1.2.3.4')
   print 'x is %s'%x
   print 'hex(x) is %r'%hex(x)
   print 'x is 0x%08x when stringified with 0x%%08x'%x
@@ -363,8 +365,8 @@ if __name__=='__main__':
   print 'y-=1'
   y-=1
   print 'x is %s, y is %s'%(x,y)
-  print 'y=IPAddr(x)'
-  y=IPAddr(x)
+  print 'y=IP4Addr(x)'
+  y=IP4Addr(x)
   print 'y is %s'%y
   print 'x==y is %r'%(x==y)
   print 'x=="1.2.3.3" is %r'%(x=='1.2.3.3')
@@ -386,5 +388,6 @@ if __name__=='__main__':
   print 'subnet is %s'%subnet
   s='127.0.0.0/255.255.255.254 128.61.0.0/255.255.0.0 130.207.0.0/255.255.0.0 143.215.0.0/255.255.0.0 199.77.128.0/255.255.128.0'
   print s
-  t=tuple(map(lambda x:IPSubnet(x),s.split()))
-  print t
+  #t=tuple(map(lambda x:IPSubnet(x),s.split()))
+  t=[IPSubnet(x) for x in s.split()]
+  pprint.pprint(t)
