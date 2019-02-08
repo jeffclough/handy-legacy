@@ -1,6 +1,17 @@
 #!/usr/bin/env python
-import fnmatch,os,pipes,re,sys
+import fcntl,fnmatch,os,pipes,re,struct,sys,termios
 from argparse import ArgumentTypeError
+
+def get_terminal_size():
+  "Return a (width,height) tuple for the caracter size of our terminal."
+
+  for f in sys.stdin,sys.stdout,sys.stderr:
+    if f.isatty():
+      th,tw,_,_=struct.unpack('HHHH',fcntl.ioctl(f.fileno(),termios.TIOCGWINSZ,struct.pack('HHHH',0,0,0,0)))
+      break
+  else:
+    th,tw=[int(x) for x in (os.environ.get('LINES','25'),os.environ.get('COUMNS','80'))]
+  return tw,th
 
 def non_negative_int(s):
   "Return the non-negative integer value of s, or raise ArgumentTypeError."
@@ -202,7 +213,8 @@ class TitleCase(str):
 if __name__=='__main__':
   import argparse,doctest,sys
 
-  import argparse
+  print 'Terminal dimensions: %d columns, %d lines'%get_terminal_size()
+
   ap=argparse.ArgumentParser()
   sp=ap.add_subparsers()
 
