@@ -270,15 +270,24 @@ class TableWriter(object):
     """outfile is the open file we are to write data to. The following
     arguments are recognized:
 
-      none_as holds the text to be used to represent None values in the
-      output. The default is simply '', but setting it to something like
-      'None', 'NULL', or 'N/A' is sometimes helpful.
+      none_as   holds the text to be used to represent None values in
+                the output. The default is simply '', but setting it to
+                something like 'None', 'NULL', or 'N/A' is sometimes
+                helpful.
+      col_sep   The column separator character in ASCII output.
+                (default=' | ')
+      haed_sep  The line that separates the first heading line from the
+                remaining data lines in ASCII output. (default='-')
+      markdown  True if this table is to be output as Markdown.
+                (default=False)
+
     """
 
     self.outfile=outfile
     self.none_as=flags.get('none_as','')
     self.col_sep=flags.get('col_sep',' | ')
-    self.heading_sep=flags.get('heading_sep','-')
+    self.head_sep=flags.get('head_sep','-')
+    self.markdown=flags.get('markdown',False)
     self.data=[] # Our list of data rows.
 
   def writerow(self,row):
