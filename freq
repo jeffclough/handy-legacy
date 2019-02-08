@@ -1,0 +1,163 @@
+#!/usr/bin/env python
+
+import argparse,csv,fcntl,json,os,struct,sys,termios
+
+char_names={
+  0x00:'NUL',0x01:'SOH',0x02:'STX',0x03:'ETX',0x04:'EOT',0x05:'ENQ',0x06:'ACK',0x07:'BEL',
+  0x08:'BS',0x09:'HT',0x0a:'NL',0x0b:'VT',0x0c:'FF',0x0d:'CR',0x0e:'SO',0x0f:'SI',
+  0x10:'DLE',0x11:'DC1',0x12:'DC2',0x13:'DC3',0x14:'DC4',0x15:'NAK',0x16:'SYN',0x17:'ETB',
+  0x18:'CAN',0x19:'EM',0x1a:'SUB',0x1b:'ESC',0x1c:'FS',0x1d:'GS',0x1e:'RS',0x1f:'US',
+  0x20:'SP',0x7f:'DEL'
+}
+
+def get_terminal_size():
+  "Return a (width,height) tuple for the caracter size of our terminal."
+
+  for f in sys.stdin,sys.stdout,sys.stderr:
+    if f.isatty():
+      th,tw,_,_=struct.unpack('HHHH',fcntl.ioctl(f.fileno(),termios.TIOCGWINSZ,struct.pack('HHHH',0,0,0,0)))
+      break
+  else:
+    th,tw=[int(x) for x in (os.environ.get('LINES','25'),os.environ.get('COUMNS','80'))]
+  return tw,th
+
+term_width,_=get_terminal_size()
+
+ap=argparse.ArgumentParser()
+ap.add_argument('--aggregate','-a',dest='aggregate',action='store_true',help="Output reports data from all inputs as one.")
+ap.add_argument('--output','-o',dest='output',action='store',choices=('csv','json','json-pretty','table'),default='table',help="Output frequency data as CSV, JSON, \"pretty\" JSON, or as a table (the default).")
+ap.add_argument('--values',dest='values',action='store',choices=('count','percent'),default='count',help="Output frequencies in decimal (d), percent (p), or CSV (c) format.")
+ap.add_argument('--verbose','-v',dest='verbose',action='store_true',help="Output an ASCII chart above the regular output as a reference.")
+ap.add_argument('--width','-w',dest='width',action='store',type=int,default=term_width,help="Width of terminal to fit output to.")
+ap.add_argument('--zero','-z',dest='zero',action='store_true',help="Output 0 rather than - for characters not found in the input. This can help visual clarity.")
+ap.add_argument('files',nargs='*',help="Optional input file(s). Use - to read standard input.")
+opt=ap.parse_args()
+
+#print 'DEBUG: opt.aggregate=%r'%opt.aggregate
+#print 'DEBUG: opt.output=%r'%opt.output
+#print 'DEBUG: opt.values=%r'%opt.values
+#print 'DEBUG: opt.verbose=%r'%opt.verbose
+#print 'DEBUG: opt.width=%r'%opt.width
+#print 'DEBUG: opt.zero=%r'%opt.zero
+#print 'DEBUG: opt.files=%r'%opt.files
+
+def read_file(filename):
+  "Count each byte value found in the input file."
+
+  count=[0]*256
+  f=open(filename,'rb')
+  for b in f.read():
+    count[ord(b)]+=1
+  f.close()
+  return count
+
+def write_counts(count):
+  "Write this list of counts."
+  
+  if opt.values=='percent':
+    t=float(sum(count))
+    if t>0:
+      count=[(x/t)*100 for x in count]
+
+  if opt.output in ('csv','json','json-pretty'):
+    # Non-tabular Formats
+    if opt.verbose:
+      # Columns: numeric character value, character name, character count
+      count=[
+        (i,char_names.get(i,chr(i)),count[i])
+          for i in range(len(count))
+            if count[i] or opt.zero
+      ]
+    else:
+      # Columns: numeric character value, character count
+      count=[
+        (i,count[i])
+          for i in range(len(count))
+            if count[i] or opt.zero
+      ]
+    if opt.output=='csv':
+      csv.writer(sys.stdout).writerows(count)
+    elif opt.output=='json':
+      json.dump(count,sys.stdout)
+      sys.stdout.write('\n')
+    elif opt.output=='json-pretty':
+      json.dump(count,sys.stdout,indent=2)
+      sys.stdout.write('\n')
+  else:
+    # Tabular output
+    maxbyte=max([i for i in range(len(count)) if count[i]>0])
+    if maxbyte<0x80:
+      maxbyte=0x80
+    else:
+      maxbyte=((maxbyte+0x0f)&0xfff0)+1
+    maxrow=maxbyte/16
+
+    # Stringify our counts in preparation for formatting.
+    if opt.values=='percent':
+      count=['%0.2f'%x for x in count]
+      if not opt.zero:
+        for i in range(len(count)):
+          if count[i]=='0.00':
+            count[i]='-  '
+    else:
+      count=['%d'%x for x in count]
+      if not opt.zero:
+        for i in range(len(count)):
+          if count[i]=='0':
+            count[i]='-'
+
+    # Express our stringified character data as a list of 16-character rows.
+    table=[count[i:i+16] for i in range(0,256,16)]
+
+    # Figure out the best column widths to use.
+    if opt.verbose:
+      minwid=3 # for character names.
+    else:
+      minwid=2 # for column labels.
+    colwid=[max([len(x) for x in count])]*16
+    colwid=[max(x,minwid) for x in colwid]
+    if sum(colwid)+3>opt.width:
+      # We'll have to go to variable column widths.
+      colwid=[
+        max([len(table[row][col]) for row in range(maxrow)])
+        for col in range(16)
+      ]
+
+      # ... and if it's still too wide, this is the best we can do.
+    colwid=[max(x,minwid) for x in colwid] # Make all our data still fits.
+
+    if opt.verbose:
+      # Show and ASCII chart above the table of our character counts.
+      for r in range(maxrow):
+        print ('%02x '%(r*16))+(
+          ' '.join([
+              '%*s'%(colwid[c],char_names.get(r*16+c,chr(r*16+c)))
+                for c in range(0x10)
+            ])
+        )
+
+    # Finally, print our table.
+    if opt.values=='percent':
+      print '   '+(' '.join(['%*s'%(colwid[c],'%02x '%c) for c in range(0x10)]))
+    else:
+      print '   '+(' '.join(['%*s'%(colwid[c],'%02x'%c) for c in range(0x10)]))
+    for r in range(maxrow):
+      print ('%02x '%(r*16))+(' '.join(['%*s'%(colwid[c],table[r][c]) for c in range(0x10)]))
+
+# We're reading from standard input, default to handling it first.
+if not sys.stdin.isatty() and '-' not in opt.files:
+  opt.files.insert(0,'-')
+
+aggregated=[0]*256
+for filename in opt.files:
+  if filename=='-':
+    filename='/dev/stdin'
+  count=read_file(filename)
+  if opt.aggregate:
+    aggregated=[aggregated[i]+count[i] for i in range(len(aggregated))]
+  else:
+    if opt.output!='csv':
+      print '\n%s:'%filename
+    write_counts(count)
+if opt.aggregate:
+  write_count(aggregated)
