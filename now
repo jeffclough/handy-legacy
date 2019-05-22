@@ -67,7 +67,7 @@ tf=(
     # the start of the C Epoch.
     # A single integer value followed by
     '"N[smhdw]" where N is an integer optionally followed by a unit character.',
-    re.compile(r'^(?P<sec>\d+)(?P<units>[smhdw])?$'),
+    re.compile(r'^(?P<sec>-?\d+)(?P<units>[smhdw])?$'),
     (
       (
         (lambda _: True), # The matched RE is all the vetting we need.
@@ -77,10 +77,10 @@ tf=(
   ),
   ( # Handle hour:minutes:second expressions.
     '"Hour{:.}Minute{:.}Second" where the separators must match.',
-    re.compile(r'^(?P<hour>\d+)(?P<tsep>[:.])(?P<min>\d+)(?P=tsep)(?P<sec>\d+)$'),
+    re.compile(r'^(?P<hour>-?\d+)(?P<tsep>[:.])(?P<min>-?\d+)(?P=tsep)(?P<sec>-?\d+)$'),
     (
       (
-        (lambda td: td.hour>=0 and td.hour<24 and td.min>=0 and td.min<60 and td.sec>=0 and td.min<60),
+        (lambda td: td.hour>-24 and td.hour<24 and td.min>-60 and td.min<60 and td.sec>-60 and td.min<60),
         #(lambda td: time.strptime('%d-%d-%d %d:%d:%d %s'%(YYYY,MM,DD,td.hour,td.min,td.sec,tz_name),IN_FMT))
         (lambda td: time.localtime(time.mktime((YYYY,MM,DD,td.hour,td.min,td.sec,0,0,DST))))
       ),
@@ -88,10 +88,10 @@ tf=(
   ),
   ( # "Mon dd hour:minute:second"
     '"MonthName Day Hour{:.}Minute{:.}Second" where the month may be abbreviated.',
-    re.compile(r'^(?P<mname>\w+)\s+(?P<day>\d+)\s+(?P<hour>\d+)(?P<tsep>[:.])(?P<min>\d+)(?P=tsep)(?P<sec>\d+)$',re.IGNORECASE),
+    re.compile(r'^(?P<mname>\w+)\s+(?P<day>\d+)\s+(?P<hour>-?\d+)(?P<tsep>[:.])(?P<min>-?\d+)(?P=tsep)(?P<sec>-?\d+)$',re.IGNORECASE),
     (
       (
-        (lambda td: month_num(td.mname)!=0 and td.day>0 and td.day<32 and td.hour>=0 and td.hour<24 and td.min>=0 and td.min<60 and td.sec>=0 and td.min<60),
+        (lambda td: month_num(td.mname)!=0 and td.day>-32 and td.day<32 and td.hour>-24 and td.hour<24 and td.min>-60 and td.min<60 and td.sec>-60 and td.min<60),
         (lambda td: time.strptime('%d %d %d %d:%d:%d'%(YYYY,month_num(td.mname),td.day,td.hour,td.min,td.sec),'%Y %m %d %H:%M:%S'))
       ),
     )
@@ -149,6 +149,7 @@ op.add_option('-h','--help',dest='help_me',default=False,action='store_true',hel
 op.add_option('-t','--time',dest='time',action='store',default=None,help="Use the given time rather than the current time.")
 #op.add_option('--input-format',dest='ifmt',action='store',default='%x %X',help="Use the given format to read -t's argument.")
 op.add_option('--output-format',dest='ofmt',action='store',default=IN_FMT,help="Use the given format to write the given or default time. Overridden by -c (--epoch).")
+op.add_option('--utc-output',dest='utc_output',action='store_true',help="Use UTC for any date/time output.")
 
 opt,args=op.parse_args()
 if opt.help_me:
@@ -196,5 +197,7 @@ else:
 # Output time t in the requested or default format.
 if opt.epoch:
   print t
+elif opt.utc_output:
+  print time.strftime(opt.ofmt,time.gmtime(t))
 else:
   print time.strftime(opt.ofmt,time.localtime(t))
