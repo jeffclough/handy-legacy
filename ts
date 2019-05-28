@@ -53,7 +53,8 @@ op.add_option('--time-format',dest='time_format',action='store',default='%Y%m%d_
 op.add_option('-n','--dry-run',dest='dry_run',action='store_true',default=False,help="Don't actually rename any files. Only output the new name of each file as it would be renamed.")
 op.add_option('--offset',dest='offset',action='store',default=None,help="Formatted as '[+|-]H:M' or '[+|-]S', where H is hours, M is minutes, and S is seconds, apply the given offset to the time.")
 op.add_option('-c','--copy',dest='copy',action='store_true',default=False,help="Copy the file rather than renaming it.")
-op.add_option('-s','--show-me',dest='showme',action='store_true',default=False,help="Only output the timestamped filename of the given file(s). No file is actually renamed or copied.")
+op.add_option('-s','--show-me',dest='showme',action='store_true',default=False,help="Only output the timestamped filename of the given file(s). No file is actually renamed or copied. The current time is used for any file that does not exist.")
+op.add_option('-q','--quiet',dest='quiet',action='store_true',default=False,help="Perform all renaming or copying silently. This option does not silence the --age or the -s (--show-me) option.")
 op.add_option('--utc',dest='utc',action='store_true',default=False,help="Express all times as UTC (no time zone at all).")
 opt,args=op.parse_args()
 if opt.offset:
@@ -72,11 +73,6 @@ if opt.offset:
 else:
   opt.offset=0
 
-def new_filename(filename,timestamp):
-  """Return the new filename of the timestamped file."""
-
-  return
-
 if opt.utc:
   # Compute how far, in seconds, local time is from UTC.
   t=time.mktime(time.localtime()) # Make sure we're all rounding floats the same way.
@@ -86,65 +82,74 @@ else:
 
 if args:
   # This is the usual mode of renaming files according to their time.
-  for f in args:
-    # Get the time this file was created, accessed, or modified.
-    try:
-      if opt.time=='created':
-        t=os.stat(f).st_ctime
-      elif opt.time=='accessed':
-        t=os.stat(f).st_atime
-      else:
-        t=os.stat(f).st_mtime
-    except OSError,e:
-      print >>sys.stderr,'%s: %s'%(prog,e)
-      sys.exit(2)
-    # Apply any offset
-    t+=utc_offset
-    t+=opt.offset
-    if opt.age:
-      print int(time.time()-t+utc_offset)
-      continue
-    # Format the time as a string.
-    t=time.strftime(opt.time_format,time.localtime(t))
-    # Create the new filename.
-    for ext in extensions:
-      if f.endswith(ext):
-        # Remove the file extension, but remember what we removed.
-        f=f[:-len(ext)]
-        break
-    else:
-      # No special file extension found, so remember that.
-      ext=None
-    filename=opt.format%dict(filename=f,time=t)
-    if ext!=None:
-      # Re-attach the file extension to our original and new filenames.
-      f+=ext
-      filename+=ext
-    if opt.showme:
-      print filename
-    elif opt.dry_run:
-      # Just output the new name of the file.
-      print "'%s' %s> '%s'"%(f,'-='[opt.copy],filename)
-    else:
-      # Ensure that there's no existing file by the new filename.
-      if lexists(filename):
-        sys.stdout.flush()
-        sys.stderr.write('%s: file exists: %s\n'%(prog,filename))
-        sys.stderr.flush()
+  try:
+    for f in args:
+      # Get the time this file was created, accessed, or modified.
+      try:
+        if opt.time=='created':
+          t=os.stat(f).st_ctime
+        elif opt.time=='accessed':
+          t=os.stat(f).st_atime
+        else:
+          t=os.stat(f).st_mtime
+      except (IOError,OSError),e:
+        if e.errno==2 and opt.showme:
+          # Use the current time if we're in "show-me" mode and there's no such flie.
+          t=int(time.time())
+        else:
+          raise
+      # Apply any offset
+      t+=utc_offset
+      t+=opt.offset
+      if opt.age:
+        print int(time.time()-t+utc_offset)
         continue
+      # Format the time as a string.
+      t=time.strftime(opt.time_format,time.localtime(t))
+      # Create the new filename.
+      for ext in extensions:
+        if f.endswith(ext):
+          # Remove the file extension, but remember what we removed.
+          f=f[:-len(ext)]
+          break
       else:
-        try:
+        # No special file extension found, so remember that.
+        ext=None
+      filename=opt.format%dict(filename=f,time=t)
+      if ext!=None:
+        # Re-attach the file extension to our original and new filenames.
+        f+=ext
+        filename+=ext
+      if opt.showme:
+        print filename
+      elif opt.dry_run:
+        # Just output the new name of the file.
+        if not opt.quiet:
+          print "'%s' %s> '%s'"%(f,'-='[opt.copy],filename)
+      else:
+        # Ensure that there's no existing file by the new filename.
+        if lexists(filename):
+          sys.stdout.flush()
+          sys.stderr.write('%s: file exists: %s\n'%(prog,filename))
+          sys.stderr.flush()
+          continue
+        else:
           if opt.copy:
             # Copy f to filename.
-            print "'%s' => '%s'"%(f,filename)
+            if not opt.quiet:
+              print "'%s' => '%s'"%(f,filename)
             shutil.copy2(f,filename)
           else:
             # Rename f to filename.
-            print "'%s' -> '%s'"%(f,filename)
+            if not opt.quiet:
+              print "'%s' -> '%s'"%(f,filename)
             os.rename(f,filename)
-        except OSError,e:
-          print >>sys.stderr,'%s: %s'%(prog,e)
-          sys.exit(2)
+  except (IOError,OSError),e:
+    if e.filename==None:
+      print >>sys.stderr,'%s: %s'%(prog,e.strerror)
+    else:
+      print >>sys.stderr,'%s: %s: %s'%(prog,e.strerror,e.filename)
+    sys.exit(2)
 else:
   # We're just outputting the current (or offset) time.
   if opt.age:
