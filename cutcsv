@@ -8,6 +8,10 @@ try:
 except:
   XLRD=False
 
+#def debug(msg):
+#  if msg:
+#    sys.stderr.write('DEBUG: '+msg+'\n')
+
 def die(msg,rc=1):
   if msg:
     sys.stderr.write(os.path.basename(sys.argv[0])+': '+msg+'\n')
@@ -26,6 +30,7 @@ re_dialect=re.compile(
   '(?P<doublequote>[ft])'
   '(?P<escapechar>.)'
   '(?P<skipinitialspace>[ft])'
+  '(?P<commentchar>.)?'
   '$'
 )
 
@@ -54,6 +59,16 @@ class LocalDialect(csv.Dialect):
     self.skipinitialspace=kwargs.get('skipinitialspace',False)
     self.lineterminator=kwargs.get('lineterminator',os.linesep)
     self.quoting=kwargs.get('quoting',csv.QUOTE_MINIMAL)
+    self.commentchar=kwargs.get('commentchar','#')
+
+  def __str__(self):
+    return ''.join(['%s'%(getattr(self,v),'') for v in ('delimiter','quotechar','quoting','doublequote','escapechar','skipinitialspace','commentchar')])
+
+  def __repr__(self):
+    return 'LocalDialect(%s)'%','.join([
+      '%s=%r'%(v,getattr(self,v))
+        for v in ('delimiter','quotechar','quoting','doublequote','escapechar','skipinitialspace','commentchar')
+    ])
 
 def parse_dialect(dialect_spec):
   """Parse a dialect string, and return a LocalDialect instance that is
@@ -84,7 +99,7 @@ def parse_dialect(dialect_spec):
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Handle the command line.
 
-default_dialect_spec=',"mt\\f'
+default_dialect_spec=',"mt\\f#'
  
 op=optparse.OptionParser(
   formatter=OptionParserFormatters.IndentedHelpFormatterWithNL(2,8),
@@ -118,7 +133,9 @@ help="""Specify the CSV reader's dialect as SEP[Q[QSTYLE[DQUOTE[ESC[SKIPWS]]]]].
     QSTYLE: Quoting style. One of 'a' (all), 'm' (minimal, the default), 'N' (non-numeric), or 'n' (none).
     DQUOTE: Represent a literal quote as two consecutive quotes. Either 't' (the default) or 'f'.
     ESC: The escape charater, which makes the next character a literal. (default: \\)
-    SKIPWS: Skip whitespace immediately following a field separator. Either 't' or 'f' (the default).""")
+    SKIPWS: Skip whitespace immediately following a field separator. Either 't' or 'f' (the default).
+    COMMENT: The character, if any, that makes a CSV line a comment IF it is the first character on that line. (default: '#')
+(default: %default)""")
 
 op.add_option('--writer',dest='writer',action='store',default=default_dialect_spec,
 help="Specify the CSV writer's dialect, using the same syntax as for --reader. (default: %default)")
@@ -141,8 +158,15 @@ except Exception,e:
   print >>sys.stderr,str(e)
   sys.exit(2)
 
+#if opt.debug:
+#  debug('Option values:')
+#  for o,v in (('-f','fields'),('-j','joinfields'),('--no-heading','skip'),('-o','fmt'),('--vars','vars'),('--reader','reader'),('--writer','writer'),('--worksheet','worksheet'),('--icond','icond'),('--ocond','ocond')):
+#    debug('    %s %s'%(o,getattr(opt,v)))
+
 try:
   opt.reader=parse_dialect(opt.reader)
+#  if opt.debug:
+#    debug('opt.reader=%r'%(opt.reader,))
 except CsvDialectError,e:
   die("Bad CSV reader dialect: %r"%e.dialect_spec)
 except:
@@ -150,6 +174,8 @@ except:
 
 try:
   opt.writer=parse_dialect(opt.writer)
+#  if opt.debug:
+#    debug('opt.reader=%r'%(opt.reader,))
 except CsvDialectError,e:
   die("Bad CSV writer dialect: %r"%e.dialect_spec)
 except:
@@ -297,9 +323,15 @@ try:
 
     IRN=0
     for IREC in reader:
+      # if opt.debug: debug('IREC=%r'%(IREC,))
       # Skip initial lines according to opt.skip.
       IRN+=1
       if IRN<=opt.skip:
+        continue
+
+      # If we know how to identify a comment line, ingore comment lines.
+      #if opt.debug: debug('opt.reader.commentchar=%r, IREC[0]=%r'%(opt.reader.commentchar,IREC[0]))
+      if opt.reader.commentchar and IREC[0].startswith(opt.reader.commentchar):
         continue
 
       # Enforce the input condition if available.
