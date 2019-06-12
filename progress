@@ -219,7 +219,11 @@ class ByteSizeProgress(Progress):
 
 if __name__=='__main__':
   try:
-    import argparse,sys,time
+    import argparse
+  except:
+    import argparse27 as argparse
+  try:
+    import sys,time
 
     ap=argparse.ArgumentParser(
       description="Output a progress bar."

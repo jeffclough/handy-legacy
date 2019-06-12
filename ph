@@ -128,7 +128,11 @@ class Search(object):
 if __name__=='__main__':
   # The code below runs ONLY if this file is executed directly.
 
-  import argparse,csv,sys
+  try:
+    import argparse
+  except:
+    import argparse27 as argparse
+  import csv,sys
 
   if sys.argv[0].endswith('.py'):
     # Run our unit tests if this file looks like a Python module.

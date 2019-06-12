@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 
-import argparse,os,random,re,sys
+try:
+  import argparse
+except:
+  import argparse27 as argparse
+import os,random,re,sys
 
 ap=argparse.ArgumentParser(description="Reading from standard input and writing to standard output, scramble the interior of each word found along the way. That might yield something like this: Radeing from stnraadd iupnt and wnitrig to strdanad optuut, srcbamle the iironetr of each word funod aonlg the way.")
 ap.add_argument('-n',dest="newline",action="store_false",default=True,help="Suppress the newline printed between the scrambled version of any command line words and the strambled version of any text on standard input.")

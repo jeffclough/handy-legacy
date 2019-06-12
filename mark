@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 
-import argparse,csv,os,re,shlex,string,sys
+try:
+  import argparse
+except:
+  import argparse27 as argparse
+import csv,os,re,shlex,string,sys
 import ansi
 
 progname=os.path.basename(sys.argv[0])

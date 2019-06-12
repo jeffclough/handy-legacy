@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 
-import argparse,csv,fcntl,json,os,struct,sys,termios
+try:
+  import argparse
+except:
+  import argparse27 as argparse
+import csv,fcntl,json,os,struct,sys,termios
 
 char_names={
   0x00:'NUL',0x01:'SOH',0x02:'STX',0x03:'ETX',0x04:'EOT',0x05:'ENQ',0x06:'ACK',0x07:'BEL',
