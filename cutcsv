@@ -113,7 +113,7 @@ op.add_option('-f',dest='fields',action='store',default=None,
 help='Output only these fields. FIELDS is made up of one range, or many ranges separated by commas. Each range is one of "N" (the Nth field), "N-" (from the Nth to the last field), "N-M" (from the Nth to the Mth field), or "-M" from the first to the Mth field). Fields are counted beginning with 1, and all ranges are inclusive. By default, all fields are available for output.')
 
 op.add_option('-j',dest='joinfields',action='store',default=None,
-help='Join the a givn field range into a single field separated by a single character.')
+help="""Join the a given field range into a single field separated by a single character. The first character of the JOINFIELDS is the field separator. The remainder of JOINFIELDS is the same field range syntax described for the -f option. Also note that -j renumbers fields as they are joined. If "-j ' 1-2'" is given, then fields 1 and 2 are joined as field 1, and any subsequent fields are renumbered beginning with 2. This is important to remember if you're also using the -f option because -f is evaluated after -j, so -f must refer to fields by their renumbered values.""")
 
 op.add_option('--no-heading',dest='skip',action='store_const',const=1,default=0,
 help="Assume the first line of input contains column headings, and skip over it.")
