@@ -33,6 +33,7 @@ t.ouput(format='json',stream=sys.stdout)
 
 t[row_num] refers directly to that row (not a copy).
 t[row_num][col_num] refers directly to that cell of the table (not a copy).
+t[row_num][col_name] refers directly to that cell of the table (not a copy).
 t[col_name] returns a copy of that column's values.
 
 
@@ -53,7 +54,7 @@ class Table(list):
     """A Table.Row object is just like a Python list, but it knows what
     Table instance it belongs to, which means that it knows what length
     it should be.
-    
+
     Instantiating Table.Row does NOT add the new instance to its table.
     Use Table's insert() or append() methods for that."""
 
@@ -75,6 +76,40 @@ class Table(list):
           data.append([None]*(self.table.colcount-n))
         list.__init__(self,data)
 
+    def append(self,value):
+      if not self.table.internal_change):
+        raise Table.Error('Table rows MUST NOT change length.')
+
+    def extend(self,iterable):
+      if not self.table.internal_change):
+        raise Table.Error('Table rows MUST NOT change length.')
+
+    def insert(self,index,value):
+      if not self.table.internal_change):
+        raise Table.Error('Table rows MUST NOT change length.')
+
+    def pop(self,index=-1):
+      if not self.table.internal_change):
+        raise Table.Error('Table rows MUST NOT change length.')
+
+    def remove(self,value):
+      raise Table.Error('Table rows MUST NOT change length.')
+
+    def reverse(self):
+      raise Table.Error('Table rows MUST NOT be reversed.')
+
+    def sort(self,cmp=None,key=None,reverse=False):
+      raise Table.Error('Table rows MUST NOT be sorted.')
+
+    def __setslice__(self,i,j,seq):
+      "Replace self[i:j] with y IFF len(y)==j-i."
+
+      if len(y)==j-y:
+        for c in range(i,j):
+          self[c]=seq[c-i]
+      else:
+        raise Table.Error('Table rows MUST NOT change length.')
+
   #/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
 
   def __init__(self,**kwargs):
@@ -84,6 +119,7 @@ class Table(list):
       ):
       setattr(self,arg,kwargs.get(arg,def_val))
     self._validate_columns()
+    self._internal_change=False
 
   def _validate_columns(self,set_colcount=None):
     # This is helpful.
@@ -103,7 +139,10 @@ class Table(list):
       self.colcount=int(self.colcount)
       if self.colnames==None or len(colnames)==0:
         self.colnames=['col%d'%(c+1) for c in range(self.colcount)]
-  
+    # Ensure we can identify our columns by name or by number.
+    self.colid=dict([(self.colname[c],c) for c in range(self.colcount)])
+    self.colid.update(dict([(c,c) for c in range(self.colcount)]))
+
   def append(self,row):
     row=Table.Row(self,row)
     if self.colcount==None:
