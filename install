@@ -69,6 +69,7 @@ SCRIPTS=( # These targets are simply copied during installation.
   'slice',
   'strftime',
   'strptime',
+  'timeout',
   'title-case',
   'tread',
   'ts',
