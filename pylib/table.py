@@ -77,29 +77,32 @@ class Table(list):
         list.__init__(self,data)
 
     def append(self,value):
-      if not self.table.internal_change):
+      if not self.table.internal_change:
         raise Table.Error('Table rows MUST NOT change length.')
 
     def extend(self,iterable):
-      if not self.table.internal_change):
+      if not self.table.internal_change:
         raise Table.Error('Table rows MUST NOT change length.')
 
     def insert(self,index,value):
-      if not self.table.internal_change):
+      if not self.table.internal_change:
         raise Table.Error('Table rows MUST NOT change length.')
 
     def pop(self,index=-1):
-      if not self.table.internal_change):
+      if not self.table.internal_change:
         raise Table.Error('Table rows MUST NOT change length.')
 
     def remove(self,value):
-      raise Table.Error('Table rows MUST NOT change length.')
+      if not self.table.internal_change:
+        raise Table.Error('Table rows MUST NOT change length.')
 
     def reverse(self):
-      raise Table.Error('Table rows MUST NOT be reversed.')
+      if not self.table.internal_change:
+        raise Table.Error('Table rows MUST NOT be reversed.')
 
     def sort(self,cmp=None,key=None,reverse=False):
-      raise Table.Error('Table rows MUST NOT be sorted.')
+      if not self.table.internal_change:
+        raise Table.Error('Table rows MUST NOT be sorted.')
 
     def __setslice__(self,i,j,seq):
       "Replace self[i:j] with y IFF len(y)==j-i."
