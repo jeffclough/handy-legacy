@@ -176,8 +176,7 @@ p.add_argument('--keep',dest='keep',metavar='RE',action='store',default=None,
   help='''Keep any lines matching the given RE and discards all others. Keeping lines of CSV data has not yet been implemented. This option is for filtering only and has no effect on colarization. (Cannot be used with --discard.)''')
 p.add_argument('-L',dest='log_mode',action='store_true',default=False,
   help='''Turns on log mode, which marks error, warning, info, and debug output in addition to the time, host, and process conent. Also see --log-format. NOT YET FULLY IMPLEMENTED.''')
-p.add_argument('--log-format',dest='log_format',action='store',default=r'''
-(?P<time>\w+ \d+ \d+:\d+:\d+)
+p.add_argument('--log-format',dest='log_format',action='store',default=r'''(?P<time>\w+ \d+ \d+:\d+:\d+)
 \s+
 (?P<host>\S+)
 \s+
@@ -188,9 +187,8 @@ p.add_argument('--log-format',dest='log_format',action='store',default=r'''
 \s*
 (?P<level>\S+)?
 :\s*
-(?P<message>.*)
-''',
-  help="Set the format to expect for log text, which is a regular expression that matches and names the various parts of each line of log data when the -L option is used. (default=%(default)s) NOT YET FULLY IMPLEMENTED.")
+(?P<message>.*)''',
+  help="""Set the format to expect for log text, which is a regular expression that matches and names the various parts of each line of log data when the -L option is used. (default="%(default)s") NOT YET FULLY IMPLEMENTED.""")
 p.add_argument('--palette',dest='palette',action='store',default='dark',
   help='''Comma-delimited list of color specifications to use to highlight matches for patterns. Each spec is of the form "[ATTR] FG [on BG]" where ATTR is any of bold, italics, underscore, or strikethrough, and FG and BG may be any of black, red, green, yellow, blue, magenta, cyan, or white. Two other possible values for a colorspec can be "normal" and "reverse", which don't make sence with other ATTR, FB, or BG values. You should also know that ATTR, FG, and BG values are persistent from one spec to the next, so, for example "red on black,green,yellow" specifies that matches for the first pattern should be red, second pattern are green, third are yellow, and that all have black backgrounds. Since the palette syntax tends to be verbose, you can also use --palette=dark or --palette=light to use colors generally suitable for dark or light terminal backgrounds, respectively. Since only red, blue, and magenta are used on light backgrounds, using -w is often a good idea with --palette=light. The default setting is "%(default)s".''')
 p.add_argument('-r','--reverse',dest='reverse',action='store_true',default=False,
