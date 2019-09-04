@@ -176,18 +176,20 @@ p.add_argument('--keep',dest='keep',metavar='RE',action='store',default=None,
   help='''Keep any lines matching the given RE and discards all others. Keeping lines of CSV data has not yet been implemented. This option is for filtering only and has no effect on colarization. (Cannot be used with --discard.)''')
 p.add_argument('-L',dest='log_mode',action='store_true',default=False,
   help='''Turns on log mode, which marks error, warning, info, and debug output in addition to the time, host, and process conent. Also see --log-format. NOT YET FULLY IMPLEMENTED.''')
-p.add_argument('--log-format',dest='log_format',action='store',default=r'''(?P<time>\w+ \d+ \d+:\d+:\d+)
+p.add_argument('--log-format',dest='log_format',action='store',default=r'''
+(?P<time>\w+\s+\d+\s\d+:\d+:\d+)
 \s+
 (?P<host>\S+)
 \s+
 (?P<proc>
-  (?P<prog>[^[]+)
-  \[(?P<pid>\d+(?P<sub>-\d+)?)\]
+  (?P<prog>[^[ ]+)
+  (\[(?P<pid>\d+(?P<sub>-\d+)?)\])?
 )
 \s*
 (?P<level>\S+)?
 :\s*
-(?P<message>.*)''',
+(?P<message>.*)
+'''.replace(' ','').replace('\n',''),
   help="""Set the format to expect for log text, which is a regular expression that matches and names the various parts of each line of log data when the -L option is used. (default="%(default)s") NOT YET FULLY IMPLEMENTED.""")
 p.add_argument('--palette',dest='palette',action='store',default='dark',
   help='''Comma-delimited list of color specifications to use to highlight matches for patterns. Each spec is of the form "[ATTR] FG [on BG]" where ATTR is any of bold, italics, underscore, or strikethrough, and FG and BG may be any of black, red, green, yellow, blue, magenta, cyan, or white. Two other possible values for a colorspec can be "normal" and "reverse", which don't make sence with other ATTR, FB, or BG values. You should also know that ATTR, FG, and BG values are persistent from one spec to the next, so, for example "red on black,green,yellow" specifies that matches for the first pattern should be red, second pattern are green, third are yellow, and that all have black backgrounds. Since the palette syntax tends to be verbose, you can also use --palette=dark or --palette=light to use colors generally suitable for dark or light terminal backgrounds, respectively. Since only red, blue, and magenta are used on light backgrounds, using -w is often a good idea with --palette=light. The default setting is "%(default)s".''')
@@ -203,6 +205,8 @@ p.add_argument('--traffic',dest='traffic',action='store_true',default=False,
   help='''Mark instances of the words red, yellow, and green in their respective colors.''')
 p.add_argument('-w',dest='wrap',action='store_true',default=False,
   help='''Turn on color wrapping mode. By default, for n colors in the palette, the match for any pattern beyond the nth pattern simply uses the last color in the palette. Wrapping mode changes this behavior so the first color is used for the n+1st pattern, the second for the n+2nd, and so on.''')
+p.add_argument('--debug',dest='debug',action='store_true',default=False,
+  help='''Turn on debug mode. Unless you're modifying the code for this command, you don't need this.''')
 p.add_argument('patterns',nargs=argparse.REMAINDER)
 
 #re_columnList=re.compile(r'(?:\s*(\d+)\s*,)*(?:\s*(\d+)\s*)')
@@ -303,6 +307,36 @@ if opt.traffic:
   opt.patterns.insert(0,r'\b[Yy][Ee][Ll]{2}[Oo][Ww]\b')
   opt.patterns.insert(0,r'\b[Gg][Rr][Ee]{2}[Nn]\b')
   opt.patterns.insert(0,r'\b[Rr][Ee][Dd]\b')
+if opt.log_mode:
+  opt.patterns=[opt.log_format]
+
+if opt.debug:
+  print 'opt.after=%r'%(opt.after,)
+  print 'opt.background=%r'%(opt.background,)
+  print 'opt.before=%r'%(opt.before,)
+  print 'opt.columns=%r'%(opt.columns,)
+  print 'opt.comment_format=%r'%(opt.comment_format,)
+  print 'opt.comment_mode=%r'%(opt.comment_mode,)
+  print 'opt.context=%r'%(opt.context,)
+  print 'opt.csv=%r'%(opt.csv,)
+  print 'opt.delim=%r'%(opt.delim,)
+  print 'opt.diff=%r'%(opt.diff,)
+  print 'opt.discard=%r'%(opt.discard,)
+  print 'opt.fields=%r'%(opt.fields,)
+  print 'opt.file=%r'%(opt.file,)
+  print 'opt.grep=%r'%(opt.grep,)
+  print 'opt.ignore_case=%r'%(opt.ignore_case,)
+  print 'opt.input_from=%r'%(opt.input_from,)
+  print 'opt.keep=%r'%(opt.keep,)
+  print 'opt.log_format=%r'%(opt.log_format,)
+  print 'opt.log_mode=%r'%(opt.log_mode,)
+  print 'opt.palette=%r'%(opt.palette,)
+  print 'opt.re_help=%r'%(opt.re_help,)
+  print 'opt.reverse=%r'%(opt.reverse,)
+  print 'opt.stanzas=%r'%(opt.stanzas,)
+  print 'opt.traffic=%r'%(opt.traffic,)
+  print 'opt.wrap=%r'%(opt.wrap,)
+  print 'opt.patterns=[%s\n]'%(''.join(["\n  '%s',"%(p,) for p in opt.patterns]),)
 
 if opt.patterns:
   for p in opt.patterns:
@@ -310,7 +344,7 @@ if opt.patterns:
       x=re.compile(p)
     except re.error,e:
       die('RE error (%s): %r'%(' '.join(e.args),p))
-elif not (opt.columns or opt.fields or opt.stripe):
+elif not (opt.columns or opt.fields or opt.stripe or opt.log_mode):
   die('No RE arguments given. Nothing to do.')
 
 def parseRangeList(s):
@@ -479,12 +513,15 @@ elif opt.fields:
       writer.writerow(flist)
       sys.stdout.flush()
 elif opt.log_mode:
+  fields=('time','host','proc','level','message')
   opt.patterns=re.compile(opt.log_format)
-  output_format=string.Template('$time $host $prog$level: $message')
+  output_format=string.Template('$time $host $proc$level: $message')
   for s in get_input_lines(opt.file):
     m=opt.patterns.search(s)
     if m!=None and not opt.grep:
       d=m.groupdict('')
+      for i in range(len(fields)):
+        d[fields[i]]=opt.palette[i](d[fields[i]])
       print output_format.safe_substitute(d)
 else:
   # Highlight based on RE matching.
