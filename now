@@ -146,15 +146,18 @@ Output formatting (from Python's docs for its time module):
 '''%'\n\n'.join(['    '+descr for descr,re,fns in tf]))
 op.add_option('-c','--epoch',dest='epoch',default=False,action='store_true',help="Output the number of C Epoch seconds. Overrides --output-format.")
 op.add_option('-h','--help',dest='help_me',default=False,action='store_true',help="Display this help text and exit.")
-op.add_option('-t','--time',dest='time',action='store',default=None,help="Use the given time rather than the current time.")
+#op.add_option('-t','--time',dest='time',action='store',default=None,help="Use the given time rather than the current time.")
 #op.add_option('--input-format',dest='ifmt',action='store',default='%x %X',help="Use the given format to read -t's argument.")
 op.add_option('--output-format',dest='ofmt',action='store',default=IN_FMT,help="Use the given format to write the given or default time. Overridden by -c (--epoch).")
 op.add_option('--utc-output',dest='utc_output',action='store_true',help="Use UTC for any date/time output.")
+op.add_option('--age',dest='age',action='store_true',help="Report how far in the past (or future, with a leading - on the output) the current (useless) or given (more interesting) time is.")
 
 opt,args=op.parse_args()
 if opt.help_me:
   op.print_help()
   sys.exit(0)
+
+now=int(time.time())
 
 if args:
   ts=args[0]  # Get the time string from the argument list.
@@ -192,10 +195,21 @@ if args:
   #print ' '.join(['%s=%r'%(p,td.__dict__.get(p)) for p in 'd1 d2 d3 dsep hour min sec tsep units'.split()])
 else:
   # No time argument found on command line, so use current time.
-  t=int(time.time())
+  t=now
 
 # Output time t in the requested or default format.
-if opt.epoch:
+if opt.age:
+  output=''
+  diff=now-t
+  if diff<0:
+    ouput='-'
+    diff=-diff
+  d,s=divmod(diff,86400) # Get days and seconds of this age
+  if diff>86400:
+    output+='%d days '%d
+  output+='%02d:%02d:%02d'%(s/3600,(s%3600)/60,s%3600)
+  print output
+elif opt.epoch:
   print t
 elif opt.utc_output:
   print time.strftime(opt.ofmt,time.gmtime(t))
