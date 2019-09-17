@@ -287,61 +287,64 @@ add_parser(
 )
 
 if __name__=="__main__":
-  import doctest
+  import argparse,doctest
+
+  ap=argparse.ArgumentParser(description="Test this Python module.")
+  ap.add_argument('args',metavar='args',nargs='*',help="Each argument is a date string to be interpreted.")
+  opt=ap.parse_args()
+
+  if not opt.args:
+    opt.args=[
+      'sunday',
+      'monday',
+      'tuesday',
+      'wednesday',
+      'thursday',
+      'friday',
+      'saturday',
+      '2 days before yesterday',
+      'day before yesterday',
+      'yesterday',
+      'day after yesterday',
+      'now',
+      'today',
+      'day before tomorrow',
+      'tomorrow',
+      'day ago',
+      'day before today',
+      'day after today',
+      'day from now',
+      'day from today',
+      'day after tomorrow',
+      '1 day ago',
+      '3 days ago',
+      '1 day hence',
+      '3 days hence',
+      '1 day from now',
+      '2 days from now',
+      '3 days from today',
+      '1 week ago',
+      '-1 week from now',
+      '2 weeks ago',
+      '-2 weeks from today',
+      '1 week from now',
+      '-1 week ago',
+      '2 weeks from today',
+      '-2 weeks in the past',
+      '1 week from monday',
+      '1 week from tue',
+      '1 week from w',
+      '1 week from th',
+      '1 week from fri',
+      '1 week from sat',
+      '1 week from sun',
+      '2 weeks before monday',
+      '1 fortnight hence',
+      '1 month ago',
+      '1 year hence',
+    ]
+
   failed,total=doctest.testmod()
   if failed==0:
-    import sys
-    if len(sys.argv)>1:
-      sample=' '.join(sys.argv[1:])
-      print '%s is %s'%(pd(sample),sample)
-    else:
-      for sample in (
-        'sunday',
-        'monday',
-        'tuesday',
-        'wednesday',
-        'thursday',
-        'friday',
-        'saturday',
-        '2 days before yesterday',
-        'day before yesterday',
-        'yesterday',
-        'day after yesterday',
-        'now',
-        'today',
-        'day before tomorrow',
-        'tomorrow',
-        'day ago',
-        'day before today',
-        'day after today',
-        'day from now',
-        'day from today',
-        'day after tomorrow',
-        '1 day ago',
-        '3 days ago',
-        '1 day hence',
-        '3 days hence',
-        '1 day from now',
-        '2 days from now',
-        '3 days from today',
-        '1 week ago',
-        '-1 week from now',
-        '2 weeks ago',
-        '-2 weeks from today',
-        '1 week from now',
-        '-1 week ago',
-        '2 weeks from today',
-        '-2 weeks in the past',
-        '1 week from monday',
-        '1 week from tue',
-        '1 week from w',
-        '1 week from th',
-        '1 week from fri',
-        '1 week from sat',
-        '1 week from sun',
-        '2 weeks before monday',
-        '1 fortnight hence',
-        '1 month ago',
-        '1 year hence',
-      ):
-        print '%s is %s'%(parse(sample),sample)
+    for sample in opt.args:
+      print '%s parsed from %r'%(parse(sample),sample)
