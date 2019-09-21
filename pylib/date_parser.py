@@ -2,7 +2,7 @@
 
 import re,time
 import datetime as dt
-import sys # for debugging
+import pyparsing as pyp
 
 downum=dict(
   monday=0,
@@ -29,43 +29,33 @@ moynum=dict(
   december=12
 )
 
-import time,pyparsing as pyp
-
-SUNDAY=pyp.oneOf('sunday sunda sund sun su',True).setParseAction(pyp.replaceWith('sunday'))
-MONDAY=pyp.oneOf('monday monda mond mon mo m',True).setParseAction(pyp.replaceWith('monday'))
-TUESDAY=pyp.oneOf('tuesday tuesda tuesd tues tue tu',True).setParseAction(pyp.replaceWith('tuesday'))
-WEDNESDAY=pyp.oneOf('wednesday wednesda wednesd wednes wedne wedn wed we w',True).setParseAction(pyp.replaceWith('wednesday'))
-THURSDAY=pyp.oneOf('thursday thursda thursd thurs thur thu th',True).setParseAction(pyp.replaceWith('thursday'))
-FRIDAY=pyp.oneOf('friday frida frid fri fr f',True).setParseAction(pyp.replaceWith('friday'))
-SATURDAY=pyp.oneOf('saturday saturda saturd satur satu sat sa').setParseAction(pyp.replaceWith('saturday'))
-specific_day=SUNDAY|MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY
-
-YESTERDAY=pyp.CaselessKeyword('yesterday')
-TODAY=pyp.oneOf('today now',True).setParseAction(pyp.replaceWith('today'))
-TOMORROW=pyp.CaselessKeyword('tomorrow')
-relative_day=YESTERDAY|TODAY|TOMORROW
-
-day=relative_day|specific_day
+begin=end=None
 
 class DateParser(object):
   def __init__(self,syntax):
     """The subclass must implement __init__(), which must set
     self.syntax to some pyparsing.ParserElement derivative."""
 
-    raise NoteImplemented("DateParser must not be instantiated on its own.")
+    raise NotImplemented("DateParser must not be instantiated on its own.")
 
   def __call__(self,s):
-    """Parse the given string according to this DateParser's syntax. If
-    the syntax matches the string, return the corresponding
-    datetime.date value. Otherwise, return None."""
+    """Parse the given string according to this DateParser's syntax, and
+    return this object. The "now" and "date" attributes will be set. If
+    the syntax matches the string, this object's "date" attribute will
+    contain the correspond value. Otherwise, it will have a value of
+    None datetime.date value. Otherwise, return None."""
 
     try:
-      tokens=self.syntax.parseString(s)
-      #print 'DEBUG: tokens=%r'%(tokens,)
+      self.tokens=self.syntax.parseString(s)
+      self.begin=begin
+      self.end=end
     except pyp.ParseException:
+      self.begin=None
+      self.end=None
       return None
     self.now=dt.date.today()
-    return self.convert(tokens)
+    self.date=self.convert(self.tokens)
+    return self
 
   def convert(self,tokens):
     """This method MUST be implemented in a subclass. tokens is a list
@@ -144,6 +134,29 @@ class DateParser(object):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+def remember_range(s,loc,toks):
+  global begin,end
+
+  begin=loc
+  end=pyp.getTokensEndLoc()
+
+SUNDAY=pyp.oneOf('sunday sunda sund sun su',True).setParseAction(pyp.replaceWith('sunday'))
+MONDAY=pyp.oneOf('monday monda mond mon mo m',True).setParseAction(pyp.replaceWith('monday'))
+TUESDAY=pyp.oneOf('tuesday tuesda tuesd tues tue tu',True).setParseAction(pyp.replaceWith('tuesday'))
+WEDNESDAY=pyp.oneOf('wednesday wednesda wednesd wednes wedne wedn wed we w',True).setParseAction(pyp.replaceWith('wednesday'))
+THURSDAY=pyp.oneOf('thursday thursda thursd thurs thur thu th',True).setParseAction(pyp.replaceWith('thursday'))
+FRIDAY=pyp.oneOf('friday frida frid fri fr f',True).setParseAction(pyp.replaceWith('friday'))
+SATURDAY=pyp.oneOf('saturday saturda saturd satur satu sat sa').setParseAction(pyp.replaceWith('saturday'))
+day_of_week=SUNDAY|MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY
+
+YESTERDAY=pyp.CaselessKeyword('yesterday')
+TODAY=pyp.oneOf('today now',True).setParseAction(pyp.replaceWith('today'))
+TOMORROW=pyp.CaselessKeyword('tomorrow')
+relative_day=YESTERDAY|TODAY|TOMORROW
+
+day=relative_day|day_of_week
+day.setParseAction(remember_range)
+
 class DateParser_1(DateParser):
   """
 
@@ -184,6 +197,7 @@ AGO=(pyp.CaselessLiteral('ago')|(IN+THE+PAST)).setParseAction(pyp.replaceWith('a
 HENCE=(pyp.CaselessLiteral('hence')|(IN+THE+FUTURE)).setParseAction(pyp.replaceWith('hence'))
 
 counted_relative_day=count+unit+(AGO|HENCE)
+counted_relative_day.setParseAction(remember_range)
 
 class DateParser_2(DateParser):
   """
@@ -227,6 +241,7 @@ AFTER=pyp.oneOf('after from').setName('AFTER').setParseAction(pyp.replaceWith('a
 refday=(BEFORE|AFTER)+day
 
 counted_relative_from_refday=count+unit+refday
+counted_relative_from_refday.setParseAction(remember_range)
 
 class DateParser_3(DateParser):
   """
@@ -234,7 +249,7 @@ class DateParser_3(DateParser):
   relday := [signed_integer] unit direction ref_day
   unit := DAY[S]|WEEK[S]|FORTNIGHT[S]|MONTH[S]|YEAR[S]
   refday := {BEFORE|AFTER|FROM} day
-  day := specific_day|relative_day
+  day := day_of_week|relative_day
 
   """
 
@@ -259,7 +274,6 @@ class DateParser_3(DateParser):
     elif unit=='year':
       delta=dt.timedelta(days=count*365)
     return refday+delta
-
 
 def add_parser(*args):
   """Accept one or more instances of a DateParser-dreived class, and
@@ -287,7 +301,7 @@ add_parser(
 )
 
 if __name__=="__main__":
-  import argparse,doctest
+  import argparse,doctest,pprint
 
   ap=argparse.ArgumentParser(description="Test this Python module.")
   ap.add_argument('args',metavar='args',nargs='*',help="Each argument is a date string to be interpreted.")
@@ -347,4 +361,5 @@ if __name__=="__main__":
   failed,total=doctest.testmod()
   if failed==0:
     for sample in opt.args:
-      print '%s parsed from %r'%(parse(sample),sample)
+      p=parse(sample)
+      print '%s parsed from %r (%d - %d)'%(p.date,sample,p.begin,p.end)
