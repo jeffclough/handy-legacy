@@ -14,9 +14,9 @@ levels=[x[0].lower() for x in levels if x[0]!='NOTSET']
 
 def get_log_level_by_name(level):
   if isinstance(level,basestring):
-    level=level.upper()
-    if level in logging._levelNames:
-      return logging._levelNames[level]
+    L=level.upper()
+    if L in logging._levelNames:
+      return logging._levelNames[L]
   raise ValueError,'bad log level value: %r'%(level,)
 
 def get_logger(**kwargs):
@@ -30,19 +30,24 @@ def get_logger(**kwargs):
     logfmt    '%(name)s %(levelname).1s: %(message)s'
     datefmt   '%Y-%m-%d %H:%M:%S '
 
-  Note the space at the end of datefmt's default value. None is proviced
+  Note the space at the end of datefmt's default value. None is provided
   automatically, so end with one if you want one there.
 
-  The facility argument, if not None, may be a filename (e.g.
-  "$HOME/myprog.log"), a file stream (e.g. sys.stderr), an integer
-  value from SysLogHandler's LOG_* values (e.g. SysLogHandler.LOG_USER),
-  or an instance of logging.Handler or any subclass thereof.
+  If facility argument is None (the default), the caller is assumed to
+  want to use a previously configured logger or just wants to use the
+  root logger. Otherwise, the facility argument may be a filename (e.g.
+  "$HOME/myprog.log"), a file stream (e.g. sys.stderr), an integer value
+  from SysLogHandler's LOG_* values (e.g. SysLogHandler.LOG_USER), or an
+  instance of logging.Handler or any subclass thereof.
 
-  The level argument should be one of the following string values:
-  DEBUG, INFO, NOTICE, WARNING, or ERR. (WARNING is the default.)
+  The level argument must be one of the following string values:
+  debug, info, notice, warning, error, or ctitical. ("warning" is the
+  default.)
 
   The name argument defaults to the name of the currently running
-  program, but any string will do.
+  program, but any string will do. Note that providing says the caller
+  wants to either create a new logger by that name or use a logger
+  that's already been set up with that name.
 
   The logfmt string sets the format of the logged messages. See the
   logging.LogRecord class for details.
@@ -57,7 +62,7 @@ def get_logger(**kwargs):
   # Instantiate our keyword arguments as local variables.
   facility=kwargs.get('facility',None)
   level=kwargs.get('level','warning')
-  name=kwargs.get('name',os.path.basename(sys.argv[0]).split('.')[0])
+  name=kwargs.get('name',os.path.basename(sys.argv[0]).rsplit('.',1)[0])
   logfmt=kwargs.get('logfmt','%(name)s %(levelname).1s: %(message)s')
   datefmt=kwargs.get('datefmt','%Y-%m-%d %H:%M:%S ')
 
@@ -115,10 +120,10 @@ def get_logger(**kwargs):
 
   # Now create the new logger, and return it to the caller.
   h.setFormatter(f)
-  log=logging.getLogger()
+  log=logging.getLogger(name)
   log.addHandler(h)
   log.setLevel(logging._levelNames[level])
-  log.name=name
+  #log.name=name
   return log
 
 if __name__=='__main__':
@@ -128,7 +133,7 @@ if __name__=='__main__':
 
   op.add_option('--facility',dest='facility',metavar='FACILITY',action='store',default='stdout',help="Log to the given syslog facility (any of: %s). (default: %%default)"%', '.join(syslog_facilities))
   op.add_option('--file',dest='facility',metavar='FILE',action='store',help="Log message to the given file. The special filenames stdout and stderr (or any of the facilities listed above) may also be given. The --file option is just a synonym for --facility. They're exactly the same.")
-  op.add_option('--level',dest='level',action='store',default='INFO',help="Log at the given level, any of: %s (default=%%default)"%', '.join(levels))
+  op.add_option('--level',dest='level',action='store',default='info',help="Log at the given level, any of: %s (default=%%default)"%', '.join(levels))
 
   opt,args=op.parse_args()
   if opt.facility=='stdout':   opt.facility=sys.stdout
