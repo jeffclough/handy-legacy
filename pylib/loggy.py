@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 import logging,os,platform,sys
-from logging.handlers import SysLogHandler
+import logging.handlers
 
 # Get an ordered list of syslog facility names.
-syslog_facilities=SysLogHandler.facility_names.items()
+syslog_facilities=logging.handlers.SysLogHandler.facility_names.items()
 syslog_facilities.sort(key=lambda x:x[1])
 syslog_facilities=[x[0] for x in syslog_facilities]
 
@@ -69,23 +69,29 @@ def get_logger(**kwargs):
   if facility==None:
     # Assume this process has already set up a logger (or just wants to
     # use the default logger), and return that.
-    return logging.getLogger()
+    log=logging.getLogger()
+    if not log.handlers:
+      # Suppress "No handlers could be found ..." message, in case our
+      # root logger hasn't been set up. NullHandler is a bit bucket.
+      log.addHandler(logging.NullHandler)
+    if name:
+      log.name=name
+    return log
 
   h=None
   if isinstance(facility,logging.Handler):
-    # The caller has provided us with his own handler.
+    # The caller has provided a handler for us.
     h=facility
     if isinstance(h,logging.StreamHandler):
-      # Include the date and time in our log format.
-      f=logging.Formatter('%(asctime)s'+logfmt,datefmt=datefmt)
-    else:
-      # Trust the logging service to provide current date and time.
-      f=logging.Formatter(logfmt)
+      # Prefix our log format with the date and time.
+      if 'asctime' in logfmt:
+        logfmt='%(asctime)s '+logfmt
+    f=logging.Formatter(logfmt,datefmt=datefmt)
   else:
     if isinstance(facility,basestring):
       if facility in syslog_facilities:
         # It looks like we're logging to syslog.
-        facility=SysLogHandler.facility_names[facility]
+        facility=logging.handlers.SysLogHandler.facility_names[facility]
       else:
         # This string must be a filename, so open it for appending.
         facility=open(facility,'a')
@@ -94,11 +100,11 @@ def get_logger(**kwargs):
       # This is a syslog facility number, or had better be.
       system=platform.system()
       if system=='Darwin':
-        h=SysLogHandler(address='/var/run/syslog',facility=facility)
+        h=logging.handlers.SysLogHandler(address='/var/run/syslog',facility=facility)
       elif system=='Linux':
-        h=SysLogHandler(address='/dev/log',facility=facility)
+        h=logging.handlers.SysLogHandler(address='/dev/log',facility=facility)
       else:
-        h=SysLogHandler(
+        h=logging.handlers.SysLogHandler(
           address=('localhost',logging.handlers.SYSLOG_UDP_PORT),
           facility=facility
         )
