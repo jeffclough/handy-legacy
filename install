@@ -55,6 +55,7 @@ SCRIPTS=( # These targets are simply copied during installation.
   'ip2host',
   'json2csv',
   'keeplast',
+  'mazer',
   'mark',
   'mix',
   'names',
