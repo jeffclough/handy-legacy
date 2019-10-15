@@ -68,6 +68,7 @@ SCRIPTS=( # These targets are simply copied during installation.
   'progress',
   'pwgen',
   'pygrep',
+  'reduce',
   'slice',
   'strftime',
   'strptime',

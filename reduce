@@ -1,0 +1,56 @@
+#!/usr/bin/env python
+
+try:
+  import argparse
+except:
+  import argparse27 as argparse
+import os,sys
+
+functions=dict(
+  sum=(lambda a,b:a+b),
+  prod=(lambda a,b:a*b)
+)
+
+ap=argparse.ArgumentParser()
+ap.add_argument('-i','--init',dest='init',default=None,help="""If present, this value is placed before any other arguments in the calculation, and serves as a default when the there are no arguments. If not given and there is only one argument, that argument is simply returned. So, for example, "--init 0" is helpful when summing a list that might contain only one value.""")
+ap.add_argument('--prep',dest='prep',action='store',default=None,help="A python function that accepts one item from command line arguments (and/or standard input) and returns it converted to a value FUNC can use. The default is a function that converts string values to int or float if possible.")
+ap.add_argument('func',metavar='FUNC',action='store',help="""A python funciton that accepts two variables and returns a value of the same type. Two predefined functions, "sum" and "prod", can be used for these common operations.""")
+ap.add_argument('args',metavar='ARG',action='store',nargs=argparse.REMAINDER,help="Apply FUNC cumulatively to command line arguments (and/or standard input), from left to right, so as to reduce the items to a single value.")
+opt=ap.parse_args()
+
+def numify(s):
+  "Return the int or float version of s if possible, else s itself."
+
+  try: return int(s)
+  except: pass
+
+  try: return float(s)
+  except: pass
+
+  return s
+
+# Set up our prep function, "compiling" it if necessary.
+if opt.prep==None:
+  opt.prep=numify
+else:
+  opt.prep=eval(opt.prep)
+# Set up our reduce function.
+if opt.func in functions:
+  opt.func=functions[opt.func]
+else:
+  opt.func=eval(opt.func)
+# Prepare our initializer if available.
+if opt.init!=None:
+  opt.init=opt.prep(opt.init)
+# Add standard input, if available, to args.
+if not sys.stdin.isatty():
+  opt.args.extend(sys.stdin.readlines())
+# Prepare any arguments from the command line.
+opt.args=[opt.prep(arg) for arg in opt.args]
+
+# Finally, run the reduce operation.
+if opt.init==None:
+  result=reduce(opt.func,opt.args)
+else:
+  result=reduce(opt.func,opt.args,opt.init)
+print result
