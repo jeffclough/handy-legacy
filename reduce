@@ -5,52 +5,120 @@ try:
 except:
   import argparse27 as argparse
 import os,sys
+from math import *
+from datetime import date,datetime,time,timedelta,tzinfo
 
-functions=dict(
-  sum=(lambda a,b:a+b),
-  prod=(lambda a,b:a*b)
+progname=os.path.basename(sys.argv[0])
+
+# Handy functions to use for FUNC:
+def add(a,b): return a+b
+def mult(a,b): return a*b
+
+# Handy functions to use with --prep:
+def noop(a): return a
+def sqr(a): return a**2
+
+# Return the value of the given Python expression, or gracefully die trying.
+def evaluate(expr):
+  try:
+    return eval(expr)
+  except Exception,e:
+    sys.stderr.write('%s: %s: %r\n'%(progname,str(e),expr))
+    sys.exit(1)
+
+ap=argparse.ArgumentParser(
+  formatter_class=argparse.RawDescriptionHelpFormatter,
+  description="""This command works much like Python's reduce() function. It is, in fact, a
+fairly simple wrapper for that function. It basically applies a function of
+two variables cumulatively to a list of values. Values are computed from
+Python expressions given as command line arguments and/or on standard input
+(one value per line).""",
+  epilog="""Examples:
+
+1) Add all the numbers on the command line.
+
+    $ %(prog)s 2 4 6 8
+    20
+
+2) Multiply all the number on the command line together.
+
+    $ %(prog)s --func 'lambda a,b:a*b' 2 4 6 8
+    384
+
+3) Do the same thing, but with the provided "mult" function.
+
+    $ %(prog)s --func mult 2 4 6 8
+    384
+
+4) Add up the differences between pairs of values.
+
+    $ %(prog)s 10-2 6-4 6-20 5-8
+    -7
+
+5) Do the same thing, but use the absolute values of those differences.
+
+    $ %(prog)s --prep abs 10-2 6-4 6-20 5-8
+    27
+
+   The preperatory function abs(x) is applied to each expression before the
+   reduce operation is performed. Summing the square of the differences is
+   just as easy. Just use the provided sqr(x) function rather than abx(x).
+
+6) Count the expressions given on the command line (for some reason).
+
+    $ %(prog)s --prep 'lambda x:1' these values do not matter
+    %(prog)s: name 'these' is not defined: 'these'
+
+   Woops! Remember that our input "values" MUST be valid Python expressions.
+   Let's try again.
+
+    $ %(prog)s --prep 'lambda x:1' "'these'" "'values'" "'do'" "'not'" "'matter'"
+    5
+
+   So the values don't matter, but how you express them does.
+
+7) All those quotes are clumsy. Isn't there a better way? Why, yes!
+
+    $ $(prog)s --eval str --prep 'lambda x:1' these values do not matter
+    5
+
+   The default evaluation function is evaluate(x), which requires that x be a
+   valid Python expression. By replacing that with str(x), all that's required
+   is that the argument can be a Python string. Now that we know this, we can
+   be even more brief with our argument counter:
+
+    $ $(prog)s --eval 'lambda x:1' these values do not matter
+    5
+
+   Since we don't care about the value of our arguemnts, we just let each one
+   "evaluate" to 1, and then add up all the 1s.
+
+"""
 )
-
-ap=argparse.ArgumentParser()
-ap.add_argument('-i','--init',dest='init',default=None,help="""If present, this value is placed before any other arguments in the calculation, and serves as a default when the there are no arguments. If not given and there is only one argument, that argument is simply returned. So, for example, "--init 0" is helpful when summing a list that might contain only one value.""")
-ap.add_argument('--prep',dest='prep',action='store',default=None,help="A python function that accepts one item from command line arguments (and/or standard input) and returns it converted to a value FUNC can use. The default is a function that converts string values to int or float if possible.")
-ap.add_argument('func',metavar='FUNC',action='store',help="""A python funciton that accepts two variables and returns a value of the same type. Two predefined functions, "sum" and "prod", can be used for these common operations.""")
+ap.add_argument('-e','--eval',dest='eval',action='store',default='evaluate',help="""A Python function that accepts one argument from the command line or standard input and returns the desired value to be processed. (default: %(default)s)""")
+ap.add_argument('-p','--prep',dest='prep',action='store',default='noop',help="""A Python function that accepts one Python expression from command line arguments (and/or standard input) and returns it converted to a value FUNC can use. The default (%(default)s) is a function that performs no operation at all, simply returning the value it was given. Since squaring numeric input is sometimes desirable, there's also a an sqr function that will do this (e.g. "--pref sqr").""")
+ap.add_argument('-i','--init',dest='init',default='None',help="""If present, this value is placed before any other arguments in the calculation, and serves as a default when the there are no arguments. If not given and there is only one argument, that argument is simply returned. So, for example, "--init 0" is helpful when summing a list that might contain only one value.""")
+ap.add_argument('-f','--func',dest='func',action='store',default='add',help="""A python function that accepts two variables and returns a value of the same type. Two predefined functions, "add" and "mult", can be used for these common operations. (default: %(default)s)""")
+ap.add_argument('-c','--cond',dest='cond',default='None',help="""You can use this option to provide a "conditioning" function for the final, reduced value. You can do anything from type coercion (e.g. "--cond int") to producing a hash value (e.g. "--cond 'lambda x:int(x)%%24'") or even formatting (with a lambda function something like lambda x:"Answer=%%d"%%x).""")
 ap.add_argument('args',metavar='ARG',action='store',nargs=argparse.REMAINDER,help="Apply FUNC cumulatively to command line arguments (and/or standard input), from left to right, so as to reduce the items to a single value.")
 opt=ap.parse_args()
+opt.eval=evaluate(opt.eval)
+opt.prep=evaluate(opt.prep)
+opt.init=opt.eval(opt.init)
+opt.func=evaluate(opt.func)
+opt.cond=evaluate(opt.cond)
 
-def numify(s):
-  "Return the int or float version of s if possible, else s itself."
-
-  try: return int(s)
-  except: pass
-
-  try: return float(s)
-  except: pass
-
-  return s
-
-# Set up our prep function, "compiling" it if necessary.
-if opt.prep==None:
-  opt.prep=numify
-else:
-  opt.prep=eval(opt.prep)
-# Set up our reduce function.
-if opt.func in functions:
-  opt.func=functions[opt.func]
-else:
-  opt.func=eval(opt.func)
-# Prepare our initializer if available.
-if opt.init!=None:
-  opt.init=opt.prep(opt.init)
 # Add standard input, if available, to args.
 if not sys.stdin.isatty():
   opt.args.extend(sys.stdin.readlines())
-# Prepare any arguments from the command line.
-opt.args=[opt.prep(arg) for arg in opt.args]
+# Prepare whatever Python expressions we've been given.
+opt.args=[opt.prep(opt.eval(arg)) for arg in opt.args]
 
 # Finally, run the reduce operation.
 if opt.init==None:
   result=reduce(opt.func,opt.args)
 else:
-  result=reduce(opt.func,opt.args,opt.init)
+  result=reduce(opt.func,opt.args,opt.prep(opt.init))
+if opt.cond!=None:
+  result=opt.cond(result)
 print result
