@@ -10,21 +10,26 @@ from datetime import date,datetime,time,timedelta,tzinfo
 
 progname=os.path.basename(sys.argv[0])
 
-# Handy functions to use for FUNC:
-def add(a,b): return a+b
-def mult(a,b): return a*b
-
-# Handy functions to use with --prep:
-def noop(a): return a
-def sqr(a): return a**2
+def die(msg,rc=1):
+  print '%s: %s'%(progname,msg)
+  sys.exit(rc)
 
 # Return the value of the given Python expression, or gracefully die trying.
+# This is the default --eval function.
 def evaluate(expr):
   try:
     return eval(expr)
   except Exception,e:
     sys.stderr.write('%s: %s: %r\n'%(progname,str(e),expr))
-    sys.exit(1)
+    die('%s: %s: %r\n'%(progname,str(e),expr))
+
+# Handy functions to use with --prep:
+def noop(a): return a # <-- default for --prep.
+def sqr(a): return a**2
+
+# Handy functions to use with --func:
+def add(a,b): return a+b # <-- default for --func.
+def mult(a,b): return a*b
 
 ap=argparse.ArgumentParser(
   formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -79,20 +84,52 @@ Python expressions given as command line arguments and/or on standard input
 
 7) All those quotes are clumsy. Isn't there a better way? Why, yes!
 
-    $ $(prog)s --eval str --prep 'lambda x:1' these values do not matter
+    $ %(prog)s --eval str --prep 'lambda x:1' these values do not matter
     5
 
    The default evaluation function is evaluate(x), which requires that x be a
    valid Python expression. By replacing that with str(x), all that's required
-   is that the argument can be a Python string. Now that we know this, we can
-   be even more brief with our argument counter:
+   is that the argument can be expressed within a Python string. Now that we
+   know this, we can be even more brief with our argument counter:
 
-    $ $(prog)s --eval 'lambda x:1' these values do not matter
+    $ %(prog)s --eval 'lambda x:1' these values do not matter
     5
 
    Since we don't care about the value of our arguemnts, we just let each one
    "evaluate" to 1, and then add up all the 1s.
 
+   But all that is just to demonstrate --eval and --prep. If all you wan to do
+   is count what are already valid python expressions, just output the
+   variable n, which is availble to the FUNC and COND functions.
+
+    $ %(prog)s --cond 'lambda x:n' <data
+    87
+
+8) You can also "condition" the output value with a --cond function that takes
+   one argument and returns the "conditioned" value. Use this for rounding,
+   formatting, or whatever.
+
+    $ %(prog)s --cond 'lambda x:"$%%0.2f"%%(x/3)' 22.21 15.21 14.65 20.05 18.96
+    $30.36
+
+   Something like this could be useful if you have to add up Uber payments and
+   then split the total three ways. :-)
+
+9) One last feature is that the variable n is available to both the FUNC and
+   COND functions. It is set to the total number of expressions given on the
+   command line and standard input. So you can use that for computing things
+   like averages or standard deviations (albeit in two passes).
+
+    m=$(%(prog)s --cond 'lambda x:x/n' <values
+    %(prog)s --prep "lambda x:(x-$m)**2" --cond 'lambda x:sqrt(x/n)' <values
+
+   The first line computes the average and stores that in environment variable
+   m. The second line line sums the squares of the distances from that mean
+   and then reports the square root of the average of those values. Nifty!
+
+   By the way, any functions you use have access to all the functions in
+   Python's standard math module. That's where sqrt() in the example above
+   came from.
 """
 )
 ap.add_argument('-e','--eval',dest='eval',action='store',default='evaluate',help="""A Python function that accepts one argument from the command line or standard input and returns the desired value to be processed. (default: %(default)s)""")
@@ -100,11 +137,12 @@ ap.add_argument('-p','--prep',dest='prep',action='store',default='noop',help="""
 ap.add_argument('-i','--init',dest='init',default='None',help="""If present, this value is placed before any other arguments in the calculation, and serves as a default when the there are no arguments. If not given and there is only one argument, that argument is simply returned. So, for example, "--init 0" is helpful when summing a list that might contain only one value.""")
 ap.add_argument('-f','--func',dest='func',action='store',default='add',help="""A python function that accepts two variables and returns a value of the same type. Two predefined functions, "add" and "mult", can be used for these common operations. (default: %(default)s)""")
 ap.add_argument('-c','--cond',dest='cond',default='None',help="""You can use this option to provide a "conditioning" function for the final, reduced value. You can do anything from type coercion (e.g. "--cond int") to producing a hash value (e.g. "--cond 'lambda x:int(x)%%24'") or even formatting (with a lambda function something like lambda x:"Answer=%%d"%%x).""")
+ap.add_argument('--intermediate',dest='intermediate',action='store_true',default=False,help="Output all arguments after running any EVAL or PREP functions on them.")
 ap.add_argument('args',metavar='ARG',action='store',nargs=argparse.REMAINDER,help="Apply FUNC cumulatively to command line arguments (and/or standard input), from left to right, so as to reduce the items to a single value.")
 opt=ap.parse_args()
 opt.eval=evaluate(opt.eval)
 opt.prep=evaluate(opt.prep)
-opt.init=opt.eval(opt.init)
+opt.init=evaluate(opt.init)
 opt.func=evaluate(opt.func)
 opt.cond=evaluate(opt.cond)
 
@@ -113,6 +151,13 @@ if not sys.stdin.isatty():
   opt.args.extend(sys.stdin.readlines())
 # Prepare whatever Python expressions we've been given.
 opt.args=[opt.prep(opt.eval(arg)) for arg in opt.args]
+if opt.intermediate:
+  print '\n'.join([str(x) for x in opt.args])
+n=len(opt.args)
+
+if n==0 and opt.init==None:
+  ap.print_usage()
+  die('No expressions found on command line or standard input.')
 
 # Finally, run the reduce operation.
 if opt.init==None:
