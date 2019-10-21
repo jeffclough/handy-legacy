@@ -12,6 +12,9 @@ levels=[(a,b) for a,b in logging._levelNames.items() if isinstance(b,int)]
 levels.sort(key=lambda x:x[1])
 levels=[x[0].lower() for x in levels if x[0]!='NOTSET']
 
+# Don't leave these global crumbs lying around from the work above.
+del a,b,x
+
 def get_log_level_by_name(level):
   if isinstance(level,basestring):
     L=level.upper()
