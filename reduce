@@ -20,16 +20,14 @@ def evaluate(expr):
   try:
     return eval(expr)
   except Exception,e:
-    sys.stderr.write('%s: %s: %r\n'%(progname,str(e),expr))
-    die('%s: %s: %r\n'%(progname,str(e),expr))
+    die('%s: %r\n'%(str(e),expr))
 
-# Handy functions to use with --prep:
-def noop(a): return a # <-- default for --prep.
+# Handy functions to use with --pre:
+def noop(a): return a # <-- default for --pre.
 def sqr(a): return a**2
 
 # Handy functions to use with --func:
 def add(a,b): return a+b # <-- default for --func.
-def mult(a,b): return a*b
 
 ap=argparse.ArgumentParser(
   formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -38,59 +36,91 @@ fairly simple wrapper for that function. It basically applies a function of
 two variables cumulatively to a list of values. Values are computed from
 Python expressions given as command line arguments and/or on standard input
 (one value per line).""",
-  epilog="""Examples:
+  epilog="""
+All the functions in Python's math module (ceil, floor, exp, factorial, etc.)
+are imported so you'll have access to them. The %(prog)s command also imports
+date, datetime, time, timedelta, and tzinfo from Python's datetime module. In
+addition, %(prog)s also provides a few handy functions for adding things
+together and for squaring numbers:
+
+  add(a,b) - Returns a+b. This is the default FUNC function.
+  noop(a)  - Returns a. This is the default PREP function.
+  sqr(a)   - Returns a**2.
+  
+Examples:
 
 1) Add all the numbers on the command line.
 
     $ %(prog)s 2 4 6 8
     20
 
-2) Multiply all the number on the command line together.
+   Since "add" is the default value of FUNC, the above is exactly like this:
+
+    $ %(prog)s --func add 2 4 6 8
+    20
+
+2) If, for some reason, you want to multiply all the numbers on the command
+   line together, there's no provided function for that. You have to use
+   Python's lambda syntax:
 
     $ %(prog)s --func 'lambda a,b:a*b' 2 4 6 8
     384
 
-3) Do the same thing, but with the provided "mult" function.
+   The "a,b" before the colon tells lambda what the arguments the function
+   are. The "a*b" expression after the colon tells lambda how to compute the
+   return value.
 
-    $ %(prog)s --func mult 2 4 6 8
-    384
-
-4) Add up the differences between pairs of values.
+3) The input items are actually Python expressions, so so you can (for
+   instance) add up the differences between pairs of values.
 
     $ %(prog)s 10-2 6-4 6-20 5-8
     -7
 
-5) Do the same thing, but use the absolute values of those differences.
+4) %(prog)s runs the PRE function on each list item before cumulatively
+   calling FUNC on list items. This lets us, for instance, replace the list's
+   items with their absolute values, so we can do the same thing as above, but
+   now we're summing the absolute values of those differences.
 
-    $ %(prog)s --prep abs 10-2 6-4 6-20 5-8
+    $ %(prog)s --pre abs 10-2 6-4 6-20 5-8
     27
 
    The preperatory function abs(x) is applied to each expression before the
    reduce operation is performed. Summing the square of the differences is
-   just as easy. Just use the provided sqr(x) function rather than abx(x).
+   just as easy. Just use the provided sqr(x) function rather than abs(x).
+
+5) You can filter out input items that fail to meet some criterion. Say you
+   want to use only the expressions that result in a positive value in the
+   example above.
+
+    $ reduce --filter 'lambda a:a>0' 10-2 6-4 6-20 5-8
+    10
+
+   Only the values for which FILTER returns True are allowed to participate in
+   the reduce operation. All others are discarded.
 
 6) Count the expressions given on the command line (for some reason).
 
-    $ %(prog)s --prep 'lambda x:1' these values do not matter
+    $ %(prog)s --pre 'lambda x:1' these values do not matter
     %(prog)s: name 'these' is not defined: 'these'
 
    Woops! Remember that our input "values" MUST be valid Python expressions.
    Let's try again.
 
-    $ %(prog)s --prep 'lambda x:1' "'these'" "'values'" "'do'" "'not'" "'matter'"
+    $ %(prog)s --pre 'lambda x:1' "'these'" "'values'" "'do'" "'not'" "'matter'"
     5
 
    So the values don't matter, but how you express them does.
 
 7) All those quotes are clumsy. Isn't there a better way? Why, yes!
 
-    $ %(prog)s --eval str --prep 'lambda x:1' these values do not matter
+    $ %(prog)s --eval str --pre 'lambda x:1' these values do not matter
     5
 
-   The default evaluation function is evaluate(x), which requires that x be a
-   valid Python expression. By replacing that with str(x), all that's required
-   is that the argument can be expressed within a Python string. Now that we
-   know this, we can be even more brief with our argument counter:
+   The default EVAL function is evaluate(x), which requires that x be a valid
+   Python expression. By replacing that with str(x), all that's required of
+   each list item is that the argument can be expressed within a Python
+   string. Now that we know this, we can be even more brief with our argument
+   counter:
 
     $ %(prog)s --eval 'lambda x:1' these values do not matter
     5
@@ -98,59 +128,64 @@ Python expressions given as command line arguments and/or on standard input
    Since we don't care about the value of our arguemnts, we just let each one
    "evaluate" to 1, and then add up all the 1s.
 
-   But all that is just to demonstrate --eval and --prep. If all you wan to do
+   But all that's just to demonstrate --eval and --pre. If all you want to do
    is count what are already valid python expressions, just output the
-   variable n, which is availble to the FUNC and COND functions.
+   variable n, which is availble to the FUNC and POST functions.
 
-    $ %(prog)s --cond 'lambda x:n' <data
+    $ %(prog)s --post 'lambda x:n' <data
     87
 
-8) You can also "condition" the output value with a --cond function that takes
-   one argument and returns the "conditioned" value. Use this for rounding,
-   formatting, or whatever.
+8) As hinted at above, the POST function accepts and returns one value and
+   lets you "post-process" whatever FUNC ends up returning. Use this for
+   rounding, formatting, or whatever.
 
-    $ %(prog)s --cond 'lambda x:"$%%0.2f"%%(x/3)' 22.21 15.21 14.65 20.05 18.96
+    $ %(prog)s --post 'lambda x:"$%%0.2f"%%(x/3)' 22.21 15.21 14.65 20.05 18.96
     $30.36
 
    Something like this could be useful if you have to add up Uber payments and
    then split the total three ways. :-)
 
 9) One last feature is that the variable n is available to both the FUNC and
-   COND functions. It is set to the total number of expressions given on the
+   POST functions. It is set to the total number of expressions given on the
    command line and standard input. So you can use that for computing things
    like averages or standard deviations (albeit in two passes).
 
-    m=$(%(prog)s --cond 'lambda x:x/n' <values
-    %(prog)s --prep "lambda x:(x-$m)**2" --cond 'lambda x:sqrt(x/n)' <values
+    m=$(%(prog)s --post 'lambda x:x/n' <values)
+    %(prog)s --pre "lambda x:(x-$m)**2" --post 'lambda x:"$%%0.2f"%%sqrt(x/n)' <values
+    $2.89
 
    The first line computes the average and stores that in environment variable
    m. The second line line sums the squares of the distances from that mean
-   and then reports the square root of the average of those values. Nifty!
-
-   By the way, any functions you use have access to all the functions in
-   Python's standard math module. That's where sqrt() in the example above
-   came from.
+   and then reports the square root of the average of those values, formatting
+   it as dollars and cents, rounding to the nearest penny. Pretty nifty! The
+   "$2.89" result is what you get if the "values" file contains the values
+   from example 8.
 """
 )
 ap.add_argument('-e','--eval',dest='eval',action='store',default='evaluate',help="""A Python function that accepts one argument from the command line or standard input and returns the desired value to be processed. (default: %(default)s)""")
-ap.add_argument('-p','--prep',dest='prep',action='store',default='noop',help="""A Python function that accepts one Python expression from command line arguments (and/or standard input) and returns it converted to a value FUNC can use. The default (%(default)s) is a function that performs no operation at all, simply returning the value it was given. Since squaring numeric input is sometimes desirable, there's also a an sqr function that will do this (e.g. "--pref sqr").""")
+ap.add_argument('--pre',dest='pre',action='store',default='noop',help="""A Python function of one argument that preprocesses each list item and returns a value that replaces it in the list. These preprocessed values are what get fed to FUNC. The default (%(default)s) is a function that performs no operation at all, simply returning the value it was given. Since squaring numeric input is sometimes desirable, there's also a an sqr function that will do this (e.g. "--pref sqr").""")
+ap.add_argument('--filter',dest='filter',action='store',default='None',help="""A Python function of one argument that returns True for each input value to be kept and False for any value that should be discarded. If given, the filter is applied immediately after preprocessing (with PRE), before FUNC is cumulatively applied to the list items. For example, "--filter 'lambda a:a>0'" allows only positive numeric values to participate in the reduce operation.""")
 ap.add_argument('-i','--init',dest='init',default='None',help="""If present, this value is placed before any other arguments in the calculation, and serves as a default when the there are no arguments. If not given and there is only one argument, that argument is simply returned. So, for example, "--init 0" is helpful when summing a list that might contain only one value.""")
 ap.add_argument('-f','--func',dest='func',action='store',default='add',help="""A python function that accepts two variables and returns a value of the same type. Two predefined functions, "add" and "mult", can be used for these common operations. (default: %(default)s)""")
-ap.add_argument('-c','--cond',dest='cond',default='None',help="""You can use this option to provide a "conditioning" function for the final, reduced value. You can do anything from type coercion (e.g. "--cond int") to producing a hash value (e.g. "--cond 'lambda x:int(x)%%24'") or even formatting (with a lambda function something like lambda x:"Answer=%%d"%%x).""")
-ap.add_argument('--intermediate',dest='intermediate',action='store_true',default=False,help="Output all arguments after running any EVAL or PREP functions on them.")
+ap.add_argument('--post',dest='post',default='None',help="""You can use this option to provide a "conditioning" function for the final, reduced value. You can do anything from type coercion (e.g. "--post int") to producing a hash value (e.g. "--post 'lambda x:int(x)%%24'") or even formatting (with a lambda function something like lambda x:"Answer=%%d"%%x).""")
+ap.add_argument('--intermediate',dest='intermediate',action='store_true',default=False,help="Output all arguments after running any EVAL, PRE, and/or FILTER functions on them. This is the list of values the reduce operation is performed on.")
 ap.add_argument('args',metavar='ARG',action='store',nargs=argparse.REMAINDER,help="Apply FUNC cumulatively to command line arguments (and/or standard input), from left to right, so as to reduce the items to a single value.")
 opt=ap.parse_args()
 opt.eval=evaluate(opt.eval)
-opt.prep=evaluate(opt.prep)
+opt.pre=evaluate(opt.pre)
+opt.filter=evaluate(opt.filter)
 opt.init=evaluate(opt.init)
 opt.func=evaluate(opt.func)
-opt.cond=evaluate(opt.cond)
+opt.post=evaluate(opt.post)
 
 # Add standard input, if available, to args.
 if not sys.stdin.isatty():
   opt.args.extend(sys.stdin.readlines())
 # Prepare whatever Python expressions we've been given.
-opt.args=[opt.prep(opt.eval(arg)) for arg in opt.args]
+opt.args=[opt.pre(opt.eval(arg)) for arg in opt.args]
+# If we have a filter function, apply that here.
+if opt.filter!=None:
+  opt.args=filter(opt.filter,opt.args)
 if opt.intermediate:
   print '\n'.join([str(x) for x in opt.args])
 n=len(opt.args)
@@ -163,7 +198,7 @@ if n==0 and opt.init==None:
 if opt.init==None:
   result=reduce(opt.func,opt.args)
 else:
-  result=reduce(opt.func,opt.args,opt.prep(opt.init))
-if opt.cond!=None:
-  result=opt.cond(result)
+  result=reduce(opt.func,opt.args,opt.pre(opt.init))
+if opt.post!=None:
+  result=opt.post(result)
 print result
