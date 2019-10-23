@@ -36,7 +36,7 @@ def positive_int(s):
   raise ArgumentTypeError('%r is not a non-negative integer.'%s)
 
 def first_match(s,patterns,flags=0):
-  """Find the firsts pattern in the patterns sequence that matches s. If
+  """Find the first pattern in the patterns sequence that matches s. If
   found, return the (pattern,match) tuple. Otherwise, return
   (None,None)."""
 
@@ -67,6 +67,9 @@ def file_walker(root,**kwargs):
   (the root), in all subdirectories beneath it, and so forth. The order
   is an alphabetical and depth-first traversal of the whole directory
   tree.
+  
+  If anyone cares: While the effect of this function is to recurse into
+  subdirectories, the function itself is not recursive.
 
   Keyword Arguments:
     depth         (default: None) The number of directories this
@@ -84,15 +87,18 @@ def file_walker(root,**kwargs):
                   encountered directory, that directory is ignored.
     ignore        (default: []) This works just like prune, but it
                   excludes files rather than directories.
-    include_dirs  (default: False) True if each directory encountered is
-                  to be included in this iterator's values immediately before
-                  the filename found in that directory. Directory names end
-                  with the path separator appropriate to the host operating
-                  system in order to distinguish them from filenames. If the
-                  directory is not descended into because of depth-limiting or
-                  pruning, that directory will not appear in this iterator's
-                  values at all. The default is False, so that only
-                  non-directory entries are included. 
+    include_dirs  (default: False) If True or 'first', each directory
+                  encountered will be included in this iterator's values
+                  immediately before the filenames found in that
+                  directory. If 'last', they will be included immediatly
+                  after the the last entry in that directory. In any
+                  case, directory names end with the path separator
+                  appropriate to the host operating system in order to
+                  distinguish them from filenames. If the directory is
+                  not descended into because of depth-limiting or
+                  pruning, that directory will not appear in this
+                  iterator's values at all. The default is False, so
+                  that only non-directory entries are included. 
   """
 
   # Get our keyword argunents, and do some initialization.
@@ -103,13 +109,18 @@ def file_walker(root,**kwargs):
   prune=compile_filename_patterns(kwargs.get('prune',[]))
   ignore=compile_filename_patterns(kwargs.get('ignore',[]))
   include_dirs=kwargs.get('include_dirs',False)
+  if include_dirs not in (False,True,'first','last'):
+    raise ArgumentTypeError("include_dirs=%r is not one of False, True, 'first', or 'last'."%(include_dirs,))
   stack=[(0,root)] # Prime our stack with root (at depth 0).
   been_there=set([os.path.abspath(os.path.realpath(root))])
+  dir_stack=[] # Stack of paths we're yielding after exhausting those directories.
 
   while stack:
     depth,path=stack.pop()
-    if include_dirs:
+    if include_dirs in (True,'first'):
       yield path+os.sep
+    elif include_dirs=='last':
+      dir_stack.append(path+os.sep)
     flist=os.listdir(path)
     flist.sort()
     dlist=[]
@@ -144,6 +155,8 @@ def file_walker(root,**kwargs):
         # We have a keeper! Record the path and push it onto the stack.
         been_there.add(rp)
         stack.append((depth+1,p))
+  while dir_stack:
+    yield dir_stack.pop()
 
 def shellify(val):
   """Return the given value quotted and escaped as necessary for a Unix
@@ -213,8 +226,6 @@ class TitleCase(str):
 if __name__=='__main__':
   import argparse,doctest,sys
 
-  print 'Terminal dimensions: %d columns, %d lines'%get_terminal_size()
-
   ap=argparse.ArgumentParser()
   sp=ap.add_subparsers()
 
@@ -227,15 +238,23 @@ if __name__=='__main__':
   sp_find.add_argument('--depth',action='store',type=non_negative_int,default=sys.maxsize,help="The number of directories to decend below the given path when traversing the directory structure.")
   sp_find.add_argument('--follow',action='store_true',help="Follow symlinks to directories during recursion. This is done in a way that's safe from symlink loops.")
   sp_find.add_argument('--prune',metavar='DIR',action='store',nargs='*',default=[],help="A list of filespecs and/or regular expressions (prefixed with 're:') that itentify directories NOT to be recursed into.")
-  sp_find.add_argument('--dirs',action='store_true',help="Output the path (with a %s suffix) immediately before listing the files in that directory. Directory names are ordinarilly suppressed.")
+  sp_find.add_argument('--dirs',action='store',default='False',help="If 'True' or 'first', output the path (with a %s suffix) immediately before listing the files in that directory. If 'last', output the path immediately after all files and other directories under that path. Directory names are ordinarilly suppressed."%os.sep)
 
   opt=ap.parse_args()
-  print repr(opt)
+  opt.dirs=opt.dirs.lower()
+  if opt.dirs=='false':
+    opt.dirs=False
+  elif opt.dirs=='true':
+    opt.dirs=True
+
 
   if opt.cmd=='test':
+    print 'Terminal dimensions: %d columns, %d lines'%get_terminal_size()
+    print 'Running doctests...'
     t,f=doctest.testmod()
     if f>0:
       sys.exit(1)
+    sys.exit(0)
   elif opt.cmd=='find':
     for fn in file_walker(opt.path,depth=opt.depth,follow_links=opt.follow,prune=opt.prune,include_dirs=opt.dirs):
       print fn
