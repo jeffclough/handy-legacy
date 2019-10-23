@@ -158,6 +158,19 @@ def file_walker(root,**kwargs):
   while dir_stack:
     yield dir_stack.pop()
 
+def rmdirs(path):
+  """Just like os.rmdir(), but this fuction takes care of recursively
+  removing the contents under path for you."""
+
+  for f in file_walker(path,follow_links=False,include_dirs='last'):
+    if f[-1]==os.sep:
+      if f!=os.sep:
+        #print "os.rmdir(%r)"%(f[:-1],)
+        os.rmdir(f[:-1])
+    else:
+      #print "os.remove(%r)"%(f,)
+      os.remove(f)
+
 def shellify(val):
   """Return the given value quotted and escaped as necessary for a Unix
   shell to interpret it as a single value.

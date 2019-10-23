@@ -1,0 +1,75 @@
+#!/usr/bin/env python
+
+import argparse,atexit,datetime,os,ssl,StringIO,subprocess,sys
+from handy import rmdirs
+
+progname=os.path.basename(sys.argv[0])
+tempdir='/tmp/%s.%d'%(progname,os.getpid())
+os.makedirs(tempdir,0750)
+atexit.register(rmdirs,tempdir)
+
+def die(msg,rc=1):
+  sys.stderr.write('%s: %s\n'%(progname,msg))
+  sys.exit(rc)
+
+# Deal with command line arguments.
+ap=argparse.ArgumentParser(description="Get certificate expiration data. The HOST:PORT command line arguments may also be supplied, one per line, on standard input.")
+ap.add_argument('services',metavar='HOST:PORT',nargs='*',help="One or more HOST:PORT arguments.")
+opt=ap.parse_args()
+if not sys.stdin.isatty():
+  opt.services.extend([line.strip() for line in sys.stdin])
+if not opt.services:
+  ap.print_help()
+  sys.exit(1)
+for i in range(len(opt.services)):
+  try:
+    host,port=opt.services[i].split(':')
+    opt.services[i]=(host,int(port))
+  except:
+    die("Bad HOST:PORT argument: %r"%(opt.services[i]))
+#print opt.services
+
+class Certificate(object):
+  def __init__(self,service):
+    self.host,self.port=service
+    self.service="%s:%s"%(self.host,self.port)
+    # Retrieve the certificate, and put it into a file.
+    cert=ssl.get_server_certificate(service,ssl_version=2)
+    fn=os.path.join(tempdir,'%s.%d.cert'%(self.host,self.port))
+    f=open(fn,'w')
+    f.write(cert)
+    f.close()
+    # Let openssl do the x509 parsing.
+    cmd=("openssl x509 -in %s -noout -serial -subject -issuer -email -dates"%(fn,)).split()
+    proc=subprocess.Popen(cmd,stdout=subprocess.PIPE)
+    output,error=proc.communicate()
+    # Store the values we get back.
+    self.values={}
+    for line in output.split('\n'):
+      #print 'D: line=%r'%(line,)
+      parts=line.split('=',1)
+      #print 'D: parts=%r'%(parts,)
+      if len(parts)==2:
+        var,val=parts
+        if var in ('notBefore','notAfter'):
+          val=datetime.datetime.strptime(val,'%b %d %H:%M:%S %Y %Z')
+        self.values[var]=val
+        if var=='notAfter':
+          val-=datetime.datetime.now()
+          self.values['timeRemaining']=val
+          self.values['daysRemaining']=val.days
+
+  def __getattr__(self,key):
+    return self.values.get(key,None)
+
+for service in opt.services:
+  cert=Certificate(service)
+  print '%s'%(cert.service,)
+  print '  serial=%s'%(cert.serial,)
+  print '  subject=%s'%(cert.subject,)
+  print '  issuer=%s'%(cert.issuer,)
+  print '  notBefore=%s'%(cert.notBefore,)
+  print '  notAfter=%s'%(cert.notAfter,)
+  print '  timeRemaining=%s'%(cert.timeRemaining,)
+  print '  daysRemaining=%s'%(cert.daysRemaining,)
+  print ''

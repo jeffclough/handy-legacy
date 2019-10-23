@@ -42,6 +42,7 @@ SCRIPTS=( # These targets are simply copied during installation.
   'args',
   'backup-volume',
   'base',
+  'certmon',
   'chronorename',
   'columnate',
   'csv',
