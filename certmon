@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 
-import argparse,atexit,datetime,os,ssl,StringIO,subprocess,sys
+import ansi,argparse,atexit,datetime,json,os,re,socket,ssl,StringIO,subprocess,sys,time
 from handy import rmdirs
+from pprint import pprint
+
+host_text,port_text,error_text,warn_text=ansi.Palette('cyan on black,green,red,yellow')
 
 progname=os.path.basename(sys.argv[0])
 tempdir='/tmp/%s.%d'%(progname,os.getpid())
@@ -12,29 +15,29 @@ def die(msg,rc=1):
   sys.stderr.write('%s: %s\n'%(progname,msg))
   sys.exit(rc)
 
-# Deal with command line arguments.
-ap=argparse.ArgumentParser(description="Get certificate expiration data. The HOST:PORT command line arguments may also be supplied, one per line, on standard input.")
-ap.add_argument('services',metavar='HOST:PORT',nargs='*',help="One or more HOST:PORT arguments.")
-opt=ap.parse_args()
-if not sys.stdin.isatty():
-  opt.services.extend([line.strip() for line in sys.stdin])
-if not opt.services:
-  ap.print_help()
-  sys.exit(1)
-for i in range(len(opt.services)):
-  try:
-    host,port=opt.services[i].split(':')
-    opt.services[i]=(host,int(port))
-  except:
-    die("Bad HOST:PORT argument: %r"%(opt.services[i]))
-#print opt.services
-
 class Certificate(object):
   def __init__(self,service):
     self.host,self.port=service
     self.service="%s:%s"%(self.host,self.port)
+    # Store the values we get back we get out of the cert itself in this dict.
+    self.values={}
     # Retrieve the certificate, and put it into a file.
-    cert=ssl.get_server_certificate(service,ssl_version=2)
+    t0=time.time()
+    try:
+      cert=ssl.get_server_certificate(service,ssl_version=2)
+    except (socket.gaierror,socket.error) as e:
+      t1=time.time()
+      self.error=re.sub(r'^\[.*\] ','',str(e))
+    except Exception as e:
+      t1=time.time()
+      print 'Debug: (%s) e=%r'%(type(e),e)
+      self.error=str(e)
+    else:
+      t1=time.time()
+      self.error=None
+    self.query_seconds=t1-t0
+    if self.error:
+      return
     fn=os.path.join(tempdir,'%s.%d.cert'%(self.host,self.port))
     f=open(fn,'w')
     f.write(cert)
@@ -43,8 +46,6 @@ class Certificate(object):
     cmd=("openssl x509 -in %s -noout -serial -subject -issuer -email -dates"%(fn,)).split()
     proc=subprocess.Popen(cmd,stdout=subprocess.PIPE)
     output,error=proc.communicate()
-    # Store the values we get back.
-    self.values={}
     for line in output.split('\n'):
       #print 'D: line=%r'%(line,)
       parts=line.split('=',1)
@@ -62,14 +63,95 @@ class Certificate(object):
   def __getattr__(self,key):
     return self.values.get(key,None)
 
+  def toDict(self):
+    d=dict(error=self.error,query_seconds=self.query_seconds)
+    d.update(self.values)
+    return d
+
+def pluralize(root,n,suffixes=('','s')):
+  """Given a string root, integer n, and tuple (singular, plural),
+  return root with the appropriate suffix for n attached."""
+
+  return root+suffixes[n!=1]
+
+# Deal with command line arguments.
+ap=argparse.ArgumentParser(description="Get certificate expiration data. The HOST:PORT command line arguments may also be supplied, one per line, on standard input.")
+ap.add_argument('-c','--color',dest='color',action='store_true',default=False,help="Turn on colored output.")
+ap.add_argument('--json',dest='format',action='store_const',const='json',default='text',help="Use JSON as output format.")
+ap.add_argument('-w','--warn',dest='warn',default=None,type=int,help="Output only warnings about certs expiring within the given number of days.")
+ap.add_argument('services',metavar='HOST:PORT',nargs='*',help="One or more HOST:PORT arguments.")
+opt=ap.parse_args()
+ansi.enabled=opt.color
+if not sys.stdin.isatty():
+  opt.services.extend([line.strip() for line in sys.stdin])
+if not opt.services:
+  ap.print_help()
+  sys.exit(1)
+for i in range(len(opt.services)):
+  try:
+    host,port=opt.services[i].split(':')
+    opt.services[i]=(host,int(port))
+  except:
+    die("Bad HOST:PORT argument: %r"%(opt.services[i]))
+
+# Retrieve all our certs in a dict keyed by (host,port) tuples.
+# THIS NEEDS TO BE PARALLELIZED because some requests time out.
+certs={}
 for service in opt.services:
-  cert=Certificate(service)
-  print '%s'%(cert.service,)
-  print '  serial=%s'%(cert.serial,)
-  print '  subject=%s'%(cert.subject,)
-  print '  issuer=%s'%(cert.issuer,)
-  print '  notBefore=%s'%(cert.notBefore,)
-  print '  notAfter=%s'%(cert.notAfter,)
-  print '  timeRemaining=%s'%(cert.timeRemaining,)
-  print '  daysRemaining=%s'%(cert.daysRemaining,)
-  print ''
+  certs[service]=Certificate(service)
+# Now that we've retrieved our certs in the order given to us, we'll sort
+# them alphabetically by hostname and numerically by port number.
+opt.services.sort()
+
+if opt.warn!=None:
+  # Warning output, which outputs only warnings about soon-expiring certs.
+  warnings=dict([
+    ('%s:%s'%(host_text(c.host),port_text(c.port)),dict(daysRemaining=c.daysRemaining,error=c.error,query_seconds=c.query_seconds))
+      for c in certs.values()
+        if c.daysRemaining<opt.warn
+  ])
+  if opt.format=='text':
+    services=warnings.keys()
+    services.sort()
+    print 'Certificates expiring in the next %d %s:'%(opt.warn,pluralize('day',opt.warn))
+    for s in services:
+      info=warnings[s]['daysRemaining']
+      if info==None:
+        info=error_text('error (%s) after %0.3f seconds'%(warnings[s]['error'],warnings[s]['query_seconds']))
+      else:
+        info="%d %s"%(info,pluralize('day',info))
+      print '%s: %s'%(s,info)
+  elif opt.format=='json':
+    print json.dumps(warnings,indent=2,sort_keys=True)
+else:
+  # "Normal" output, which outputs everything we know about these certs.
+  if opt.format=='text':
+    for service in opt.services:
+      c=certs[service]
+      print '%s'%(c.service,)
+      print '  serial=%s'%(c.serial,)
+      print '  subject=%s'%(c.subject,)
+      print '  issuer=%s'%(c.issuer,)
+      print '  notBefore=%s'%(c.notBefore,)
+      if c.daysRemaining!=None and c.daysRemaining<=30:
+        print '  notAfter=%s'%warn_text(c.notAfter)
+        print '  timeRemaining=%s'%warn_text(c.timeRemaining)
+        print '  daysRemaining=%s'%warn_text(c.daysRemaining)
+      else:
+        print '  notAfter=%s'%(c.notAfter,)
+        print '  timeRemaining=%s'%(c.timeRemaining,)
+        print '  daysRemaining=%s'%(c.daysRemaining,)
+      if c.error==None:
+        print '  error=%s'%(c.error,)
+      else:
+        print '  error=%s'%error_text(c.error)
+      print '  query_seconds=%0.3f'%(c.query_seconds,)
+      print ''
+  elif opt.format=='json':
+    # Output certs as a JSON dictionary. The diction
+    print json.dumps(
+      dict([("%s:%d"%s,certs[s].toDict()) for s in opt.services]),
+      indent=2,       # Make our JSON output more readable to human eyes.
+      sort_keys=True, # Keep the output order predictable.
+      default=str     # This makes datetime's classes serializable.
+    )

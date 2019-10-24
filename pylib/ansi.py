@@ -17,6 +17,27 @@ back off.
     import ansi
     print ansi.Color('bold','red','yellow')('Error message')
 
+You can also assign Color instances to handy variables.
+
+    import ansi
+    error_text=Color('bold red on yellow')
+    .
+    .
+    .
+    print error_text(some_message)
+
+You can turn off the effect of ALL Color objects by disabling the whole
+ansi module.
+
+    print error_text("This text will be colored.")
+    ansi.enabled=False
+    print error_text("This text will NOT be colored.")
+    ansi.enabled=True
+    print error_text("This text will AGAIN be colored.")
+
+This makes it easy to manage whether your script's output is colored or
+not without having to have a bunch of messy if statements.
+
 You can also call ansi.paint(), which takes any number of arguments
 
     import ansi
@@ -161,6 +182,10 @@ luminosity=dict(
 dark='norm red on black,green,yellow,bold blue,norm magenta,cyan,white'
 light='norm red on white,green,blue,magenta,black'
 
+# This is the master switch for this module. ANSI Colors have no effect unless
+# enabled is True.
+enabled=True
+
 class AnsiException(Exception):
   "Exceptions raised from this module are of this type."
 
@@ -270,7 +295,9 @@ class Color(object):
     True
     """
 
-    return str(self)+str(text)+str(norm)
+    if enabled:
+      return str(self)+str(text)+str(norm)
+    return str(text)
 
   def __repr__(self):
     """Return a Python expression string that can be evaluated to re-
