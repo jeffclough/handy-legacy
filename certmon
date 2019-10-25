@@ -1,36 +1,19 @@
 #!/usr/bin/env python
 
 import ansi,argparse,atexit,datetime,json,os,re,socket,ssl,StringIO,subprocess,sys,time,threading
-from handy import rmdirs,get_terminal_size
-from pprint import pprint
+from handy import die,get_terminal_size,prog,Spinner
 
-host_text,port_text,error_text,warn_text=ansi.Palette('cyan on black,green,red,yellow')
+host_text,port_text,error_text,warn_text,neg_text=ansi.Palette('cyan on black,green,red,yellow,red on yellow')
 
-progname=os.path.basename(sys.argv[0])
-tempdir='/tmp/%s.%d'%(progname,os.getpid())
-os.makedirs(tempdir,0750)
-atexit.register(rmdirs,tempdir)
+def neg_check(n):
+  """Return some brightly colored version of n if it is less than 0.
+  Otherwise, simply return the string value of n."""
 
-class Spinner(object):
-  def __init__(self,seq=r'-\|/',yoyo=False):
-    self.seq=seq
-    self.ndx=-1
-    self.delta=1
-    self.yoyo=yoyo
-
-  def __call__(self):
-    self.ndx+=self.delta
-    if not 0<=self.ndx<len(self.seq):
-      if self.yoyo:
-        self.delta*=-1
-        self.ndx+=self.delta*2
-      else:
-        self.ndx=0
-    return self.seq[self.ndx]
-
-def die(msg,rc=1):
-  sys.stderr.write('%s: %s\n'%(progname,msg))
-  sys.exit(rc)
+  if isinstance(n,basestring):
+    if n.startswith('-'):
+      n=neg_text(n)
+    return n
+  return (str(n),neg_text(n))[n<type(n)(0)]
 
 class Certificate(object):
   def __init__(self,service):
@@ -55,7 +38,7 @@ class Certificate(object):
     self.query_seconds=t1-t0
     if self.error:
       return
-    fn=os.path.join(tempdir,'%s.%d.cert'%(self.host,self.port))
+    fn=os.path.join(prog.tempdir,'%s.%d.cert'%(self.host,self.port))
     f=open(fn,'w')
     f.write(cert)
     f.close()
@@ -141,18 +124,7 @@ for service in opt.services:
   threading.Thread(name='%s:%s'%service,target=add_cert,args=(service,)).start()
 
 # Wait for all our threads (except the main thread) to finish.
-spinner=Spinner('''
--        
- -       
-  -      
-   =     
-   <*>   
-     =   
-      -  
-       - 
-        -
-'''.strip().split('\n'),True
-)
+spinner=Spinner(Spinner.cylon,True)
 while threading.activeCount()>1:
   sys.stderr.write('Waiting for %s to finish [%s] \r'%(pluralize('thread',threading.activeCount()-1,fmt='%d %s'),spinner()))
   time.sleep(0.1)

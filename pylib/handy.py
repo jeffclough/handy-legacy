@@ -2,6 +2,220 @@
 import fcntl,fnmatch,os,pipes,re,struct,sys,termios
 from argparse import ArgumentTypeError
 
+class Spinner(object):
+  """Instantiate this class with any sequence, the elements of which
+  will be returned iteratively every time that instance is called.
+
+  Example:
+  >>> spinner=Spinner('abc')
+  >>> spinner=Spinner('abc')
+  >>> spinner()
+  'a'
+  >>> spinner()
+  'b'
+  >>> spinner()
+  'c'
+  >>> spinner()
+  'a'
+
+  Each next element of the given sequence is returned every time the
+  instance is called, which repeats forever. The default sequence is
+  r'-\|/', which are the traditional ASCII spinner characters. Try this:
+
+    import sys,time
+    spinner=Spinner()
+    while True:
+      sys.stderr.write(" It won't stop! (%s) \r"%spinner())
+      time.sleep(0.1)
+
+  It's a cheap trick, but it's fun. (Use ^C to stop it.)
+
+  By the way, ANY indexable sequence can be used. A Spinner object
+  instantiated with a tuple of strings will return the "next" string
+  every time that instance is called, which can be used to produce
+  multi-character animations. The code below demonstrates this and uses
+  yoyo=True to show how that works as well.
+
+    import sys,time
+    spinner=Spinner(Spinner.cylon,True)
+    while True:
+      sys.stderr.write(" The robots [%s] are coming. \r"%spinner())
+      time.sleep(0.1)
+
+  Bear in mind that instantiating Spinner with a mutable sequence (like
+  a list) means you can modify that last after the fact. This raises
+  some powerful, though not necessarily intended, possibilities.
+  """
+
+  cylon=tuple('''
+-        
+ -       
+  -      
+  (+>    
+   <*>   
+    <+)  
+      -  
+       - 
+        -
+'''.strip().split('\n'))
+
+  def __init__(self,seq=r'-\|/',yoyo=False):
+    """Set the sequence for this Spinner instance. If yoyo is True, the
+    sequence items are returned in ascending order than then in
+    descending order, and so on. Otherwise, which is the default, the
+    items are returned only in ascending order."""
+
+    self.seq=seq
+    self.ndx=-1
+    self.delta=1
+    self.yoyo=yoyo
+
+  def __call__(self):
+    """Return the "next" item from the sequence this object was
+    instantiated with. If yoyo was True when this objecect was created,
+    items will be returned in ascending and then descending order."""
+
+    self.ndx+=self.delta
+    if not 0<=self.ndx<len(self.seq):
+      if self.ndx>len(self.seq):
+        self.ndx=len(self.seq) # In case this sequence has shrunk.
+      if self.yoyo:
+        self.delta*=-1
+        self.ndx+=self.delta*2
+      else:
+        self.ndx=0
+    return self.seq[self.ndx]
+
+class ProgInfo(object):
+  """This prog object is required by die() and gripe(), but it's
+  generally useful as well.
+  
+  Attributes:
+    name      - basename of the current script's main file.
+    pid       - numeric PID (program ID) of this script.
+    dir       - full, absolute dirname of this script.
+    real_name - like name, but with any symlinks resolved.
+    real_dir  - like dir, bu with symlinks resolved.
+    tempdir   - name of this system's main temp directory.
+    temp      - full name of this script's temp file or temp directory."""
+
+  def __init__(self,cmd=sys.argv[0]):
+    """Set up this object's data according to cmd, which defaults to the
+    name of the main file of the calling script."""
+
+    # Name of the current script's main file without the directory.
+    self.name=os.path.basename(sys.argv[0])
+
+    # The numeric PID (program ID) of the currently running script.
+    self.pid=os.getpid()
+
+    # The full, absolute path to the directory given when the current
+    # script was run.
+    self.dir=os.path.abspath(os.path.dirname(sys.argv[0]))
+
+    # Like name, but this follows any symlinks to find the real name.
+    self.real_name=os.path.realpath(sys.argv[0])
+
+    # Like dir, but this follows any symlinks to find the real directory
+    # and also returns the full, absolute path.
+    self.real_dir=os.path.dirname(os.path.realpath(sys.argv[0]))
+
+    # A decent choice of temp file or directory for this program, if
+    # needed.
+    self.tempdir=self.findMainTempDir()
+    self.temp=os.path.join(self.tempdir,os.sep,'%s.%d'%(self.name,self.pid))
+
+  def __repr__(self):
+    d=self.__dict__
+    alist=self.__dict__.keys()
+    alist.sort()
+    return '%s(%s)'%(
+      self.__class__.__name__,
+      ','.join([
+        '%s=%r'%(a,d[a])
+          for a in alist
+            if not a.startswith('_') and not callable(getattr(self,a))
+    ]))
+
+  def findMainTempDir(self,perms=None):
+    """Return the full path to a reasonable guess at what might be a
+    temp direcory on this system, creating if necessary using the given
+    permissions. If no permissions are given, we'll base the perms on
+    the current umask."""
+
+    # Let the environment tell us where our temp directory is, or ought
+    # to be, or just use /tmp if the enrionment lets us down.
+    d=os.path.abspath(
+      os.environ.get(
+        'TMPDIR',
+      os.environ.get(
+        'TEMP',
+      os.environ.get(
+        'TMP',
+        os.path.join(os.sep,'tmp')
+    ))))
+
+    # Ensure our temp direcory exists.
+    if not os.path.isdir(d):
+      # If no permissions were given, then just respect the current umask.
+      if perms==None:
+        m=os.umask(0)
+        os.umask(m)
+        perms=m^0777
+      # Set the 'x' bit of each non-zero permission tripplet
+      # (e.g. 0640 ==> 0750).
+      perms=[p|(p!=0) for p in [((mode>>n)&7) for n in (6,3,0)]]
+      os.path.mkdirs(d,perms)
+
+    # If all went well, return the full path of this possibly new directory.
+    return d
+
+  def makeTempFile(self,perms=0600,keep=False):
+    """Open (and likely create, but at least truncate) a temp file for
+    this program, and return the open (for reading and writing) file
+    object. See the our "temp" attribute for the name of the file.
+    Remove this file at program termination unless the "keep" argument
+    is False."""
+
+    fd=os.open(self.temp,os.O_RDWR|os.O_CREAT|os.O_EXCL|os.O_TRUNC,perms)
+    f=os.fdopen(fd,'w+') 
+    if not keep:
+      atexit.register(os.remove,self.temp)
+    return f
+
+  def makeTempDir(self,perms=0700,keep=False):
+    """Create a directory for this program's temp files, and register a
+    function with the atexit module that will automatically removed that
+    whole directory if when this program exits (unless keep=True is
+    given as one of the keyword arguments)."""
+
+    os.mkdirs(self.temp,perms)
+    if not keep:
+      atexit.register(rmdirs,self.temp)
+    return self.temp
+
+prog=ProgInfo()
+
+def die(msg,output=sys.stderr,progname=prog.name,rc=1):
+  """Write '<progname>: <msg>' to output, and terminate with code rc.
+
+  Defaults:
+    output:   sys.stderr
+    progname: basename of the current program (from sys.argv[0])
+    rc:       1
+
+  If rc==None the program is not actually terminated, in which case
+  this function simply returns."""
+
+  output.write('%s: %s\n'%(progname,msg))
+  if rc!=None:
+    sys.exit(rc)
+
+def gripe(msg,output=sys.stderr,progname=prog.name):
+  "Same as die(...,rc=None), so the program doesn't terminate."
+
+  die(msg,output,progname,rc=None)
+
 def get_terminal_size():
   "Return a (width,height) tuple for the caracter size of our terminal."
 
