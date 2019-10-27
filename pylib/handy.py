@@ -347,7 +347,7 @@ class ProgInfo(object):
         )
         break
     else:
-      self.term_height,self.term_width=[int(x) for x in (os.environ.get('LINES','25'),os.environ.get('COUMNS','80'))]
+      self.term_height,self.term_width=[int(x) for x in (os.environ.get('LINES','25'),os.environ.get('COLUMNS','80'))]
 
     return self.term_width,self.term_height
 
