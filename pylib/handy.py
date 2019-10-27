@@ -281,17 +281,6 @@ def shellify(val):
 #
 #   Main program module helpers.
 
-def get_terminal_size():
-  "Return a (width,height) tuple for the caracter size of our terminal."
-
-  for f in sys.stdin,sys.stdout,sys.stderr:
-    if f.isatty():
-      th,tw,_,_=struct.unpack('HHHH',fcntl.ioctl(f.fileno(),termios.TIOCGWINSZ,struct.pack('HHHH',0,0,0,0)))
-      break
-  else:
-    th,tw=[int(x) for x in (os.environ.get('LINES','25'),os.environ.get('COUMNS','80'))]
-  return tw,th
-
 class ProgInfo(object):
   """This prog object is required by die() and gripe(), but it's
   generally useful as well.
@@ -331,6 +320,9 @@ class ProgInfo(object):
     self.tempdir=self.findMainTempDir()
     self.temp=os.path.join(self.tempdir,os.sep,'%s.%d'%(self.name,self.pid))
 
+    # Get the terminal width and and height, or default to 25x80.
+    self.getTerminalSize()
+
   def __repr__(self):
     d=self.__dict__
     alist=self.__dict__.keys()
@@ -342,6 +334,22 @@ class ProgInfo(object):
           for a in alist
             if not a.startswith('_') and not callable(getattr(self,a))
     ]))
+
+  def getTerminalSize(self):
+    """Return a (width,height) tuple for the caracter size of our
+    terminal. Also update our term_width and term_height members."""
+
+    for f in sys.stdin,sys.stdout,sys.stderr:
+      if f.isatty():
+        self.term_height,self.term_width,_,_=struct.unpack(
+          'HHHH',
+          fcntl.ioctl(f.fileno(),termios.TIOCGWINSZ,struct.pack('HHHH',0,0,0,0))
+        )
+        break
+    else:
+      self.term_height,self.term_width=[int(x) for x in (os.environ.get('LINES','25'),os.environ.get('COUMNS','80'))]
+
+    return self.term_width,self.term_height
 
   def findMainTempDir(self,perms=None):
     """Return the full path to a reasonable guess at what might be a

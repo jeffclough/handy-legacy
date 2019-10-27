@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import ansi,argparse,atexit,datetime,json,os,re,socket,ssl,StringIO,subprocess,sys,time,threading
-from handy import die,get_terminal_size,prog,Spinner
+from handy import die,prog,Spinner
 
 host_text,port_text,error_text,warn_text,neg_text=ansi.Palette('cyan on black,green,red,yellow,red on yellow')
 
@@ -128,8 +128,7 @@ spinner=Spinner(Spinner.cylon,True)
 while threading.activeCount()>1:
   sys.stderr.write('Waiting for %s to finish [%s] \r'%(pluralize('thread',threading.activeCount()-1,fmt='%d %s'),spinner()))
   time.sleep(0.1)
-w,_=get_terminal_size()
-sys.stderr.write((' '*(w-1))+'\r')
+sys.stderr.write((' '*(prog.term_width-1))+'\r')
 # Now that we've retrieved our certs in the order given to us, we'll sort
 # them alphabetically by hostname and numerically by port number.
 opt.services.sort()

@@ -5,6 +5,7 @@ try:
 except:
   import argparse27 as argparse
 import csv,fcntl,json,os,struct,sys,termios
+from handy import prog
 
 char_names={
   0x00:'NUL',0x01:'SOH',0x02:'STX',0x03:'ETX',0x04:'EOT',0x05:'ENQ',0x06:'ACK',0x07:'BEL',
@@ -14,25 +15,12 @@ char_names={
   0x20:'SP',0x7f:'DEL'
 }
 
-def get_terminal_size():
-  "Return a (width,height) tuple for the caracter size of our terminal."
-
-  for f in sys.stdin,sys.stdout,sys.stderr:
-    if f.isatty():
-      th,tw,_,_=struct.unpack('HHHH',fcntl.ioctl(f.fileno(),termios.TIOCGWINSZ,struct.pack('HHHH',0,0,0,0)))
-      break
-  else:
-    th,tw=[int(x) for x in (os.environ.get('LINES','25'),os.environ.get('COUMNS','80'))]
-  return tw,th
-
-term_width,_=get_terminal_size()
-
 ap=argparse.ArgumentParser()
 ap.add_argument('--aggregate','-a',dest='aggregate',action='store_true',help="Output reports data from all inputs as one.")
 ap.add_argument('--output','-o',dest='output',action='store',choices=('csv','json','json-pretty','table'),default='table',help="Output frequency data as CSV, JSON, \"pretty\" JSON, or as a table (the default).")
 ap.add_argument('--values',dest='values',action='store',choices=('count','percent'),default='count',help="Output frequencies in decimal (d), percent (p), or CSV (c) format.")
 ap.add_argument('--verbose','-v',dest='verbose',action='store_true',help="Output an ASCII chart above the regular output as a reference.")
-ap.add_argument('--width','-w',dest='width',action='store',type=int,default=term_width,help="Width of terminal to fit output to.")
+ap.add_argument('--width','-w',dest='width',action='store',type=int,default=prog.term_width,help="Width of terminal to fit output to.")
 ap.add_argument('--zero','-z',dest='zero',action='store_true',help="Output 0 rather than - for characters not found in the input. This can help visual clarity.")
 ap.add_argument('files',nargs='*',help="Optional input file(s). Use - to read standard input.")
 opt=ap.parse_args()
