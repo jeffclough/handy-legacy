@@ -1,7 +1,23 @@
 #!/usr/bin/env python
 
-import ansi,argparse,atexit,datetime,json,os,re,socket,ssl,StringIO,subprocess,sys,time,threading
-from handy import die,prog,Spinner
+import argparse,atexit,datetime,json,os,re,socket,ssl,StringIO,subprocess,sys,time,threading
+
+# Put a little extra effort into finding our non-standard modules if needed.
+try:
+  import ansi,loggy
+  from handy import die,prog,Spinner
+except:
+  sys.path.insert(1,os.path.join(
+    os.path.dirname(os.path.realpath(sys.argv[0])),
+    'pylib'
+  ))
+  sys.path.insert(1,os.path.join(
+    os.path.dirname(os.path.realpath(sys.argv[0])),
+    'lib',
+    'python'
+  ))
+  import ansi,loggy
+  from handy import die,prog,Spinner
 
 host_text,port_text,error_text,warn_text,neg_text=ansi.Palette('cyan on black,green,red,yellow,red on yellow')
 
@@ -92,8 +108,14 @@ ap=argparse.ArgumentParser(description="Get certificate expiration data. The HOS
 ap.add_argument('-c','--color',dest='color',action='store_true',default=False,help="Turn on colored output.")
 ap.add_argument('--json',dest='format',action='store_const',const='json',default='text',help="Use JSON as output format.")
 ap.add_argument('-w','--warn',dest='warn',default=None,type=int,help="Output only warnings about certs expiring within the given number of days.")
+ap.add_argument('--scan',dest='scan',action='store_true',default=False,help="Only test each host:port argument for a listener and report how each such listener responds to an SSL certificate request.")
+ap.add_argument('--log-facility',dest='log_facility',metavar='FACILITY',action='store',default='local0',help="Log to the given syslog facility. (default: %(default)s)")
+ap.add_argument('--log-level',dest='log_level',metavar='LEVEL',action='store',default='info',help="Log at the given level. (default: %(default)s)")
 ap.add_argument('services',metavar='HOST:PORT',nargs='*',help="One or more HOST:PORT arguments.")
 opt=ap.parse_args()
+
+log=loggy.get_logger(facility=opt.log_facility,level=opt.log_level)
+
 ansi.enabled=opt.color or sys.stdout.isatty()
 if not sys.stdin.isatty():
   opt.services.extend([line.strip() for line in sys.stdin])
@@ -107,19 +129,26 @@ for i in range(len(opt.services)):
   except:
     die("Bad HOST:PORT argument: %r"%(opt.services[i]))
 
-# Retrieve all our certs in a dict keyed by (host,port) tuples.
-certs={}
-connections=threading.Semaphore(8) # Allow only up to 8 concurrent cert retrievals.
-
 def add_cert(service):
   """This simply runs in a thread. The service argument is a (host,port)
   tuple."""
 
   connections.acquire()
+  log.info("Queuinig %s:%d for SSL cert retrieval"%service)
   certs[service]=Certificate(service)
+  c=certs[service]
+  if certs[service].error:
+    log.error("Error (%s) from %s:%d after %0.3f seconds"%(c.error,service[0],service[1],c.query_seconds))
+  else:
+    log.info("Retrieved cert from %s:%d, valid from %s to %s"%(service[0],service[1],c.notBefore,c.notAfter))
   connections.release()
 
+# Retrieve all our certs in a dict keyed by (host,port) tuples.
+certs={}
+connections=threading.Semaphore(16) # Allow only up to 8 concurrent cert retrievals.
+
 # Create and start our threads.
+log.info("Starting retrieval of %s"%pluralize('certificate',len(opt.services),fmt='%d %s'))
 for service in opt.services:
   threading.Thread(name='%s:%s'%service,target=add_cert,args=(service,)).start()
 
@@ -129,9 +158,27 @@ while threading.activeCount()>1:
   sys.stderr.write('Waiting for %s to finish [%s] \r'%(pluralize('thread',threading.activeCount()-1,fmt='%d %s'),spinner()))
   time.sleep(0.1)
 sys.stderr.write((' '*(prog.term_width-1))+'\r')
+log.info("Finished retrieval of %s"%pluralize('certificate',len(opt.services),fmt='%d %s'))
 # Now that we've retrieved our certs in the order given to us, we'll sort
 # them alphabetically by hostname and numerically by port number.
 opt.services.sort()
+
+if opt.scan:
+  now=datetime.datetime.now()
+  for service in opt.services:
+    c=certs[service]
+    if c.notBefore and c.notAfter:
+      if c.notAfter<now:
+        info=error_text('Expired cert valid from %s to %s'%(c.notBefore,c.notAfter))
+      elif c.notBefore>now:
+        info=error_text('Premature cert valid from %s to %s'%(c.notBefore,c.notAfter))
+      else:
+        info='Current cert valid from %s to %s'%(c.notBefore,c.notAfter)
+    else:
+      info=error_text('error (%s) after %0.3f seconds'%(c.error,c.query_seconds))
+    host_text(service[0]),port_text(service[1])
+    print '%s:%s: %s'%(host_text(service[0]),port_text(service[1]),info)
+  sys.exit(0)
 
 if opt.warn!=None:
   # Warning output, which outputs only warnings about soon-expiring certs.
