@@ -66,7 +66,7 @@ def get_logger(**kwargs):
   facility=kwargs.get('facility',None)
   level=kwargs.get('level','warning')
   name=kwargs.get('name',os.path.basename(sys.argv[0]).rsplit('.',1)[0])
-  logfmt=kwargs.get('logfmt','%(name)s %(levelname).1s: %(message)s')
+  logfmt=kwargs.get('logfmt','%(name)s[%(process)d] %(levelname).1s: %(message)s')
   datefmt=kwargs.get('datefmt','%Y-%m-%d %H:%M:%S ')
 
   if facility==None:
