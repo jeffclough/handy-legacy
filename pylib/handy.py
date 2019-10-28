@@ -252,6 +252,19 @@ def file_walker(root,**kwargs):
   while dir_stack:
     yield dir_stack.pop()
 
+def rmdirs(path):
+  """Just like os.rmdir(), but this fuction takes care of recursively
+  removing the contents under path for you."""
+
+  for f in file_walker(path,follow_links=False,report_dirs='last'):
+    if f[-1]==os.sep:
+      if f!=os.sep:
+        #print "os.rmdir(%r)"%(f[:-1],)
+        os.rmdir(f[:-1])
+    else:
+      #print "os.remove(%r)"%(f,)
+      os.remove(f)
+
 def shellify(val):
   """Return the given value quotted and escaped as necessary for a Unix
   shell to interpret it as a single value.
@@ -447,6 +460,7 @@ class Spinner(object):
   r'-\|/', which are the traditional ASCII spinner characters. Try this:
 
     import sys,time
+    from handy import Spinner
     spinner=Spinner()
     while True:
       sys.stderr.write(" It won't stop! (%s) \r"%spinner())
@@ -461,6 +475,7 @@ class Spinner(object):
   yoyo=True to show how that works as well.
 
     import sys,time
+    from handy import Spinner
     spinner=Spinner(Spinner.cylon,True)
     while True:
       sys.stderr.write(" The robots [%s] are coming. \r"%spinner())
@@ -474,11 +489,11 @@ class Spinner(object):
   cylon=tuple('''
 -        
  -       
-  -      
-  (+>    
+  =      
+  =+=    
    <*>   
-    <+)  
-      -  
+    =+=  
+      =  
        - 
         -
 '''.strip().split('\n'))
@@ -510,18 +525,8 @@ class Spinner(object):
         self.ndx=0
     return self.seq[self.ndx]
 
-def rmdirs(path):
-  """Just like os.rmdir(), but this fuction takes care of recursively
-  removing the contents under path for you."""
-
-  for f in file_walker(path,follow_links=False,report_dirs='last'):
-    if f[-1]==os.sep:
-      if f!=os.sep:
-        #print "os.rmdir(%r)"%(f[:-1],)
-        os.rmdir(f[:-1])
-    else:
-      #print "os.remove(%r)"%(f,)
-      os.remove(f)
+wheel_spinner=Spinner(r'-\|/')
+cylon_spinner=Spinner(Spinner.cylon,yoyo=True)
 
 if __name__=='__main__':
   import argparse,doctest,sys
