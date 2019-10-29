@@ -356,7 +356,6 @@ class Installer(DependentTarget):
 
     # Copy each dependency to the given directory.
     for dep in self.deps:
-      dep=os.path.realpath(dep)
       dest=os.path.join(self.dir,os.path.basename(dep))
       if isnewer(dep,dest) and not any([fnmatch(dep,pat) for pat in IGNORE]):
         print '%s ==> %s'%(dep,self.dir)

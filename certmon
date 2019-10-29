@@ -7,15 +7,8 @@ try:
   import ansi,loggy
   from handy import die,prog,Spinner
 except:
-  sys.path.insert(1,os.path.join(
-    os.path.dirname(os.path.realpath(sys.argv[0])),
-    'pylib'
-  ))
-  sys.path.insert(1,os.path.join(
-    os.path.dirname(os.path.realpath(sys.argv[0])),
-    'lib',
-    'python'
-  ))
+  sys.path.insert(1,os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])),'pylib'))
+  sys.path.insert(1,os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])),'lib','python'))
   import ansi,loggy
   from handy import die,prog,Spinner
 
