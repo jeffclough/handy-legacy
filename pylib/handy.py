@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import fcntl,fnmatch,os,pipes,re,struct,sys,termios
-from argparse import ArgumentTypeError
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -60,7 +59,7 @@ def first_match(s,patterns,flags=0):
   return None,None
 
 def non_negative_int(s):
-  "Return the non-negative integer value of s, or raise ArgumentTypeError."
+  "Return the non-negative integer value of s, or raise ValueError."
 
   try:
     n=int(s)
@@ -68,10 +67,10 @@ def non_negative_int(s):
       return n
   except:
     pass
-  raise ArgumentTypeError('%r is not a non-negative integer.'%s)
+  raise ValueError('%r is not a non-negative integer.'%s)
 
 def positive_int(s):
-  "Return the positive integer value of s, or raise ArgumentTypeError."
+  "Return the positive integer value of s, or raise ValueError."
 
   try:
     n=int(s)
@@ -79,7 +78,7 @@ def positive_int(s):
       return n
   except:
     pass
-  raise ArgumentTypeError('%r is not a non-negative integer.'%s)
+  raise ValueError('%r is not a non-negative integer.'%s)
 
 class TitleCase(str):
   """A TitleCase value is just like a str value, but it gets title-cased
@@ -114,10 +113,17 @@ class TitleCase(str):
     words=[w for w in value.lower().split() if w]
 
     # Join this sequence of words into a title-cased string.
+    # Use this code for compatibility with Python versions < 2.5. This kludge
+    # is valid here only becasue words[i].lower() will never evaluate to False.
     value=' '.join([
-      words[i].lower() if words[i] in TitleCase.lc and i>0 else words[i].capitalize()
+      (words[i] in TitleCase.lc and i>0) and words[i].lower() or words[i].capitalize()
         for i in range(len(words))
     ])
+    # Use this code for compatibility with Python versions >= 2.5.
+    #value=' '.join([
+    #  words[i].lower() if words[i] in TitleCase.lc and i>0 else words[i].capitalize()
+    #    for i in range(len(words))
+    #])
 
     # Now become our immutable value as a title-cased string.
     return str.__new__(cls,value)
@@ -204,7 +210,7 @@ def file_walker(root,**kwargs):
   ignore=compile_filename_patterns(kwargs.get('ignore',[]))
   report_dirs=kwargs.get('report_dirs',False)
   if report_dirs not in (False,True,'first','last'):
-    raise ArgumentTypeError("report_dirs=%r is not one of False, True, 'first', or 'last'."%(report_dirs,))
+    raise ValueError("report_dirs=%r is not one of False, True, 'first', or 'last'."%(report_dirs,))
   stack=[(0,root)] # Prime our stack with root (at depth 0).
   been_there=set([os.path.abspath(os.path.realpath(root))])
   dir_stack=[] # Stack of paths we're yielding after exhausting those directories.
@@ -529,8 +535,13 @@ wheel_spinner=Spinner(r'-\|/')
 cylon_spinner=Spinner(Spinner.cylon,yoyo=True)
 
 if __name__=='__main__':
-  import argparse,doctest,sys
+  import doctest,sys
   from pprint import pprint
+
+  try:
+    import argparse
+  except:
+    import argparse27 as argparse
 
   ap=argparse.ArgumentParser()
   sp=ap.add_subparsers()
@@ -541,7 +552,7 @@ if __name__=='__main__':
   sp_find=sp.add_parser('find',help="Call file_walker() with the given path and options.")
   sp_find.set_defaults(cmd='find')
   sp_find.add_argument('path',action='store',default='.',help="The path to be searched.")
-  sp_find.add_argument('--depth',action='store',type=non_negative_int,default=sys.maxsize,help="The number of directories to decend below the given path when traversing the directory structure.")
+  sp_find.add_argument('--depth',action='store',type=non_negative_int,default=sys.maxint,help="The number of directories to decend below the given path when traversing the directory structure.")
   sp_find.add_argument('--follow',action='store_true',help="Follow symlinks to directories during recursion. This is done in a way that's safe from symlink loops.")
   sp_find.add_argument('--ignore',metavar='FILE',action='store',nargs='+',default=[],help="A list of filespecs and/or regular expressions (prefixed with 're:') that itentify files NOT to be reported.")
   sp_find.add_argument('--prune',metavar='DIR',action='store',nargs='+',default=[],help="A list of filespecs and/or regular expressions (prefixed with 're:') that itentify directories NOT to be recursed into.")

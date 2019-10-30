@@ -83,6 +83,10 @@ __all__ = [
 
 
 import collections as _collections
+try:
+  _collections.OrderedDict
+except:
+  import collections27 as _collections
 import copy as _copy
 import os as _os
 import re as _re
