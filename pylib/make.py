@@ -105,14 +105,19 @@ def filetime(filename,default=0):
   except:
     pass
   if opt.verbosity>=V_TIME:
-    print '  %s:\t%s'%(filename,time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(default)))
+    print '  %s:\tt=%0.6f (%s)'%(filename,default,time.strftime('%Y-%m-%d %H:%M:%S.%f',time.localtime(default)))
   return default
 
-def isnewer(src,dst):
+def isnewer(src,dst,bias=-0.001):
   """Return true if src names a file that is newer than the file dst
-  names (or if dst doesn't exist)."""
+  names (or if dst doesn't exist).
+  
+  The bias argument is the number of seconds to add to the source time
+  in order to bias comparison with the time of the destination file. It
+  defaults to -0.001 seconds (-1 miliseconds) to avoid needless file
+  copies on some operating systems. (I'm looking at you, Mac OS.)"""
 
-  return opt.force or filetime(src,1)>filetime(dst)
+  return opt.force or (filetime(src,1)+bias)>filetime(dst)
 
 def flatten(*args):
   '''Return a list of all arguments, breaking out elements of any tuples
