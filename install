@@ -64,6 +64,7 @@ SCRIPTS=( # These targets are simply copied during installation.
   'freq',
   'gensig/gensig',
   'ip2host',
+  'json',
   'json2csv',
   'keeplast',
   'mazer',
