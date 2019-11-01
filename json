@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-import argparse,csv,json,os,re,sys
+import argparse,datetime,csv,json,os,re,sys
+from pprint import pprint
 # Put a little extra effort into finding our non-standard modules if needed.
 try:
   from handy import die,prog
@@ -37,7 +38,7 @@ As many -D options may be specified as are needed.
   skipinitialspace=False
   lineterminator=\\n
   quoting=QUOTE_MINIMAL''')
-ap.add_argument('--output-format','-O',dest='output_format',action='store',choices=('csv','json','json-pretty'),default='json-pretty',help="Set the output format. (default: %(default)s)")
+ap.add_argument('--output-format','-O',dest='output_format',action='store',choices=('csv','json','json-pretty','python'),default='json-pretty',help="Set the output format. (default: %(default)s)")
 ap.add_argument('--show-structure','-S',dest='show_structure',action='store_true',default=False,help="Rather than outputting the data itself, just\noutput the structure of the data.")
 ap.add_argument('filename',action='store',nargs='?',default=None,help="Name of the file to read JSON data from.")
 try:
@@ -130,25 +131,46 @@ def show_structure(d,indent=0):
     if len(d):
       show_structure(d[0],indent+2)
 
-# A tuple of (RE,FUNC) pairs for identifying and converting parsable types from
-# strings into something more useful.
+def time_value(m):
+  d=m.groupdict()
+  if 'second' not in d:
+    d['second']='00'
+  if 'am' in d:
+    dt=datetime.datetime.strptime("%(hour)s:%(minute)s:%(second)s %(am)s"%d,"%I:%M:%S %p")
+  else:
+    dt=datetime.datetime.strptime("%(hour)s:%(minute)s:%(second)s"%d,"%H:%M:%S")
+  return datetime.time(dt.hour,dt.minute,dt.second)
+
+# A tuple of (NAME,RE,FUNC) triplets for identifying and converting parsable
+# types from strings into something more useful.
 type_parsers=(
-  # Integer
   (
+    'int',
     re.compile(r'[-+]?\d+$'),
-    int
+    lambda m:int(m.group())
   ),
-  # Float
   (
+    'float',
     re.compile(r'[-+]?\d+\.\d+([Ee]\d+)?$'),
-    float
+    lambda m:float(m.group())
+  ),
+  (
+    'time',
+    re.compile(r'(?P<hour>\d{1,2}):(?P<minute>\d{1,2})(:(?P<second>\d{1,2}))?\s?(?P<am>([Aa]|[Pp])[Mm]?)?$'),
+    time_value
   ),
 )
 
 def evaluate(val):
-  for p,f in type_parsers:
-    if p.match(val):
-      return f(val)
+  #print 'D: evaluate(%r)'%(val,)
+  if isinstance(val,basestring):
+    for name,pat,func in type_parsers:
+      m=pat.match(val)
+      if m:
+        #print 'D: matched %s'%pat.pattern
+        val=func(m)
+        break
+  #print 'D: returning %r'%(val,)
   return val
 
 def traverse(d,func):
@@ -165,23 +187,20 @@ def traverse(d,func):
       else:
         d[i]=func(d[i])
 
+class BetterJsonEncoder(json.JSONEncoder):
+  def default(self,obj):
+    if isinstance(obj,datetime.time):
+      return obj.strftime("%H:%M:%S")
+    # Let the base class default method raise the TypeError
+    return json.JSONEncoder.default(self, obj)
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-def numify(s):
-  """Return an int or float from this string if possible. If not, then
-  just return the original string."""
-
-  try: return int(s)
-  except: pass
-  try: return float(s)
-  except: pass
-  return s
 
 # Read our JSON data.
 if opt.filename==None:
   opt.filename='/dev/stdin'
 f=open(opt.filename)
-d=json.load(f,parse_int=numify)
+d=json.load(f)
 f.close()
 traverse(d,evaluate) # Parse and convert what values we can.
 
@@ -192,9 +211,11 @@ else:
   if opt.output_format=='csv':
     die("Output format csv has not yet been implemented. Please complain to the developer.")
   elif opt.output_format=='json':
-    json.dump(d,sys.stdout)
+    json.dump(d,sys.stdout,cls=BetterJsonEncoder)
   elif opt.output_format=='json-pretty':
-    json.dump(d,sys.stdout,indent=2)
+    json.dump(d,sys.stdout,indent=2,cls=BetterJsonEncoder)
+  elif opt.output_format=='python':
+    pprint(d,indent=2,width=prog.term_width)
   else:
     die("Unrecognized output format %s!. Please complain to the developer."%(opt.output_format,))
 sys.exit(0)
