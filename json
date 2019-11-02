@@ -131,46 +131,92 @@ def show_structure(d,indent=0):
     if len(d):
       show_structure(d[0],indent+2)
 
-def time_value(m):
-  d=m.groupdict()
-  if 'second' not in d:
-    d['second']='00'
-  if 'am' in d:
-    dt=datetime.datetime.strptime("%(hour)s:%(minute)s:%(second)s %(am)s"%d,"%I:%M:%S %p")
-  else:
-    dt=datetime.datetime.strptime("%(hour)s:%(minute)s:%(second)s"%d,"%H:%M:%S")
-  return datetime.time(dt.hour,dt.minute,dt.second)
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+#  Type parsers:
+#
 
-# A tuple of (NAME,RE,FUNC) triplets for identifying and converting parsable
-# types from strings into something more useful.
-type_parsers=(
-  (
-    'int',
-    re.compile(r'[-+]?\d+$'),
-    lambda m:int(m.group())
-  ),
-  (
-    'float',
-    re.compile(r'[-+]?\d+\.\d+([Ee]\d+)?$'),
-    lambda m:float(m.group())
-  ),
-  (
-    'time',
+class TypeParser(object):
+
+  novalue='OPjhMQY84pAp6pL5xEUoFmlFl2w5zglu'
+
+  def __call__(self,string):
+    "Return the parsed value of string or TypeParser.novalue"
+
+    return self.value
+
+class NumberParser(TypeParser):
+  def __call__(self,string):
+    try: return int(string)
+    except: pass
+    try: return float(string)
+    except: pass
+    return TypeParser.novalue
+
+class TimeParser(TypeParser):
+  patterns=(
     re.compile(r'(?P<hour>\d{1,2}):(?P<minute>\d{1,2})(:(?P<second>\d{1,2}))?\s?(?P<am>([Aa]|[Pp])[Mm]?)?$'),
-    time_value
-  ),
+  )
+
+  def __call__(self,string):
+    value=TypeParser.novalue
+    for p in TimeParser.patterns:
+      m=p.match(string)
+      if m:
+        break
+    if m:
+      d=m.groupdict()
+      if 'am' in d:
+        dt=datetime.datetime.strptime("%(hour)s:%(minute)s:%(second)s %(am)s"%d,"%I:%M:%S %p")
+      else:
+        dt=datetime.datetime.strptime("%(hour)s:%(minute)s:%(second)s"%d,"%H:%M:%S")
+      value=datetime.time(dt.hour,dt.minute,dt.second)
+    return value
+
+class DateTimeParser(TypeParser):
+  patterns=(
+    re.compile(r'(?P<month>\d{1,2})[-/](?P<day>\d{1,2})[-/](?P<year>\d{4})\s+(?P<hour>\d{1,2}):(?P<minute>\d{1,2})(:(?P<second>\d{1,2}))?\s?(?P<am>([Aa]|[Pp])[Mm]?)?$'),
+    re.compile(r'(?P<year>\d{4})[-/](?P<month>\d{1,2})[-/](?P<day>\d{1,2})\s+(?P<hour>\d{1,2}):(?P<minute>\d{1,2})(:(?P<second>\d{1,2}))?\s?(?P<am>([Aa]|[Pp])[Mm]?)?$'),
+  )
+
+  def __call__(self,string):
+    #print 'D: %s(%r)'%(self.__class__.__name__,string)
+    value=TypeParser.novalue
+    for p in DateTimeParser.patterns:
+      m=p.match(string)
+      if m:
+        #print 'D: matched %s'%p.pattern
+        #print 'D: match: %r'%m.groupdict()
+        break
+    if m:
+      d=m.groupdict()
+      day=int(d['day'])
+      month=int(d['month'])
+      if month>12 and day<=12:
+        # Try to use some common sense about which is day and which is month.
+        d['day'],d['month']=month,day
+      if 'am' in d:
+        value=datetime.datetime.strptime("%(year)s-%(month)s-%(day)s %(hour)s:%(minute)s:%(second)s %(am)s"%d,"%Y-%m-%d %I:%M:%S %p")
+      else:
+        value=datetime.datetime.strptime("%(year)s-%(month)s-%(day)s %(hour)s:%(minute)s:%(second)s %(am)s"%d,"%Y-%m-%d %H:%M:%S")
+    #print 'D: returning %r'%(value,)
+    return value
+
+# A tuple of TypeParser instances for identifying and converting parsable types
+# from strings into something more useful.
+type_parsers=(
+  NumberParser(),
+  TimeParser(),
+  DateTimeParser(),
 )
 
 def evaluate(val):
-  #print 'D: evaluate(%r)'%(val,)
   if isinstance(val,basestring):
-    for name,pat,func in type_parsers:
-      m=pat.match(val)
-      if m:
-        #print 'D: matched %s'%pat.pattern
-        val=func(m)
-        break
-  #print 'D: returning %r'%(val,)
+    for parser in type_parsers:
+      v=parser(val)
+      if v!=TypeParser.novalue:
+        return v
   return val
 
 def traverse(d,func):
@@ -191,6 +237,8 @@ class BetterJsonEncoder(json.JSONEncoder):
   def default(self,obj):
     if isinstance(obj,datetime.time):
       return obj.strftime("%H:%M:%S")
+    if isinstance(obj,datetime.datetime):
+      return obj.strftime("%Y-%m-%d %H:%M:%S")
     # Let the base class default method raise the TypeError
     return json.JSONEncoder.default(self, obj)
 
