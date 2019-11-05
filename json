@@ -38,7 +38,7 @@ As many -D options may be specified as are needed.
   skipinitialspace=False
   lineterminator=\\n
   quoting=QUOTE_MINIMAL''')
-ap.add_argument('--output-format','-O',dest='output_format',action='store',choices=('csv','json','json-pretty','python'),default='json-pretty',help="Set the output format. (default: %(default)s)")
+ap.add_argument('--output-format','-O',dest='output_format',action='store',choices=('csv','json','json-pretty','python','traverse'),default='json-pretty',help="Set the output format. (default: %(default)s)")
 ap.add_argument('--show-structure','-S',dest='show_structure',action='store_true',default=False,help="Rather than outputting the data itself, just\noutput the structure of the data.")
 ap.add_argument('filename',action='store',nargs='?',default=None,help="Name of the file to read JSON data from.")
 try:
@@ -134,7 +134,7 @@ def show_structure(d,indent=0):
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #
-#  Type parsers:
+#  Type parsing:
 #
 
 class TypeParser(object):
@@ -219,30 +219,84 @@ def evaluate(val):
         return v
   return val
 
-def traverse(d,func):
+def reading_traversal(d,func,depth=0):
+  if isinstance(d,dict):
+    for key,val in d.items():
+      func(key,val,depth)
+      if isinstance(val,(dict,list)):
+        reading_traversal(val,func,depth+1)
+  elif isinstance(d,(list,tuple)):
+    for i in range(len(d)):
+      func(i,d[i],depth)
+      if isinstance(d[i],(dict,list)):
+        reading_traversal(d[i],func,depth+1)
+
+def iterating_traversal(d):
+  items=[]
+  reading_traversal(d,lambda i,val,depth:items.append((i,val,depth)))
+  for i,val,depth in items:
+    yield i,val,depth
+
+def modifying_traversal(d,func):
   if isinstance(d,dict):
     for key,val in d.items():
       if isinstance(val,(dict,list)):
-        traverse(val,func)
+        modifying_traversal(val,func)
       else:
         d[key]=func(val)
-  elif isinstance(d,list):
+  elif isinstance(d,(list,tuple)):
     for i in range(len(d)):
       if isinstance(d[i],(dict,list)):
-        traverse(d[i],func)
+        modifying_traversal(d[i],func)
       else:
         d[i]=func(d[i])
 
+# End of type parsing.
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 class BetterJsonEncoder(json.JSONEncoder):
+  """This JSON encoder adds to json.JSONEncoder some Python data types
+  that we'd like to be able to serialize in JSON data.
+  
+    datetime.datetime
+    datetime.time
+  """
+
   def default(self,obj):
     if isinstance(obj,datetime.time):
       return obj.strftime("%H:%M:%S")
     if isinstance(obj,datetime.datetime):
       return obj.strftime("%Y-%m-%d %H:%M:%S")
-    # Let the base class default method raise the TypeError
+    # Let the base class default method raise any TypeError
     return json.JSONEncoder.default(self, obj)
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+def all_values(d):
+  values=[]
+  reading_traversal(d,lambda i,v:values.append((i,v)))
+  for i,v in values:
+    print 'i=%r, val=%r'%(i,v)
+
+#def query_hierarchy(data,*args,**kwargs):
+#  """This gererator function returns an iterator over any matching
+#  pieces of the given nested hierarchy of lists, tuples, and dicts in
+#  "data"."""
+#
+#  # Get the given or default values of our keyword arguments.
+#  sep=kwargs.get('sep','/')
+#
+#  # Get the "path" to the data the caller wants.
+#  if len(args)==0:
+#    raise ValueError("No path components given.")
+#  args=list(args)
+#  for i in len(args):
+#    if not isinstance(args[i],basestring):
+#      args[i]=str(args[i])
+#    if sep!=None and sep in args[i]:
+#      # Replace args[i] with the separate path items it contains.
+#      args[i:i+1]=args[i].split(sep)
 
 # Read our JSON data.
 if opt.filename==None:
@@ -250,7 +304,7 @@ if opt.filename==None:
 f=open(opt.filename)
 d=json.load(f)
 f.close()
-traverse(d,evaluate) # Parse and convert what values we can.
+modifying_traversal(d,evaluate) # Parse and convert what values we can.
 
 if opt.show_structure:
   show_structure(d)
@@ -264,6 +318,12 @@ else:
     json.dump(d,sys.stdout,indent=2,cls=BetterJsonEncoder)
   elif opt.output_format=='python':
     pprint(d,indent=2,width=prog.term_width)
+  elif opt.output_format=='traverse':
+    for i,val,depth in iterating_traversal(d):
+      if isinstance(val,(dict,list,tuple)):
+        print '%s%s:'%('\t'*depth,i)
+      else:
+        print '%s%s=%r'%('\t'*depth,i,val)
   else:
     die("Unrecognized output format %s!. Please complain to the developer."%(opt.output_format,))
 sys.exit(0)
