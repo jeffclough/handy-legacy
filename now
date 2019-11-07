@@ -41,7 +41,7 @@ def timeFromInteger(td):
   elif td.units=='m':t*=60
   return time.localtime(t)
 
-# This is a big structure identifies, validates, and parses lots of different
+# This big structure identifies, validates, and parses lots of different
 # string expressions of dates and times down to a Unix Epoch time value.
 #
 # Each supported format has an english description, an RE that must match the

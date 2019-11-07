@@ -298,12 +298,22 @@ def all_values(d):
 #      # Replace args[i] with the separate path items it contains.
 #      args[i:i+1]=args[i].split(sep)
 
+url_parser=re.compile(r'(?P<protocol>\w+)://(?P<host>.[^:/]+)(:(?P<port>\d+))?(?P<path>/.*)?$')
+
 # Read our JSON data.
 if opt.filename==None:
   opt.filename='/dev/stdin'
-f=open(opt.filename)
-d=json.load(f)
-f.close()
+if url_parser.match(opt.filename):
+  import urllib2
+  f=urllib2.urlopen('http://www.python.org/','')
+  d=f.read()
+  print d
+  f.close()
+  sys.exit(0)
+else:
+  f=open(opt.filename)
+  d=json.load(f)
+  f.close()
 modifying_traversal(d,evaluate) # Parse and convert what values we can.
 
 if opt.show_structure:
