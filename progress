@@ -294,4 +294,6 @@ if __name__=='__main__':
       sys.stdout.write('\r')
   except KeyboardInterrupt:
     sys.exit(1)
-  sys.exit(0)
+  if opt.pos<opt.limit:
+    sys.exit(0)
+  sys.exit(1)
