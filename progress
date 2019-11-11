@@ -226,7 +226,7 @@ if __name__=='__main__':
     import sys,time
 
     ap=argparse.ArgumentParser(
-      description="Output a progress bar."
+      description="Output a progress bar and terminat with 0 (true) if pos < limit. Otherwise, return 1 (false)."
     )
     ap.add_argument('--newline','-n',action='store_true',help="Write a newline character to standard output after every progress bar. By default, only a carriage return is output, returning the cursor to the left-most column of the terminal.")
     ap.add_argument('--fmt',action='store',default='(%d)',help="Format string for the numeric value of this progress bar. (default: %(default)s)")
@@ -234,7 +234,7 @@ if __name__=='__main__':
     ap.add_argument('--trailer',action='store',default='=',help="Character to fill in the bar to the left of (trailing behind) the current position. (default: %(default)s)")
     ap.add_argument('--leader',action='store',default='-',help="Character to fill in the bar to the right of (leading) the current position. (default: %(default)s)")
     ap.add_argument('--end',action='store',default='|',help="Character that marks the right side of the bar. (default: %(default)s)")
-    ap.add_argument('--width',action='store',type=int,default=tty_columns-1,help="The number of characters to fit the progress bar into. (default: %(default)s)")
+    ap.add_argument('--width','-w',action='store',type=int,default=tty_columns-1,help="The number of characters to fit the progress bar into. (default: %(default)s)")
     ap.add_argument('--test',action='store',type=float,default=0,help="Write all progress bar values to standard output and exit. The optional value of this option is the number of seconds (which may be a floating point value) to delay between each iteration.")
     ap.add_argument('--percent',action='store_true',help="Express progress as a percentage rather than as an absolute value.")
     ap.add_argument('--bytes',action='store_true',help="Express progress as a number of bytes in human-friendly units (B, KB, MB, GB, TB, or EB) according to the number of bytes in question.")
