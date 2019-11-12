@@ -39,6 +39,7 @@ As many -D options may be specified as are needed.
   lineterminator=\\n
   quoting=QUOTE_MINIMAL''')
 ap.add_argument('--output-format','-O',dest='output_format',action='store',choices=('csv','json','json-pretty','python','traverse'),default='json-pretty',help="Set the output format. (default: %(default)s)")
+ap.add_argument('--quote-numbers',dest='quote_numbers',action='store_true',default=False,help="Output numeric values with quotes around them. Normally, numbers are not quoted in this way.")
 ap.add_argument('--show-structure','-S',dest='show_structure',action='store_true',default=False,help="Rather than outputting the data itself, just\noutput the structure of the data.")
 ap.add_argument('filename',action='store',nargs='?',default=None,help="Name of the file to read JSON data from.")
 try:
@@ -148,10 +149,11 @@ class TypeParser(object):
 
 class NumberParser(TypeParser):
   def __call__(self,string):
-    try: return int(string)
-    except: pass
-    try: return float(string)
-    except: pass
+    if not opt.quote_numbers:
+      try: return int(string)
+      except: pass
+      try: return float(string)
+      except: pass
     return TypeParser.novalue
 
 class TimeParser(TypeParser):
