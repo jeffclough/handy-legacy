@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 ##
 ## If you make this file a Python module by renaming it to have a .py

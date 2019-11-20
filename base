@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 import os,sys
 # Put a little extra effort into finding our non-standard modules if needed.
@@ -69,10 +69,10 @@ ap=argparse.ArgumentParser(
   usage="%(prog)s [OPTIONS] [infile [outfile]]",
   description="Base 16 encodes 1 byte into two characters. Base 32 encodes 5 bytes into 8 characters. Base 64 encodes 3 bytes into 4 characters. We like base 64."
 )
-ap.add_argument('--base','-b',type=int,choices=valid_bases,default=default_base,required=base_required,help="Use this base for encoding or decoding. (default: %(default)s)")
-ap.add_argument('--encode','-e',dest='action',action='store_const',const='encode',default=default_action,help="Encode binary data to output.")
-ap.add_argument('--decode','-d',dest='action',action='store_const',const='decode',help="Decode previously encoded data to output.")
-ap.add_argument('--wrap','-w',metavar='N',type=int,nargs='?',help="Wrap encoded output lines to fit within N characters (plus a new-line character). This is currently only implemented for base 64.")
+ap.add_argument('-b','--base',type=int,choices=valid_bases,default=default_base,required=base_required,help="Use this base for encoding or decoding. (default: %(default)s)")
+ap.add_argument('-e','--encode',dest='action',action='store_const',const='encode',default=default_action,help="Encode binary data to output.")
+ap.add_argument('-d','--decode',dest='action',action='store_const',const='decode',help="Decode previously encoded data to output.")
+ap.add_argument('-w','--wrap',metavar='N',type=int,nargs='?',help="Wrap encoded output lines to fit within N characters (plus a new-line character). This is currently only implemented for base 64.")
 ap.add_argument('--alt',default=None,help="Give two characters to use in the base 64 alphabet rather than / and +.")
 ap.add_argument('infile',nargs='?',default=None,help="If given, input is read from this file. Otherwise, input is read from standard input.")
 ap.add_argument('outfile',nargs='?',default=None,help="If given, output is written to this file. Otherwise, output is written to standard output.")

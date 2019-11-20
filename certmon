@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 import argparse,atexit,datetime,json,os,re,socket,ssl,StringIO,subprocess,sys,time,threading
 

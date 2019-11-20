@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 import ansi,sys
 
 # Set up whatever ANSI attribute-foreground-background combo the user wants.

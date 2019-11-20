@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 import argparse,datetime,csv,json,os,re,sys
 from pprint import pprint
