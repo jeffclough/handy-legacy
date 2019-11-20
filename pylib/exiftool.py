@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 '''
 This module provides a fairly clumsy Python interface to Phil Harvey's

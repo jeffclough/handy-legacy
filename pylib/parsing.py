@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 # Lengthable is to be used as a metaclass of classes that support
 # len(instance) calls.
