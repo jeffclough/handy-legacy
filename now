@@ -6,6 +6,7 @@ import pprint
 # Components of the current date and time and TZ details are needed in lots of
 # places in this code, so I'm just making them globally available. So there.
 YYYY,MM,DD,hh,mm,ss,dummy,dummy,DST=time.localtime()
+defaults=dict(year=YYYY,mon=MM,day=DD,hour=hh,min=mm,sec=ss)
 tz_name=time.tzname[DST]
 tz_offset=int(time.mktime(time.localtime(86400))-time.mktime(time.gmtime(86400)))
 
@@ -14,8 +15,8 @@ tz_offset=int(time.mktime(time.localtime(86400))-time.mktime(time.gmtime(86400))
 IN_FMT='%Y-%m-%d %H:%M:%S %Z'
 
 # Get names of months in our current locale.
-month_names=[time.strftime('%B',(2017,m,1,12,0,0,0,0,0)) for m in range(1,13)]
-month_abbr=[time.strftime('%b',(2017,m,1,12,0,0,0,0,0)) for m in range(1,13)]
+month_names=[time.strftime('%B',(2017,m,1,12,0,0,0,0,0)).lower() for m in range(1,13)]
+month_abbr=[time.strftime('%b',(2017,m,1,12,0,0,0,0,0)).lower() for m in range(1,13)]
 
 def month_num(s):
   "Return the number (1-12) of the named month. Return 0 if uncertain."
@@ -88,11 +89,22 @@ tf=(
   ),
   ( # "Mon dd hour:minute:second"
     '"MonthName Day Hour{:.}Minute{:.}Second" where the month may be abbreviated.',
-    re.compile(r'^(?P<mname>\w+)\s+(?P<day>\d+)\s+(?P<hour>-?\d+)(?P<tsep>[:.])(?P<min>-?\d+)(?P=tsep)(?P<sec>-?\d+)$',re.IGNORECASE),
+    re.compile(r'^(?P<mname>\w+)\s+(?P<day>\d+)(\s+(?P<hour>-?\d+)(?P<tsep>[:.])(?P<min>-?\d+)((?P=tsep)(?P<sec>-?\d+))?)?$',re.IGNORECASE),
     (
       (
         (lambda td: month_num(td.mname)!=0 and td.day>-32 and td.day<32 and td.hour>-24 and td.hour<24 and td.min>-60 and td.min<60 and td.sec>-60 and td.min<60),
         (lambda td: time.strptime('%d %d %d %d:%d:%d'%(YYYY,month_num(td.mname),td.day,td.hour,td.min,td.sec),'%Y %m %d %H:%M:%S'))
+      ),
+    )
+  ),
+  ( # "YYYY-mm-dd hour:minute:second"
+    '"YYYY{-/}MM{-/}{DD} Hour{:.}Minute{:.}Second".',
+    #re.compile(r'^(?P<year>\d{4})(?P<dsep>[-/])(?P<month>\d{1,2})(?P=dsep)(?P<day>\d{1,2})\s+(?P<hour>-?\d+)(?P<tsep>[:.])(?P<min>-?\d+)(?P=tsep)(?P<sec>-?\d+)$',re.IGNORECASE),
+    re.compile(r'^(?P<year>\d{4})(?P<dsep>[-/])(?P<month>\d{1,2})(?P=dsep)(?P<day>\d{1,2})(\s+(?P<hour>-?\d+)(?P<tsep>[:.])(?P<min>-?\d+)((?P=tsep)(?P<sec>-?\d+))?)?$',re.IGNORECASE),
+    (
+      (
+        (lambda td: td.month>=-12 and td.month<=12 and td.day>-32 and td.day<32 and td.hour>-24 and td.hour<24 and td.min>-60 and td.min<60 and td.sec>-60 and td.min<60),
+        (lambda td: time.strptime('%d-%d-%d %d:%d:%d'%(td.year,td.month,td.day,td.hour,td.min,td.sec),'%Y-%m-%d %H:%M:%S'))
       ),
     )
   ),
@@ -174,6 +186,9 @@ if args:
       td=type('',(),m.groupdict(''))
       for var,val in td.__dict__.items():
         if var[0]!='_':
+          if var in defaults and val in (None,''):
+            val=defaults[var]
+            setattr(td,var,val)
           try:
             setattr(td,var,int(val))
           except:
@@ -207,8 +222,12 @@ if opt.age:
   d,s=divmod(diff,86400) # Get days and seconds of this age
   if diff>86400:
     output+='%d days '%d
-  output+='%02d:%02d:%02d'%(s/3600,(s%3600)/60,s%3600)
-  print output
+  if s:
+    output+='%02d:%02d:%02d'%(s/3600,(s%3600)/60,s%60)
+  if output:
+    print output
+  else:
+    print 0
 elif opt.epoch:
   print t
 elif opt.utc_output:
