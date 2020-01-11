@@ -1,13 +1,31 @@
 #!/usr/bin/env python2
-import csv,optparse,os,sys
+import csv,optparse,os,re,sys
 
 # Parse command-line arguments
-op=optparse.OptionParser(description='Parse LDIF data and reformat as CSV.')
-op.add_option('--columns','-c',help='Comma-separated list of attributes to include in CSV output.')
-op.add_option('--file','-f',help='LDIF file (default is stdin).')
-op.add_option('--output','-o',help='Output file (default is stdout).')
-op.add_option('--with-hedings',action='store_true',help='Include a headings row.')
+op=optparse.OptionParser(
+  usage="%prog [optons] [infile]",
+  description='Parse LDIF data from infile or standard input, and reformat it as CSV to standard output (by default).',
+  add_help_option=False
+)
+op.add_option('--columns','-c',help="Comma- and/or space-separated list of case-sensitive attributes to include in CSV output. If this option is not used, all attributes found in the LDIF data will become columns and will arranged alphabetically in the CSV output. Use -h begin output with a row of attribute names.")
+op.add_option('--flatten',action='store_true',help="Flatten multi-valued attributes into as many CSV rows as needed.")
+op.add_option('--no-dn',action='store_true',help="Exclude DN from the output columns.")
+op.add_option('-h',dest='with_headings',action='store_true',help='Include a headings row. This is strongly encouraged if --columns is not used.')
+op.add_option('--help',action='store_true',help=optparse.SUPPRESS_HELP)
 opt,args=op.parse_args()
+
+if opt.help:
+  op.print_help()
+  sys.exit(0)
+
+if opt.columns:
+  # Convert comma-separated string to a proper tuple.
+  opt.columns=tuple([
+    c for c in [
+      col.strip() for col in re.split(r'[\s,]+',opt.columns)
+    ]
+    if c
+  ])
 
 class LdifError(Exception):
   pass
@@ -102,11 +120,14 @@ class LdifEntry(object):
   def __repr__(self):
     return '%s((%r,%r))'%(self.__class__.__name__,self.dn,self.entry)
 
-def die(msg,rc=1):
+def die(msg,show_help=False,rc=1):
   """Write the given message and terminate with the given or default
-  return code."""
+  return code. If show_help is true, output our help text."""
 
-  sys.stderr.write('%s: %s\n'%(op.prog,msg))
+  sys.stderr.write('%s: %s\n'%(os.path.basename(sys.argv[0]),msg))
+  if show_help:
+    sys.stderr.write('\n')
+    op.print_help(sys.stderr)
   sys.exit(rc)
 
 # Figure out whether we're reading from stdin or a named file.
@@ -120,7 +141,7 @@ else:
   if not sys.stdin.isatty():
     infile=sys.stdin
   else:
-    die('No input found on standard input or as a filename argument.')
+    die('No input found on standard input or as a filename argument.',show_help=True)
 
 # This is a clumsy way to read in our LDIF data, but I'm in a rush.
 records=[]
@@ -133,17 +154,19 @@ while True:
 
 # Get or figure out what columns to output.
 cols=opt.columns
-if cols==None:
+if not cols:
   # If the user gave no list of columns to use, list all attributes in
   # alphabetical order, but put dn first.
   s=set([])
   for r in records:
     for a in r.entry:
       if a not in s:
-        s.add(s)
+        s.add(a)
   cols=list(s)
-  sort(cols)
-  cols.insert(0,'dn')
+  cols.sort()
+  if not opt.no_dn:
+    cols.insert(0,'dn')
+#print 'D: cols=%r\n'%(cols,)
 
 # Now flatten our LDAP objects so we can write them out as CSV data.
 out=[]
@@ -151,8 +174,23 @@ if opt.with_headings:
   out.append(cols)
 for r in records:
   d=dict(r.entry)
-  d['dn']=r.dn # A dictionary that includes dn.
-  i=dict([(k,0) for k in d]) # Dictionary of attribute value indices.:w
-  while i[cols[0]]<len(d[cols[0]):
+  d['dn']=[r.dn] # An LDAP dictionary that includes dn.
+  for c in cols: # And make sure no attirutes are missing.
+    if c not in d:
+      d[c]=['']
+  i=dict([(k,0) for k in cols]) # Dictionary of current value indices.
+  while i[cols[0]]<len(d[cols[0]]):
     out.append([d[c][i[c]] for c in cols])
     # Now incriment i's values in normal counting order ... in the morning.
+    for j in range(len(cols)-1,-1,-1):
+      k=cols[j]
+      i[k]+=1
+      if j>0 and i[k]>=len(d[k]):
+        # Wrap index back around to zero for all but the left-most column.
+        i[k]=0
+      else:
+        break
+
+# Output our flattened data as CSV.
+writer=csv.writer(sys.stdout)
+writer.writerows(out)
