@@ -8,6 +8,7 @@ op=optparse.OptionParser(
   add_help_option=False
 )
 op.add_option('--columns','-c',help="Comma- and/or space-separated list of case-sensitive attributes to include in CSV output. If this option is not used, all attributes found in the LDIF data will become columns and will arranged alphabetically in the CSV output. Use -h begin output with a row of attribute names.")
+op.add_option('--filter',action='append',help="Supply a Python expression that must be true for ever CSV row to be written. As many of these expressions can be supplied as needed, but they must all be true for a given CSV row to be written. The row to be evaluated is in the 'row' list.")
 op.add_option('--flatten',action='store_true',help="Flatten multi-valued attributes into as many CSV rows as needed.")
 op.add_option('--no-dn',action='store_true',help="Exclude DN from the output columns.")
 op.add_option('-h',dest='with_headings',action='store_true',help='Include a headings row. This is strongly encouraged if --columns is not used.')
@@ -180,7 +181,12 @@ for r in records:
       d[c]=['']
   i=dict([(k,0) for k in cols]) # Dictionary of current value indices.
   while i[cols[0]]<len(d[cols[0]]):
-    out.append([d[c][i[c]] for c in cols])
+    row=[d[c][i[c]] for c in cols]
+    if opt.filter:
+      if all([eval(f) for f in opt.filter]):
+        out.append(row)
+    else:
+      out.append(row)
     # Now incriment i's values in normal counting order ... in the morning.
     for j in range(len(cols)-1,-1,-1):
       k=cols[j]
