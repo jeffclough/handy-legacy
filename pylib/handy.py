@@ -4,6 +4,149 @@ import fcntl,fnmatch,os,pipes,re,struct,sys,termios
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #
+#   Some lawyerly classes. They tell strings they have no case. :-)
+
+class CaselessString(unicode):
+  """This is just like unicode, but hashing and comparison ignore case.
+
+  >>> alpha=CaselessString('alpha')
+  >>> bravo=CaselessString('Bravo')
+  >>> charlie=CaselessString('charlie')
+  >>> isinstance(alpha,basestring)
+  True
+  >>> print(alpha)
+  alpha
+  >>> print(bravo)
+  Bravo
+  >>> alpha<bravo
+  True
+  >>> bravo<charlie
+  True
+  >>> l=[alpha,bravo,charlie]
+  >>> l
+  [u'alpha', u'Bravo', u'charlie']
+  >>> l.sort()
+  >>> l
+  [u'alpha', u'Bravo', u'charlie']
+  """
+
+  def __hash__(self):
+    return hash(self.lower())
+
+  def __lt__(self,other):
+    if isinstance(other,basestring):
+      return self.lower()<other.lower()
+    return NotImplemented
+
+  def __le__(self,other):
+    if isinstance(other,basestring):
+      return self.lower()<=other.lower()
+    return NotImplemented
+
+  def __eq__(self,other):
+    if isinstance(other,basestring):
+      return self.lower()==other.lower()
+    return NotImplemented
+
+  def __ne__(self,other):
+    if isinstance(other,basestring):
+      return self.lower()!=other.lower()
+    return NotImplemented
+
+  def __ge__(self,other):
+    if isinstance(other,basestring):
+      return self.lower()>=other.lower()
+    return NotImplemented
+
+  def __gt__(self,other):
+    if isinstance(other,basestring):
+      return self.lower()>other.lower()
+    return NotImplemented
+
+class CaselessDict(dict):
+  """Just like dict, but string keys are coerced to  CaselessString
+  values.
+
+  >>> x=CaselessDict(alpha=1,Bravo=2,charlie=3)
+  >>> k=x.keys()
+  >>> type(k[0])
+  <class '__main__.CaselessString'>
+  >>> k.sort()
+  >>> k
+  [u'alpha', u'Bravo', u'charlie']
+  >>> 'alpha' in x
+  True
+  >>> 'Alpha' in x
+  True
+  >>> 'bravo' in x
+  True
+  >>> 'Bravo' in x
+  True
+  >>> y=CaselessDict([('Delta',4),('echo',5),('FoxTrot',6)])
+  >>> k=y.keys()
+  >>> type(k[0])
+  <class '__main__.CaselessString'>
+  >>> k.sort()
+  >>> k
+  [u'Delta', u'echo', u'FoxTrot']
+  >>> z=CaselessDict(dict(x))
+  >>> k=z.keys()
+  >>> type(k[0])
+  <class '__main__.CaselessString'>
+  >>> k.sort()
+  >>> k
+  [u'alpha', u'Bravo', u'charlie']
+  >>> z.update(dict(y))
+  >>> 'ALPHA' in z
+  True
+  >>> 'bravo' in z
+  True
+  >>> 'CHARLIE' in z
+  True
+  >>> 'delta' in z
+  True
+  >>> 'ECHO' in z
+  True
+  >>> 'FOXTROT' in z
+  True
+  """
+
+  def __init__(self,obj=None,**kwargs):
+    "Make sure all string keys go in as CaselessString values."
+
+    if isinstance(obj,(list,tuple)):
+      # This had better be a sequence of pairs.
+      for k,v in obj:
+        self[k]=type(v)(v)
+    elif obj!=None:
+      # Treat obj as a generic mapping object (which might not be a dict).
+      for k in obj:
+        self[k]=type(obj[k])(obj[k])
+    for k,v in kwargs.items():
+      self[k]=type(v)(v)
+
+  def __contains__(self,k):
+    "Make sure hash comparisons are done on CaselessString values."
+
+    if type(k)!=CaselessString and isinstance(k,basestring):
+      k=CaselessString(k)
+    return super(CaselessDict,self).__contains__(k)
+
+  #def __getitem__(self,k):
+  #  if type(k)!=CaselessString and isinstance(k,basestring):
+  #    k=CaselessString(k)
+  #  return super(CaselessDict,self).__getitem__(k)
+
+  def __setitem__(self,k,val):
+    "Make sure all stringish keys are put in as CaselessStrings."
+
+    if type(k)!=CaselessString and isinstance(k,basestring):
+      k=CaselessString(k)
+    super(CaselessDict,self).__setitem__(k,val)
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
 #   Generally useful stuff.
 
 def first_match(s,patterns):
