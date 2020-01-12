@@ -6,15 +6,7 @@ import fcntl,fnmatch,os,pipes,re,struct,sys,termios
 #
 #   Generally useful stuff.
 
-""" TODO: This doctest fails in first_match(), but I don't know why.
-  >>> p,m=first_match('somefile.DOC',pats,re.I)
-  >>> p.pattern
-  '^.*\\\\.doc$'
-  >>> m.group()
-  'somefile.doc'
-"""
-
-def first_match(s,patterns,flags=0):
+def first_match(s,patterns):
   """Find the first pattern in the patterns sequence that matches s. If
   found, return the (pattern,match) tuple. If not, return (None,None).
 
@@ -53,7 +45,7 @@ def first_match(s,patterns,flags=0):
   """
 
   for p in patterns:
-    m=p.match(s,flags)
+    m=p.match(s)
     if m:
       return p,m
   return None,None
@@ -560,7 +552,7 @@ if __name__=='__main__':
 
   opt=ap.parse_args()
   if opt.cmd=='test': # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-    print 'Terminal dimensions: %d columns, %d lines'%get_terminal_size()
+    print 'Terminal dimensions: %d columns, %d lines'%prog.getTerminalSize()
     print 'Running doctests...'
     t,f=doctest.testmod()
     if f>0:
