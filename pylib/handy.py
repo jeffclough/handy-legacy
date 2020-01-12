@@ -24,10 +24,10 @@ class CaselessString(unicode):
   True
   >>> l=[alpha,bravo,charlie]
   >>> l
-  [u'alpha', u'Bravo', u'charlie']
+  [CaselessString("u'alpha'"), CaselessString("u'Bravo'"), CaselessString("u'charlie'")]
   >>> l.sort()
   >>> l
-  [u'alpha', u'Bravo', u'charlie']
+  [CaselessString("u'alpha'"), CaselessString("u'Bravo'"), CaselessString("u'charlie'")]
   """
 
   def __hash__(self):
@@ -63,6 +63,9 @@ class CaselessString(unicode):
       return self.lower()>other.lower()
     return NotImplemented
 
+  def __repr__(self):
+    return '%s(%r)'%(self.__class__.__name__,super(self.__class__,self).__repr__())
+
 class CaselessDict(dict):
   """Just like dict, but string keys are coerced to  CaselessString
   values.
@@ -73,7 +76,7 @@ class CaselessDict(dict):
   <class '__main__.CaselessString'>
   >>> k.sort()
   >>> k
-  [u'alpha', u'Bravo', u'charlie']
+  [CaselessString("u'alpha'"), CaselessString("u'Bravo'"), CaselessString("u'charlie'")]
   >>> 'alpha' in x
   True
   >>> 'Alpha' in x
@@ -88,14 +91,14 @@ class CaselessDict(dict):
   <class '__main__.CaselessString'>
   >>> k.sort()
   >>> k
-  [u'Delta', u'echo', u'FoxTrot']
+  [CaselessString("u'Delta'"), CaselessString("u'echo'"), CaselessString("u'FoxTrot'")]
   >>> z=CaselessDict(dict(x))
   >>> k=z.keys()
   >>> type(k[0])
   <class '__main__.CaselessString'>
   >>> k.sort()
   >>> k
-  [u'alpha', u'Bravo', u'charlie']
+  [CaselessString("u'alpha'"), CaselessString("u'Bravo'"), CaselessString("u'charlie'")]
   >>> z.update(dict(y))
   >>> 'ALPHA' in z
   True
@@ -109,6 +112,23 @@ class CaselessDict(dict):
   True
   >>> 'FOXTROT' in z
   True
+  >>> x.pop('alpha')
+  1
+  >>> x.pop('bravo')
+  2
+  >>> x.setdefault('alpha',1)
+  1
+  >>> x.setdefault('Bravo',2)
+  2
+  >>> k=x.keys()
+  >>> k.sort()
+  >>> k
+  [CaselessString("u'alpha'"), CaselessString("u'Bravo'"), CaselessString("u'charlie'")]
+  >>> 'ALPHA' in x
+  True
+  >>> 'bravo' in x
+  True
+
   """
 
   def __init__(self,obj=None,**kwargs):
@@ -132,10 +152,10 @@ class CaselessDict(dict):
       k=CaselessString(k)
     return super(CaselessDict,self).__contains__(k)
 
-  #def __getitem__(self,k):
-  #  if type(k)!=CaselessString and isinstance(k,basestring):
-  #    k=CaselessString(k)
-  #  return super(CaselessDict,self).__getitem__(k)
+  def __getitem__(self,k):
+    if type(k)!=CaselessString and isinstance(k,basestring):
+      k=CaselessString(k)
+    return super(CaselessDict,self).__getitem__(k)
 
   def __setitem__(self,k,val):
     "Make sure all stringish keys are put in as CaselessStrings."
@@ -143,6 +163,11 @@ class CaselessDict(dict):
     if type(k)!=CaselessString and isinstance(k,basestring):
       k=CaselessString(k)
     super(CaselessDict,self).__setitem__(k,val)
+
+  def setdefault(self,k,default=None):
+    if k not in self:
+      self[k]=default
+    return self[k]
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
