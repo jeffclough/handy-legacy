@@ -2,12 +2,12 @@
 
 import csv,optparse,os,pipes,re,shlex,sys
 import OptionParserFormatters
-from handy import shellify
+from handy import die,shellify
 
-def die(msg,rc=1):
-  if msg:
-    sys.stderr.write(os.path.basename(sys.argv[0])+': '+msg+'\n')
-  sys.exit(rc)
+#def die(msg,rc=1):
+#  if msg:
+#    sys.stderr.write(os.path.basename(sys.argv[0])+': '+msg+'\n')
+#  sys.exit(rc)
   
 def numeric(x):
   """Return the numeric value of x if x can be interpreted as either
@@ -157,19 +157,19 @@ class CsvDialect(csv.Dialect):
 op=optparse.OptionParser(
   formatter=OptionParserFormatters.IndentedHelpFormatterWithNL(2,8),
   usage="""Usage:
-  Form 1: %prog [OPTIONS] [column-1 ... column-n]
+  Form 1: %prog [OPTIONS] [value-1 ... value-n]
     Input MUST be formatted as parsable CSV.
 
-  Form 2: %prog --infmt=excel [--worksheet=WORKSHEET] [OPTIONS] [column-1 ... column-n]
+  Form 2: %prog --infmt=excel [--worksheet=WORKSHEET] [OPTIONS] [value-1 ... value-n]
     Input MUST be an Excel spreadsheet. The first worksheet will be used unless named.
 
-  Form 3: %prog --infmt=shell [OPTIONS] [column-1 ... column-n]
+  Form 3: %prog --infmt=shell [OPTIONS] [value-1 ... value-n]
     Input MUST be lines of shell-escaped and -quoted values.""",
-  description="""This command reads data from standard input in either CSV (by default), Excel, or shell format and writes it to standard output as properly formatted CSV. The CSV dialects used for reading and writing need not be the same and can be specified using the --reader (in the case of Form 1) and --writer options.
+  description="""This command reads data from standard input in either CSV (by default), Excel, or shell format and writes it to standard output as CSV (by default), shell, or either of two tabular format: table and markdown. The CSV dialects used for reading and writing need not be the same and can be specified using the --reader (in the case of Form 1) and --writer options.
 
-Regardless of which usage form is used, command line arguments can be given to supply a row of data that will be appear as the first line of output. Typically, this is used to output column headings, (e.g.: 'First name' Last\ name email account zipcode), but it could just as easily be a row of data. Just in case it's not obvious, any data given on the command line in this way is not CSV-formatted. It is parsed by your shell, so use proper escapes and quoting to distinguish one argument from another.
+Regardless of which usage form is used, data values may be given as command line arguments to supply a row of data that will be appear as the first line of output. Typically, this is used to output column headings, (e.g.: 'First name' Last\ name email account zipcode), but it could just as easily be a row of actual data. Just in case it's not obvious, any data given on the command line in this way is not CSV-formatted. It is parsed by your shell, so use proper escapes and quoting to distinguish one argument (data value) from another.
 
-The output format defaults to CSV (--outfmt=csv), but it can also be set to shell or table. If shell, each line of output is a list environment variable assignments separated by semicolons. This REQUIRES that the first line of input data consists of column headings that are valid when used to name environment variables. If --outfmt=table is used, the first row is also assumed to be column headings, but they can be any crazy thing you want. (Don't take that as a challenge.)"""
+The output format defaults to CSV (--outfmt=csv), but it can also be set to shell, table, or markdown. If shell, each line of output is a list environment variable assignments separated by semicolons. This REQUIRES that the first line of input data consists of column headings that are valid when used to name environment variables. If --outfmt=table is used, the first row is also assumed to be column headings, but they can be any crazy thing you want. (Don't take that as a challenge.) --outfmt=markdown is just like table output, but it is formatted as Markdown."""
 )
 op.add_option('--heading-lines',dest='heading_lines',action='store',type=int,default=0,
 help="Specify how many rows (lines) of heading data are in the input. (default: %default)")
@@ -207,7 +207,7 @@ opt.writing=CsvDialect(opt.writing)
 
 if opt.worksheet!=None:
   if opt.infmt!='excel':
-    op.error('--worksheet can only be used with --excel.')
+    op.error('--worksheet can only be used with --infmt=excel.')
   try:
     opt.worksheet=int(opt.worksheet)
   except:
@@ -397,7 +397,7 @@ elif opt.outfmt=='markdown':
 elif opt.outfmt=='table':
   writer=TableWriter(sys.stdout)
 else:
-  die('Bad --outfmt value: %r'%(opt.outfmt))
+  die('Programming Error! Bad --outfmt value: %r'%(opt.outfmt))
 
 # This is where unit testing is implemented.
 if opt.test:
@@ -405,6 +405,7 @@ if opt.test:
   failed,total=doctest.testmod()
   if failed:
     sys.exit(1)
+  sys.exit(0)
 
 # Output the CSV for our command line arguments, if any.
 if args:
@@ -422,7 +423,7 @@ if not sys.stdin.isatty():
         row=shlex.split(line)
       writer.writerow(row)
   else:
-    # We're just converting from one dialect of CSV to another, maybe.
+    # We're just converting from one format to another, maybe.
     for row in reader:
       writer.writerow(row)
     if opt.outfmt in ('markdown','table'):
