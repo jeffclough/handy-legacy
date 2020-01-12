@@ -7,26 +7,29 @@ op=optparse.OptionParser(
   description='Parse LDIF data from infile or standard input, and reformat it as CSV to standard output (by default).',
   add_help_option=False
 )
-op.add_option('--columns','-c',help="Comma- and/or space-separated list of case-sensitive attributes to include in CSV output. If this option is not used, all attributes found in the LDIF data will become columns and will arranged alphabetically in the CSV output. Use -h begin output with a row of attribute names.")
+op.add_option('--columns','-c',help="Comma- and/or space-separated list of case-sensitive attributes to include in CSV output. If this option is not used, all attributes found in the LDIF data will become columns and will arranged alphabetically from left to right in the CSV output. Use -h begin output with a row of attribute names.")
 op.add_option('--filter',action='append',help="Supply a Python expression that must be true for ever CSV row to be written. As many of these expressions can be supplied as needed, but they must all be true for a given CSV row to be written. The row to be evaluated is in the 'row' list.")
-op.add_option('--flatten',action='store_true',help="Flatten multi-valued attributes into as many CSV rows as needed.")
+op.add_option('--gather',action='store',help="Ordinarily, multi-valued attributes result in as many output rows, but you can use this option to provide a comma- and/or space-separated list of case-sensitive attributes whose values are to be grouped into a single row rather than flattened out into multiple output rows.")
+op.add_option('--gather-sep',metavar='SEP',action='store',default=' ',help="\"Gathered\" values need to be separated by something, and '%default' is used by default, but you can change that with this option.")
 op.add_option('--no-dn',action='store_true',help="Exclude DN from the output columns.")
 op.add_option('-h',dest='with_headings',action='store_true',help='Include a headings row. This is strongly encouraged if --columns is not used.')
 op.add_option('--help',action='store_true',help=optparse.SUPPRESS_HELP)
 opt,args=op.parse_args()
 
+def string_to_tuple(s):
+  "Convert a comma- and/or space-separated string into a proper tuple."
+
+  return tuple(
+    [c for c in [col.strip() for col in re.split(r'[\s,]+',s)] if c]
+  )
+
 if opt.help:
   op.print_help()
   sys.exit(0)
-
 if opt.columns:
-  # Convert comma-separated string to a proper tuple.
-  opt.columns=tuple([
-    c for c in [
-      col.strip() for col in re.split(r'[\s,]+',opt.columns)
-    ]
-    if c
-  ])
+  opt.columns=string_to_tuple(opt.columns)
+if opt.gather:
+  opt.gather=string_to_tuple(opt.gather)
 
 class LdifError(Exception):
   pass
@@ -179,6 +182,10 @@ for r in records:
   for c in cols: # And make sure no attirutes are missing.
     if c not in d:
       d[c]=['']
+  if opt.gather: # Gather muti-values into one value if called for.
+    for col in opt.gather:
+      if len(d[col])>1:
+        d[col]=[opt.gather_sep.join(d[col])]
   i=dict([(k,0) for k in cols]) # Dictionary of current value indices.
   while i[cols[0]]<len(d[cols[0]]):
     row=[d[c][i[c]] for c in cols]
