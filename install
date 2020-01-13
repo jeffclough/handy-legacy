@@ -67,7 +67,7 @@ SCRIPTS=( # These targets are simply copied during installation.
   'json',
   'json2csv',
   'keeplast',
-  'ldif2csv',
+  'ldif',
   'mazer',
   'mark',
   'mix',
