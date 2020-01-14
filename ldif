@@ -141,6 +141,70 @@ class LdifEntry(object):
   def __repr__(self):
     return '%s((%r,%r))'%(self.__class__.__name__,self.dn,self.entry)
 
+  def flatten(self,attrs,gather=[],gather_sep=' ',keep_filter=[]):
+    """Return a list of rows from this LDIF suitable for representing
+    it in tabular form. This means multi-value attributes will generate
+    as many rows as there are output, and this is multiplied by as many
+    attributes as have multiple values. For example if we're outputting
+    3 attributes where 2 of those attributes have a single value and the
+    third as 4 values, 4 rows will be returns. If, of those three
+    attributes, 1 has a single value, another has 4 value, and a third
+    as 2 values, then 8 values (1*4*2) will be returned. This is what we
+    call "flattening" LDAP data, but also read about gather and
+    gather_sep below.
+
+    attrs       - The list of attributes to include inthe returned data.
+
+    gather      - If given, this is a list of attributes whose values
+    gather_sep  - are to be gathered into a single string value,
+                  separated by gather_sep (which defaults to a space
+                  charcter. This effectively short-circuits the
+                  flattening process for the "gathered" attributes,
+                  representing all that attributes values as a single
+                  value.
+
+    keep_filter - This is a list of Python expressions to be applied to
+                  each new output row that's generated. If ALL the
+                  filters are true, the row is added to the output.
+                  Otherwise, that row is quietly thown away. These
+                  filter expressions should reference the "row" list.
+                  For example, "'202002' in row[1]" will be true only if
+                  the second value in row contains "202002".
+    """
+
+    rows=[]
+    d=dict(self.entry)
+    d['dn']=[self.dn] # An LDAP dictionary that includes dn.
+    for c in attrs: # And make sure no attirutes are missing.
+      if c not in d:
+        d[c]=['']
+    if gather: # Gather muti-values into one value if called for.
+      for col in gather:
+        if len(d[col])>1:
+          d[col]=[gather_sep.join(d[col])]
+    i=dict([(k,0) for k in attrs]) # Dictionary of current value indices.
+    while i[attrs[0]]<len(d[attrs[0]]):
+      row=[d[c][i[c]] for c in attrs]
+      if keep_filter:
+        try:
+          success=all([eval(f) for f in keep_filter])
+        except Exception as e:
+          die("Error while evaluating CSV filters: %s"%(str(e),))
+        if success:
+          rows.append(row)
+      else:
+        rows.append(row)
+      # Now incriment i's values in normal counting order ... in the morning.
+      for j in range(len(attrs)-1,-1,-1):
+        k=attrs[j]
+        i[k]+=1
+        if j>0 and i[k]>=len(d[k]):
+          # Wrap index back around to zero for all but the left-most column.
+          i[k]=0
+        else:
+          break
+    return rows
+
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 ###
@@ -193,34 +257,12 @@ if opt.cmd=='csv':
   # Now flatten our LDAP objects so we can write them out as CSV data.
   out=[]
   if opt.with_headings:
+    # Start with our column headings if we're doing that.
     out.append(cols)
   for r in records:
-    d=dict(r.entry)
-    d['dn']=[r.dn] # An LDAP dictionary that includes dn.
-    for c in cols: # And make sure no attirutes are missing.
-      if c not in d:
-        d[c]=['']
-    if opt.gather: # Gather muti-values into one value if called for.
-      for col in opt.gather:
-        if len(d[col])>1:
-          d[col]=[opt.gather_sep.join(d[col])]
-    i=dict([(k,0) for k in cols]) # Dictionary of current value indices.
-    while i[cols[0]]<len(d[cols[0]]):
-      row=[d[c][i[c]] for c in cols]
-      if opt.filter:
-        if all([eval(f) for f in opt.filter]):
-          out.append(row)
-      else:
-        out.append(row)
-      # Now incriment i's values in normal counting order ... in the morning.
-      for j in range(len(cols)-1,-1,-1):
-        k=cols[j]
-        i[k]+=1
-        if j>0 and i[k]>=len(d[k]):
-          # Wrap index back around to zero for all but the left-most column.
-          i[k]=0
-        else:
-          break
+    out.extend(r.flatten(
+      cols,gather=opt.gather,gather_sep=opt.gather_sep,keep_filter=opt.filter
+    ))
 
   # Output our flattened data as CSV.
   writer=csv.writer(sys.stdout)
