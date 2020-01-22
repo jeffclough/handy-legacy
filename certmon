@@ -109,7 +109,7 @@ opt=ap.parse_args()
 
 log=loggy.get_logger(facility=opt.log_facility,level=opt.log_level)
 
-ansi.enabled=opt.color or sys.stdout.isatty()
+ansi.enabled=(opt.color or sys.stdout.isatty()) and opt.format=='text'
 if not sys.stdin.isatty():
   opt.services.extend([line.strip() for line in sys.stdin])
 if not opt.services:
@@ -174,9 +174,8 @@ if opt.scan:
   sys.exit(0)
 
 if opt.warn!=None:
-  # Warning output, which outputs only warnings about soon-expiring certs.
   warnings=dict([
-    ('%s:%s'%(host_text(c.host),port_text(c.port)),dict(daysRemaining=c.daysRemaining,error=c.error,query_seconds=c.query_seconds))
+    ('%s:%s'%(host_text(c.host),port_text(c.port)),c.toDict())
       for c in certs.values()
         if c.daysRemaining<opt.warn
   ])
@@ -192,7 +191,7 @@ if opt.warn!=None:
         info="%s"%pluralize('day',info,fmt='%d %s')
       print '%s: %s'%(s,info)
   elif opt.format=='json':
-    print json.dumps(warnings,indent=2,sort_keys=True)
+    print json.dumps(warnings,indent=2,sort_keys=True,default=str)
 else:
   # "Normal" output, which outputs everything we know about these certs.
   if opt.format=='text':
