@@ -1,0 +1,24 @@
+#!/usr/bin/env python
+import argparse,re,sys
+from handy import die,prog,non_negative_int
+
+def fit_formatting(formatter):
+  "Return a formatter that uses the whole width of our terminal."
+
+  width,_=prog.getTerminalSize()
+  kwargs=dict(width=width)
+  formatter(None,**kwargs)
+  return lambda prog:formatter(prog,**kwargs)
+
+ap=argparse.ArgumentParser(
+  formatter_class=fit_formatting(argparse.ArgumentDefaultsHelpFormatter),
+  description="Prefix text read from standard input with white space on its way to standard output."
+)
+ap.add_argument('--with',dest='prefix',action='store',default=' ',help="The caracter or string to be used for indenting. (default: %(default)r)")
+ap.add_argument('n',action='store',type=non_negative_int,default=2,nargs='?',help="The number of PREFIX strings to prepend to each output line. (default=%(default)d)")
+opt=ap.parse_args()
+
+prefix=opt.prefix*opt.n
+
+for s in sys.stdin:
+  sys.stdout.write(prefix+s)
