@@ -1,5 +1,9 @@
 #!/usr/bin/env python
-import argparse,re,sys
+try:
+  import argparse
+except:
+  import argparse27 as argparse
+import re,sys
 from handy import die,prog,non_negative_int
 
 def fit_formatting(formatter):
