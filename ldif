@@ -1,57 +1,107 @@
 #!/usr/bin/env python2
-import argparse,csv,os,re,sys
+try:
+  import argparse
+except:
+  import argparse27 as argparse
+import os,sys
 from handy import CaselessDict,CaselessString,die,prog
-
-# Parse command-line arguments
-ap=argparse.ArgumentParser(
-  description="Read LDIF data and perform some action on it. See the subcommands below."
-)
-#ap.add_argument('--filter',metavar='EXPR',action='store',help="This is your chance to accept or reject each LDAP entry read from input according to a Python expression before it is processed by any of %(prog)s's subcommands. EXPR can be any Python expression and can access the variables dn (the string value of the LDAP record's DN) and ent (a dictionary of the record's entry, keyed by attribute name and containing a list of 0 or more values for each attribute. As many of this option can be given as needed, but they must all be true for a given LDAP record to be processed by one of %(prog)s's subcommands.")
-sp=ap.add_subparsers()
-
-csv_help="Output the LDIF input data as CSV, restructuring multi-valued attributes so that each value is written to its own CSV row. The LDIF attrubute names may be used as CSV column headings."
-ap_csv=sp.add_parser('csv',description=csv_help,help=csv_help+"\nRun \"%(prog)s csv --help\" for more information.")
-ap_csv.set_defaults(cmd='csv')
-ap_csv.add_argument('-c','--columns',help="Comma- and/or space-separated list of case-sensitive attributes to include in CSV output. If this option is not used, all attributes found in the LDIF data will become columns and will arranged alphabetically from left to right in the CSV output. Use --headings begin output with a row of attribute names.")
-ap_csv.add_argument('--filter',metavar='EXPR',action='append',help="Supply a Python expression that must be true for every CSV row to be written. As many of this option can be given as needed, but they must all be true for a given CSV row to be written. The row to be evaluated is in the 'row' list.")
-ap_csv.add_argument('--gather',metavar='ATTR(S)',action='store',help="Ordinarily, multi-valued attributes result in as many output rows, but you can use this option to provide a comma- and/or space-separated list of case-sensitive attributes whose values are to be grouped into a single row rather than flattened out into multiple output rows.")
-ap_csv.add_argument('--gather-sep',metavar='SEP',action='store',default=' ',help="\"Gathered\" values need to be separated by something, and %(default)r is used by default, but you can change that with this option.")
-ap_csv.add_argument('--no-dn',action='store_true',help="Exclude DN from the output columns. This is handy if you're not using -c (--columns) to select the columns to output and you don't want DN to be included.")
-ap_csv.add_argument('--headings',dest='with_headings',action='store_true',help='Start the output with a headings row. This is strongly encouraged if -c (--columns) is not used, since these unnamed columns will be output in alphabetical order in that case.')
-ap_csv.add_argument('infile',metavar='INPUT.LDIF',action='store',nargs='?',help="This is the input file. If no input file is given, %(prog)s will try to read data from standard input.")
-
-diff_help="Compare the entries in two LDIF files, outputting any differences as LDIF suitable for processing with ldapmodify."
-ap_diff=sp.add_parser('diff',description=diff_help,help=diff_help+"\nRun \"%(prog)s diff --help\" for more information.")
-ap_diff.set_defaults(cmd='diff')
-ap_diff.add_argument('--testing',action='store_true',help="help")
-ap_diff.add_argument('--color',action='store_true',help="Color the LDIF output to make add, delete, and replace operations easier to distinguish. (Of course, you would NEVER send such output directly to ldapmodify.)")
-ap_diff.add_argument('infile',nargs=2,help="These are the files to be compared. The output will show any changes that occur from the first LDIF file to the second.")
-
-json_help="Output the LDIF ihnput data as JSON on standard output."
-ap_json=sp.add_parser('json',description=json_help,help=json_help+"\nRun \"%(prog)s json --help\" for more information.")
-ap_json.set_defaults(cmd='json')
-ap_json.add_argument('--testing',action='store_true',help="help")
-ap_json.add_argument('infile',metavar='INPUT.LDIF',action='store',nargs='?',help="This is the input file. If no input file is given, \"%(prog)s\" will try to read data from standard input.")
-
-opt=ap.parse_args()
-
-def string_to_tuple(s):
-  "Convert a comma- and/or space-separated string into a proper tuple."
-
-  return tuple(
-    [c for c in [col.strip() for col in re.split(r'[\s,]+',s)] if c]
-  )
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 ###
-### 
+### Set up some general code to handle LDAP/LDIF data.
 ###
 
-class LdifError(Exception):
+import re
+
+class LdapError(Exception):
   pass
 
-class LdifEntry(object):
+class LdapFilter(object):
+  "Parse and store an LDAP filter."
+
+  class Condition(object):
+    "Base class for all LDAP conditions."
+
+    _condition_classes=None
+
+    @classmethod
+    def makeCondition(cls,condition,*args,**kwargs):
+      """Find the first LDAPFilter.Condition subclass suitable for the
+      given LDAP conditional expression. If none can be found, raise
+      ValueError."""
+
+      if cls._condition_classes==None:
+        # Initialize the list of our subclasses if this is the first call.
+        cls._condition_classes=(
+          __class__.PresenceCondition,
+          __class__.EqualityCondition,
+          __class__.ComparisonCondition,
+          __class__.SubstringCondition,
+          __class__.ApproximateCondition,
+          __class__.ExtensibleCondition
+        )
+
+      for cc in cls._condition_classes:
+        m=cc.parser.match(condition)
+        if m:
+          cond=cc(condition,*args,**kwargs)
+          cond.matched=m
+          return cond
+      raise ValueError('%s.makeCondition(%r)'%(cls.__name__,condition))
+
+  class PresenceCondition(Condition):
+    "cn=*"
+
+    parser=re.compile(r'(?P<attr>[A-Za-z0-9]+)(?P<op>=)(?P<val>\*)')
+
+  class EqualityCondition(Condition):
+    "cn=something specific"
+
+    parser=re.compile(r'(?P<attr>[A-Za-z0-9]+)(?P<op>=)(?P<val>.*)')
+
+  class ComparisonCondition(Condition):
+    """Compare the attribute value(s) with the given value.
+    
+      cn<something specific
+      cn<=something specific
+      cn>=something specific
+      cn>something specific
+    """
+
+    parser=re.compile(r'(?P<attr>[A-Za-z0-9]+)(?P<op>[<>]?=)(?P<val>.*)')
+
+  class SubstringCondition(Condition):
+    """Look for substrings.
+
+      cn=starts with*
+      cn=*ends with
+      cn=*contains*
+      cn=*this*and*that*in*order*
+      cn=starts with*this*and*that*in*order*
+      cn=*this*and*that*in*order*ends with
+    """
+
+    parser=re.compile(r'(?P<attr>[A-Za-z0-9]+)(?P<op>=)(?P<val>\*?(.+\*?))')
+
+  class ApproximateCondition(Condition):
+    "cn~=something vague"
+
+    parser=re.compile(r'(?P<attr>[A-Za-z0-9]+)(?P<op>~=)(?P<val>.*)')
+
+  class ExtensibleCondition(Condition):
+    "cn~=something vague"
+
+    parser=re.compile(r'(?P<attr>(:?[A-Za-z0-9])+)(?P<op>:=)(?P<val>.*)')
+
+  def __init__(self,filter='(objectClass=*)'):
+    "Compile the given filter string."
+
+    self.stack=[]
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class LdapEntry(object):
   "This is a ... say it with me ... LDIF entry."
 
   def __init__(self,data):
@@ -67,7 +117,7 @@ class LdifEntry(object):
       self._from_file(data)
 
   def __nonzero__(self):
-    "Return True if this LdifEntry contains data."
+    "Return True if this LdapEntry contains data."
 
     return bool(self.dn and self.entry)
 
@@ -75,7 +125,7 @@ class LdifEntry(object):
     "Populate this entry from a sequence of strings."
 
     if len(stanza)==0:
-      raise LdifError("Empty stanza cannot create LdifEntry.")
+      raise LdapError("Empty stanza cannot create LdapEntry.")
     #print 'D: stansa=%r'%(stanza,)
     if isinstance(stanza[0],basestring):
       # Parse this list of strings.
@@ -120,7 +170,7 @@ class LdifEntry(object):
           if stanza:
             stanza[-1]+=line.lstrip()
           else:
-            raise LdifEntry("LDIF continuation line can't be the fist line.")
+            raise LdapError("LDIF continuation line can't be the fist line.")
         else:
           stanza.append(line)
         #print 'D: line=%r'%(line,)
@@ -130,6 +180,8 @@ class LdifEntry(object):
       self._from_seq(stanza)
 
   def __str__(self):
+    "Return a string containing the LDIF representation of this object."
+
     s='dn: '+self.dn+os.linesep
     attrs=self.entry.keys()
     attrs.sort()
@@ -139,6 +191,8 @@ class LdifEntry(object):
     return s
 
   def __repr__(self):
+    "Return a string that can be eval()'d to recreate this object."
+
     return '%s((%r,%r))'%(self.__class__.__name__,self.dn,self.entry)
 
   def flatten(self,attrs,gather=[],gather_sep=' ',keep_filter=[]):
@@ -211,32 +265,88 @@ class LdifEntry(object):
 ### Start processing input.
 ###
 
-if opt.cmd=='csv':
+def fit_formatting(formatter):
+  "Return a formatter that uses the whole width of our terminal."
+
+  width,_=prog.getTerminalSize()
+  kwargs=dict(width=width)
+  formatter(None,**kwargs)
+  return lambda prog:formatter(prog,**kwargs)
+
+# Parse command-line arguments
+ap=argparse.ArgumentParser(
+  formatter_class=fit_formatting(argparse.ArgumentDefaultsHelpFormatter),
+  description="Read LDIF data and perform some action on it. See the subcommands below."
+)
+#ap.add_argument('--filter',metavar='EXPR',action='store',help="This is your chance to accept or reject each LDAP entry read from input according to a Python expression before it is processed by any of %(prog)s's subcommands. EXPR can be any Python expression and can access the variables dn (the string value of the LDAP record's DN) and ent (a dictionary of the record's entry, keyed by attribute name and containing a list of 0 or more values for each attribute. As many of this option can be given as needed, but they must all be true for a given LDAP record to be processed by one of %(prog)s's subcommands.")
+sp=ap.add_subparsers()
+
+csv_help="Output the LDIF input data as CSV, restructuring multi-valued attributes so that each value is written to its own CSV row. The LDIF attrubute names may be used as CSV column headings."
+ap_csv=sp.add_parser('csv',description=csv_help,help=csv_help+"\nRun \"%(prog)s csv --help\" for more information.")
+ap_csv.set_defaults(cmd='csv')
+ap_csv.add_argument('-c','--columns',help="Comma- and/or space-separated list of case-sensitive attributes to include in CSV output. If this option is not used, all attributes found in the LDIF data will become columns and will arranged alphabetically from left to right in the CSV output. Use --headings begin output with a row of attribute names.")
+ap_csv.add_argument('--filter',metavar='EXPR',action='append',help="Supply a Python expression that must be true for every CSV row to be written. As many of this option can be given as needed, but they must all be true for a given CSV row to be written. The row to be evaluated is in the 'row' list.")
+ap_csv.add_argument('--gather',metavar='ATTR(S)',action='store',help="Ordinarily, multi-valued attributes result in as many output rows, but you can use this option to provide a comma- and/or space-separated list of case-sensitive attributes whose values are to be grouped into a single row rather than flattened out into multiple output rows.")
+ap_csv.add_argument('--gather-sep',metavar='SEP',action='store',default=' ',help="\"Gathered\" values need to be separated by something, and %(default)r is used by default, but you can change that with this option.")
+ap_csv.add_argument('--no-dn',action='store_true',help="Exclude DN from the output columns. This is handy if you're not using -c (--columns) to select the columns to output and you don't want DN to be included.")
+ap_csv.add_argument('--headings',dest='with_headings',action='store_true',help='Start the output with a headings row. This is strongly encouraged if -c (--columns) is not used, since these unnamed columns will be output in alphabetical order in that case.')
+ap_csv.add_argument('infile',metavar='INPUT.LDIF',action='store',nargs='?',help="This is the input file. If no input file is given, %(prog)s will try to read data from standard input.")
+
+diff_help="Compare the entries in two LDIF files, outputting any differences as LDIF suitable for processing with ldapmodify."
+ap_diff=sp.add_parser('diff',description=diff_help,help=diff_help+"\nRun \"%(prog)s diff --help\" for more information.")
+ap_diff.set_defaults(cmd='diff')
+ap_diff.add_argument('--color',action='store_true',help="Color the LDIF output to make add, delete, and replace operations easier to distinguish. (Of course, you would NEVER send such output directly to ldapmodify.)")
+ap_diff.add_argument('infile',nargs=2,help="These are the files to be compared. The output will show any changes that occur from the first LDIF file to the second.")
+
+json_help="Output the LDIF ihnput data as JSON on standard output."
+ap_json=sp.add_parser('json',description=json_help,help=json_help+"\nRun \"%(prog)s json --help\" for more information.")
+ap_json.set_defaults(cmd='json')
+ap_json.add_argument('--pretty',action='store_true',help="Format the JSON output to be more humanly readable than the default raw formatting. This includes ending the output with a newline character.")
+ap_json.add_argument('infile',metavar='INPUT.LDIF',action='store',nargs='?',help="This is the input file. If no input file is given, \"%(prog)s\" will try to read data from standard input.")
+
+opt=ap.parse_args()
+
+def string_to_tuple(s):
+  "Convert a comma- and/or space-separated string into a proper tuple."
+
+  return tuple(
+    [c for c in [col.strip() for col in re.split(r'[\s,]+',s)] if c]
+  )
+
+def ldap_entries(infile):
+  "Return one LdapEntry object at a time from the given open file."
+
+  while True:
+    rec=LdapEntry(opt.infile)
+    if rec:
+      yield rec
+    else:
+      break
+
+def get_single_input():
+  "Return our opened input file."
+
+  infile=sys.stdin
+  if opt.infile and opt.infile!='-':
+    opt.infile=file(opt.infile)
+  else:
+    if sys.stdin.isatty():
+      die('No input found on standard input or as a filename argument.\n\n'+ap.format_help())
+  return infile
+
+if opt.cmd=='csv':    # # # # # # # # # # # #  CSV  # # # # # # # # # # # # # #
+  import csv
+
   if opt.columns:
     opt.columns=string_to_tuple(opt.columns)
   if opt.gather:
     opt.gather=string_to_tuple(opt.gather)
 
-  # Figure out whether we're reading from stdin or a named file.
-  if opt.infile:
-    if opt.infile=='-':
-      opt.infile=sys.stdin
-    else:
-      opt.infile=file(opt.infile)
-  else:
-    if not sys.stdin.isatty():
-      opt.infile=sys.stdin
-    else:
-      die('No input found on standard input or as a filename argument.\n\n'+ap.format_help())
-
-  # This is a clumsy way to read in our LDIF data, but I'm in a rush.
+  # Read in our LDIF data.
+  infile=get_single_input()
   records=[]
-  while True:
-    rec=LdifEntry(opt.infile)
-    if rec:
-      records.append(rec)
-    else:
-      break
+  for rec in ldap_entries(infile):
+    records.append(rec)
 
   # Get or figure out what columns to output.
   cols=opt.columns
@@ -267,3 +377,28 @@ if opt.cmd=='csv':
   # Output our flattened data as CSV.
   writer=csv.writer(sys.stdout)
   writer.writerows(out)
+
+elif opt.cmd=='json':    # # # # # # # # # # #  JSON  # # # # # # # # # # # # #
+  import json
+
+  # Read in our LDIF data.
+  infile=get_single_input()
+  records=[]
+  for rec in ldap_entries(infile):
+    records.append(rec)
+
+  # Move our LdapEntry objects from their list into our out dictionary.
+  out={}
+  while records:
+    r=records.pop(0)
+    out[r.dn]=r.entry
+
+  # Write out the JSON.
+  if opt.pretty:
+    json.dump(out,sys.stdout,indent=2,sort_keys=True)
+    sys.stdout.write(os.linesep)
+  else:
+    json.dump(out,sys.stdout,sort_keys=True)
+
+elif opt.cmd=='diff':    # # # # # # # # # # #  diff  # # # # # # # # # # # # #
+  pass
