@@ -303,7 +303,7 @@ def all_values(d):
 url_parser=re.compile(r'(?P<protocol>\w+)://(?P<host>.[^:/]+)(:(?P<port>\d+))?(?P<path>/.*)?$')
 
 # Read our JSON data.
-if opt.filename==None:
+if opt.filename==None or opt.filename=='-':
   # From standard input.
   opt.filename='/dev/stdin'
 if url_parser.match(opt.filename):
