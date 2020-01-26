@@ -605,6 +605,15 @@ def gripe(msg,output=sys.stderr,progname=prog.name):
 
   die(msg,output,progname,rc=None)
 
+def pluralize(root,n,suffixes=('','s'),fmt=None):
+  """Given a string root, integer n, and tuple (singular, plural),
+  return root with the appropriate suffix for n attached."""
+
+  s=root+suffixes[n!=1]
+  if fmt:
+    return fmt%(n,s)
+  return s
+
 class Spinner(object):
   """Instantiate this class with any sequence, the elements of which
   will be returned iteratively every time that instance is called.
