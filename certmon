@@ -5,7 +5,7 @@ import argparse,atexit,datetime,json,os,re,socket,ssl,StringIO,subprocess,sys,ti
 # Put a little extra effort into finding our non-standard modules if needed.
 try:
   import ansi,loggy
-  from handy import die,prog,Spinner
+  from handy import die,pluralize,prog,Spinner
 except:
   sys.path.insert(1,os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])),'pylib'))
   sys.path.insert(1,os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])),'lib','python'))
@@ -86,15 +86,6 @@ class Certificate(object):
     d=dict(error=self.error,query_seconds=self.query_seconds)
     d.update(self.values)
     return d
-
-def pluralize(root,n,suffixes=('','s'),fmt=None):
-  """Given a string root, integer n, and tuple (singular, plural),
-  return root with the appropriate suffix for n attached."""
-
-  s=root+suffixes[n!=1]
-  if fmt:
-    return fmt%(n,s)
-  return s
 
 # Deal with command line arguments.
 ap=argparse.ArgumentParser(description="Get certificate expiration data. The HOST:PORT command line arguments may also be supplied, one per line, on standard input.")
@@ -181,7 +172,7 @@ if opt.warn!=None:
   ])
   if opt.format=='text':
     services=warnings.keys()
-    services.sort()
+    services.sort(key=lambda s:warnings[s]['daysRemaining'])
     print 'Certificates expiring in the next %s:'%pluralize('day',opt.warn,fmt='%d %s')
     for s in services:
       info=warnings[s]['daysRemaining']
@@ -189,6 +180,7 @@ if opt.warn!=None:
         info=error_text('error (%s) after %0.3f seconds'%(warnings[s]['error'],warnings[s]['query_seconds']))
       else:
         info="%s"%pluralize('day',info,fmt='%d %s')
+        info+=warn_text(' (%s)'%warnings[s]['notAfter'])
       print '%s: %s'%(s,info)
   elif opt.format=='json':
     print json.dumps(warnings,indent=2,sort_keys=True,default=str)
