@@ -20,45 +20,57 @@ class LdapError(Exception):
 class LdapFilter(object):
   "Parse and store an LDAP filter."
 
+  def __init__(self,condition):
+    self.condition=LdapFilter.Condition(condition)
+
   class Condition(object):
     "Base class for all LDAP conditions."
 
     _condition_classes=None
 
-    @classmethod
-    def makeCondition(cls,condition,*args,**kwargs):
+    def __init__(self,condition,*args,**kwargs):
       """Find the first LDAPFilter.Condition subclass suitable for the
-      given LDAP conditional expression. If none can be found, raise
-      ValueError."""
+      given LDAP conditional expression. If found, become an instance of
+      that class. Otherwise, raise ValueError."""
 
-      if cls._condition_classes==None:
+      if self._condition_classes==None:
         # Initialize the list of our subclasses if this is the first call.
-        cls._condition_classes=(
-          __class__.PresenceCondition,
-          __class__.EqualityCondition,
-          __class__.ComparisonCondition,
-          __class__.SubstringCondition,
-          __class__.ApproximateCondition,
-          __class__.ExtensibleCondition
+        LdapFilter.Condition._condition_classes=(
+          LdapFilter.PresenceCondition,
+          LdapFilter.EqualityCondition,
+          LdapFilter.ComparisonCondition,
+          LdapFilter.SubstringCondition,
+          LdapFilter.ApproximateCondition,
+          LdapFilter.ExtensibleCondition
         )
 
-      for cc in cls._condition_classes:
-        m=cc.parser.match(condition)
+      for cls in self._condition_classes:
+        m=cls.parser.match(condition)
         if m:
-          cond=cc(condition,*args,**kwargs)
-          cond.matched=m
-          return cond
-      raise ValueError('%s.makeCondition(%r)'%(cls.__name__,condition))
+          #print 'D: cls=%s'%(cls.__name__,)
+          cond=cls(condition,m)
+          self=cls # Become the object we've just created.
+          break
+      else:
+        raise ValueError('LdapFilter.Condition(%r)'%(condition,))
 
   class PresenceCondition(Condition):
     "cn=*"
 
     parser=re.compile(r'(?P<attr>[A-Za-z0-9]+)(?P<op>=)(?P<val>\*)')
 
+    def __init__(self,condition,matched):
+      self.condition=condition
+      self.matched=matched
+
   class EqualityCondition(Condition):
     "cn=something specific"
 
     parser=re.compile(r'(?P<attr>[A-Za-z0-9]+)(?P<op>=)(?P<val>.*)')
+
+    def __init__(self,condition,matched):
+      self.condition=condition
+      self.matched=matched
 
   class ComparisonCondition(Condition):
     """Compare the attribute value(s) with the given value.
@@ -70,6 +82,10 @@ class LdapFilter(object):
     """
 
     parser=re.compile(r'(?P<attr>[A-Za-z0-9]+)(?P<op>[<>]?=)(?P<val>.*)')
+
+    def __init__(self,condition,matched):
+      self.condition=condition
+      self.matched=matched
 
   class SubstringCondition(Condition):
     """Look for substrings.
@@ -84,20 +100,28 @@ class LdapFilter(object):
 
     parser=re.compile(r'(?P<attr>[A-Za-z0-9]+)(?P<op>=)(?P<val>\*?(.+\*?))')
 
+    def __init__(self,condition,matched):
+      self.condition=condition
+      self.matched=matched
+
   class ApproximateCondition(Condition):
     "cn~=something vague"
 
     parser=re.compile(r'(?P<attr>[A-Za-z0-9]+)(?P<op>~=)(?P<val>.*)')
+
+    def __init__(self,condition,matched):
+      self.condition=condition
+      self.matched=matched
 
   class ExtensibleCondition(Condition):
     "cn~=something vague"
 
     parser=re.compile(r'(?P<attr>(:?[A-Za-z0-9])+)(?P<op>:=)(?P<val>.*)')
 
-  def __init__(self,filter='(objectClass=*)'):
-    "Compile the given filter string."
+    def __init__(self,condition,matched):
+      self.condition=condition
+      self.matched=matched
 
-    self.stack=[]
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -278,7 +302,7 @@ ap=argparse.ArgumentParser(
   formatter_class=fit_formatting(argparse.ArgumentDefaultsHelpFormatter),
   description="Read LDIF data and perform some action on it. See the subcommands below."
 )
-#ap.add_argument('--filter',metavar='EXPR',action='store',help="This is your chance to accept or reject each LDAP entry read from input according to a Python expression before it is processed by any of %(prog)s's subcommands. EXPR can be any Python expression and can access the variables dn (the string value of the LDAP record's DN) and ent (a dictionary of the record's entry, keyed by attribute name and containing a list of 0 or more values for each attribute. As many of this option can be given as needed, but they must all be true for a given LDAP record to be processed by one of %(prog)s's subcommands.")
+ap.add_argument('--filter',metavar='EXPR',dest='ldap_filter',action='store',help="This is your chance to accept or reject each LDAP entry read from input according to a Python expression before it is processed by any of %(prog)s's subcommands. EXPR can be any Python expression and can access the variables dn (the string value of the LDAP record's DN) and ent (a dictionary of the record's entry, keyed by attribute name and containing a list of 0 or more values for each attribute. As many of this option can be given as needed, but they must all be true for a given LDAP record to be processed by one of %(prog)s's subcommands.")
 sp=ap.add_subparsers()
 
 csv_help="Output the LDIF input data as CSV, restructuring multi-valued attributes so that each value is written to its own CSV row. The LDIF attrubute names may be used as CSV column headings."
@@ -305,6 +329,8 @@ ap_json.add_argument('--pretty',action='store_true',help="Format the JSON output
 ap_json.add_argument('infile',metavar='INPUT.LDIF',action='store',nargs='?',help="This is the input file. If no input file is given, \"%(prog)s\" will try to read data from standard input.")
 
 opt=ap.parse_args()
+if opt.ldap_filter:
+  opt.ldap_filter=LdapFilter(opt.ldap_filter)
 
 def string_to_tuple(s):
   "Convert a comma- and/or space-separated string into a proper tuple."
