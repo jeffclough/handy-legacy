@@ -44,89 +44,157 @@ class LdapFilter(object):
           LdapFilter.ExtensibleCondition
         )
 
-      for cls in self._condition_classes:
-        m=cls.parser.match(condition)
-        if m:
-          #print 'D: cls=%s'%(cls.__name__,)
-          cond=cls(condition,m)
-          self=cls # Become the object we've just created.
-          break
-      else:
+      # Make sure considition starts and ends with parentheses. Then find the
+      # right Condition subclass for this condition string.
+      m=None
+      if condition:
+        if not condition[0].startswith('('):
+          condition='{'+condition+')'
+        for cls in self._condition_classes:
+          m=cls.parser.match(condition)
+          if m:
+            #print 'D: cls=%s'%(cls.__name__,)
+            cond=cls(condition,m)
+            self=cls # Become the object we've just created.
+            break
+      if m==None:
         raise ValueError('LdapFilter.Condition(%r)'%(condition,))
 
   class PresenceCondition(Condition):
-    "cn=*"
+    "(cn=*)"
 
-    parser=re.compile(r'(?P<attr>[A-Za-z0-9]+)(?P<op>=)(?P<val>\*)')
+    parser=re.compile(r'\((?P<attr>[A-Za-z0-9]+)(?P<op>=)(?P<val>\*)\)')
 
     def __init__(self,condition,matched):
       self.condition=condition
       self.matched=matched
+      for k,v in self.matched.groupdict().items():
+        setattr(self,k,v)
 
   class EqualityCondition(Condition):
-    "cn=something specific"
+    "(cn=something specific)"
 
-    parser=re.compile(r'(?P<attr>[A-Za-z0-9]+)(?P<op>=)(?P<val>.*)')
+    parser=re.compile(r'\((?P<attr>[A-Za-z0-9]+)(?P<op>=)(?P<val>.*)\)')
 
     def __init__(self,condition,matched):
       self.condition=condition
       self.matched=matched
+      for k,v in self.matched.groupdict().items():
+        setattr(self,k,v)
 
   class ComparisonCondition(Condition):
     """Compare the attribute value(s) with the given value.
     
-      cn<something specific
-      cn<=something specific
-      cn>=something specific
-      cn>something specific
+      (cn<something specific)
+      (cn<=something specific)
+      (cn>=something specific)
+      (cn>something specific)
     """
 
-    parser=re.compile(r'(?P<attr>[A-Za-z0-9]+)(?P<op>[<>]?=)(?P<val>.*)')
+    parser=re.compile(r'\((?P<attr>[A-Za-z0-9]+)(?P<op>[<>]?=)(?P<val>.*)\)')
 
     def __init__(self,condition,matched):
       self.condition=condition
       self.matched=matched
+      for k,v in self.matched.groupdict().items():
+        setattr(self,k,v)
 
   class SubstringCondition(Condition):
     """Look for substrings.
 
-      cn=starts with*
-      cn=*ends with
-      cn=*contains*
-      cn=*this*and*that*in*order*
-      cn=starts with*this*and*that*in*order*
-      cn=*this*and*that*in*order*ends with
+      (cn=starts with*)
+      (cn=*ends with)
+      (cn=*contains*)
+      (cn=*this*and*that*in*order*)
+      (cn=starts with*this*and*that*in*order*)
+      (cn=*this*and*that*in*order*ends with)
     """
 
-    parser=re.compile(r'(?P<attr>[A-Za-z0-9]+)(?P<op>=)(?P<val>\*?(.+\*?))')
+    parser=re.compile(r'\((?P<attr>[A-Za-z0-9]+)(?P<op>=)(?P<val>\*?(.+\*?))\)')
 
     def __init__(self,condition,matched):
       self.condition=condition
       self.matched=matched
+      for k,v in self.matched.groupdict().items():
+        setattr(self,k,v)
 
   class ApproximateCondition(Condition):
-    "cn~=something vague"
+    "(cn~=something vague)"
 
-    parser=re.compile(r'(?P<attr>[A-Za-z0-9]+)(?P<op>~=)(?P<val>.*)')
+    parser=re.compile(r'\((?P<attr>[A-Za-z0-9]+)(?P<op>~=)(?P<val>.*)\)')
 
     def __init__(self,condition,matched):
       self.condition=condition
       self.matched=matched
+      for k,v in self.matched.groupdict().items():
+        setattr(self,k,v)
 
   class ExtensibleCondition(Condition):
-    "cn~=something vague"
+    "(cn~=something vague)"
 
-    parser=re.compile(r'(?P<attr>(:?[A-Za-z0-9])+)(?P<op>:=)(?P<val>.*)')
+    parser=re.compile(r'\((?P<attr>(:?[A-Za-z0-9])+)(?P<op>:=)(?P<val>.*)\)')
 
     def __init__(self,condition,matched):
       self.condition=condition
       self.matched=matched
+      for k,v in self.matched.groupdict().items():
+        setattr(self,k,v)
 
+  class OperatorCondition(Condition):
+    """Apply an AND, OR, or NOT operation to 1 or more interior
+    conditions. This is where things get recursive. 
+
+    (&(condition1)(condition2)...)
+    (|(condition1)(condition2)...)
+    (!(condition))
+    """
+
+    parser=re.compile(r'\((?P<op>[&|!])(?P<interior>.*)\)')
+
+    def __init__(self,condition,matched):
+      self.condition=condition
+      self.matched=matched
+      for k,v in self.matched.groupdict().items():
+        setattr(self,k,v)
+
+      # Parse and store our interior conditions.
+      self.conditions=[]
+      i=0
+      while i<len(self.interior):
+        c=LdapFilter.Condition(self.interior[i:])
+        self.conditions.append(c)
+        i+=c.matched.end()
+
+      if self.op=='!' and len(self.conditions)!=1:
+        raise LdapError("\"!\" operation takes exactly one operand: %r"%(self.condition,))
+
+    def test(rec):
+      "Return True iff this condition matches the given LdapRecord."
+
+      if self.op=='!':
+        result=not self.conditions[0].test(rec)
+      elif self.op=='|':
+        for c in self.conditions:
+          if c.test(rec):
+            result=True
+            break
+        else:
+          result=False
+      elif self.op=='&':
+        for c in self.conditions:
+          if not c.test(rec):
+            result=False
+            break
+        else:
+          result=True
+      else:
+        raise LdapError("Programming error. Unrecognized operator: %r"%(self.op,))
+      return result
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class LdapEntry(object):
-  "This is a ... say it with me ... LDIF entry."
+class LdapRecord(object):
+  "This is a ... say it with me ... LDAP record."
 
   def __init__(self,data):
     self.dn=self.entry=None
@@ -141,7 +209,7 @@ class LdapEntry(object):
       self._from_file(data)
 
   def __nonzero__(self):
-    "Return True if this LdapEntry contains data."
+    "Return True if this LdapRecord contains data."
 
     return bool(self.dn and self.entry)
 
@@ -149,7 +217,7 @@ class LdapEntry(object):
     "Populate this entry from a sequence of strings."
 
     if len(stanza)==0:
-      raise LdapError("Empty stanza cannot create LdapEntry.")
+      raise LdapError("Empty stanza cannot create LdapRecord.")
     #print 'D: stansa=%r'%(stanza,)
     if isinstance(stanza[0],basestring):
       # Parse this list of strings.
@@ -339,11 +407,11 @@ def string_to_tuple(s):
     [c for c in [col.strip() for col in re.split(r'[\s,]+',s)] if c]
   )
 
-def ldap_entries(infile):
-  "Return one LdapEntry object at a time from the given open file."
+def ldap_records(infile):
+  "Return one LdapRecord object at a time from the given open file."
 
   while True:
-    rec=LdapEntry(opt.infile)
+    rec=LdapRecord(opt.infile)
     if rec:
       yield rec
     else:
@@ -371,7 +439,7 @@ if opt.cmd=='csv':    # # # # # # # # # # # #  CSV  # # # # # # # # # # # # # #
   # Read in our LDIF data.
   infile=get_single_input()
   records=[]
-  for rec in ldap_entries(infile):
+  for rec in ldap_records(infile):
     records.append(rec)
 
   # Get or figure out what columns to output.
@@ -410,10 +478,10 @@ elif opt.cmd=='json':    # # # # # # # # # # #  JSON  # # # # # # # # # # # # #
   # Read in our LDIF data.
   infile=get_single_input()
   records=[]
-  for rec in ldap_entries(infile):
+  for rec in ldap_records(infile):
     records.append(rec)
 
-  # Move our LdapEntry objects from their list into our out dictionary.
+  # Move our LdapRecord objects from their list into our out dictionary.
   out={}
   while records:
     r=records.pop(0)
