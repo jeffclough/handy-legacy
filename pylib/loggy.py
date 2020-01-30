@@ -39,9 +39,10 @@ def get_logger(**kwargs):
   If facility argument is None (the default), the caller is assumed to
   want to use a previously configured logger or just wants to use the
   root logger. Otherwise, the facility argument may be a filename (e.g.
-  "$HOME/myprog.log"), a file stream (e.g. sys.stderr), an integer value
-  from SysLogHandler's LOG_* values (e.g. SysLogHandler.LOG_USER), or an
-  instance of logging.Handler or any subclass thereof.
+  "$HOME/myprog.log" or "~/myprog.log"), a file stream (e.g.
+  sys.stderr), an integer value from SysLogHandler's LOG_* values (e.g.
+  SysLogHandler.LOG_USER), or an instance of logging.Handler or any
+  subclass thereof.
 
   The level argument must be one of the following string values:
   debug, info, notice, warning, error, or ctitical. ("warning" is the
@@ -97,6 +98,7 @@ def get_logger(**kwargs):
         facility=logging.handlers.SysLogHandler.facility_names[facility]
       else:
         # This string must be a filename, so open it for appending.
+        facility=os.path.expanduser(os.path.expandvars(facility))
         facility=open(facility,'a')
 
     if isinstance(facility,int):
