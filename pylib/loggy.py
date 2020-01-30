@@ -99,7 +99,13 @@ def get_logger(**kwargs):
       else:
         # This string must be a filename, so open it for appending.
         facility=os.path.expanduser(os.path.expandvars(facility))
-        facility=open(facility,'a')
+        if os.path.isfile(facility):
+          mode='a'
+        elif not os.path.exists(facility):
+          mode='w'
+        else:
+          raise ValueError('"%s" exists but is not a regular file.'%(facility,))
+        facility=open(facility,mode)
 
     if isinstance(facility,int):
       # This is a syslog facility number, or had better be.

@@ -4,7 +4,12 @@ try:
 except:
   import argparse27 as argparse
 import os,sys
+import loggy
 from handy import CaselessDict,CaselessString,die,prog
+
+# Set up some logging we'll use for diagnostics.
+log=loggy.get_logger(facility='~/ldif.log',level='debug')
+log.debug('---- Starting ---')
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -23,12 +28,15 @@ class LdapFilter(object):
   def __init__(self,condition):
     self.condition=LdapFilter.Condition(condition)
 
+  def test(self,rec):
+    return self.condition(rec)
+
   class Condition(object):
     "Base class for all LDAP conditions."
 
     _condition_classes=None
 
-    def __init__(self,condition,*args,**kwargs):
+    def __init__(self,condition,matched=None):
       """Find the first LDAPFilter.Condition subclass suitable for the
       given LDAP conditional expression. If found, become an instance of
       that class. Otherwise, raise ValueError."""
@@ -49,7 +57,7 @@ class LdapFilter(object):
       m=None
       if condition:
         if not condition[0].startswith('('):
-          condition='{'+condition+')'
+          condition='('+condition+')'
         for cls in self._condition_classes:
           m=cls.parser.match(condition)
           if m:
@@ -59,6 +67,9 @@ class LdapFilter(object):
             break
       if m==None:
         raise ValueError('LdapFilter.Condition(%r)'%(condition,))
+
+    def __repr__(self):
+      return '%s(%r,%r)'%(self.condition,self.matched)
 
   class PresenceCondition(Condition):
     "(cn=*)"
@@ -71,6 +82,14 @@ class LdapFilter(object):
       for k,v in self.matched.groupdict().items():
         setattr(self,k,v)
 
+    def test(rec):
+      "Return True iff this record has the sought attribute."
+
+      log.debug('Testing %r'%self)
+      result=self.attr=='dn' or self.attr in rec.entry
+      log.debug('%r ==> %r'%(self,result))
+      return result
+
   class EqualityCondition(Condition):
     "(cn=something specific)"
 
@@ -81,6 +100,11 @@ class LdapFilter(object):
       self.matched=matched
       for k,v in self.matched.groupdict().items():
         setattr(self,k,v)
+
+    def test(rec):
+      if self.dn=='dn':
+        return self.val==rec.dn
+      return self.attr in rec.entry and self.val in rec.entry[self.attr]
 
   class ComparisonCondition(Condition):
     """Compare the attribute value(s) with the given value.
@@ -98,6 +122,13 @@ class LdapFilter(object):
       self.matched=matched
       for k,v in self.matched.groupdict().items():
         setattr(self,k,v)
+
+    def test(rec):
+      if self.attr=='dn':
+        result=eval('self.dn%sself.val'%self.op)
+      else:
+        result=eval('any([v%sself.val for v in rec.entry[self.attr]])'%self.op)
+      return result
 
   class SubstringCondition(Condition):
     """Look for substrings.
@@ -118,6 +149,9 @@ class LdapFilter(object):
       for k,v in self.matched.groupdict().items():
         setattr(self,k,v)
 
+    def test(rec):
+      raise NotImplementedError('%s.test()'%(__class__.__name__,))
+
   class ApproximateCondition(Condition):
     "(cn~=something vague)"
 
@@ -129,6 +163,9 @@ class LdapFilter(object):
       for k,v in self.matched.groupdict().items():
         setattr(self,k,v)
 
+    def test(rec):
+      raise NotImplementedError('%s.test()'%(__class__.__name__,))
+
   class ExtensibleCondition(Condition):
     "(cn~=something vague)"
 
@@ -139,6 +176,9 @@ class LdapFilter(object):
       self.matched=matched
       for k,v in self.matched.groupdict().items():
         setattr(self,k,v)
+
+    def test(rec):
+      raise NotImplementedError('%s.test()'%(__class__.__name__,))
 
   class OperatorCondition(Condition):
     """Apply an AND, OR, or NOT operation to 1 or more interior
@@ -274,12 +314,15 @@ class LdapRecord(object):
   def __str__(self):
     "Return a string containing the LDIF representation of this object."
 
-    s='dn: '+self.dn+os.linesep
-    attrs=self.entry.keys()
-    attrs.sort()
-    for attr in attrs:
-      s+=''.join(['%s: %s%s'%(attr,val,os.linesep) for val in self.entry[attr]])
-    s+=os.linesep
+    if self.dn:
+      s='dn: '+self.dn+os.linesep
+      attrs=self.entry.keys()
+      attrs.sort()
+      for attr in attrs:
+        s+=''.join(['%s: %s%s'%(attr,val,os.linesep) for val in self.entry[attr]])
+      s+=os.linesep
+    else:
+      s=''
     return s
 
   def __repr__(self):
@@ -400,6 +443,15 @@ opt=ap.parse_args()
 if opt.ldap_filter:
   opt.ldap_filter=LdapFilter(opt.ldap_filter)
 
+log.debug('opt.ldap_filter=%r'%(opt.ldap_filter,))
+log.debug('opt.columns=%r'%(opt.columns,))
+log.debug('opt.filter=%r'%(opt.filter,))
+log.debug('opt.gather=%r'%(opt.gather,))
+log.debug('opt.gather_sep=%r'%(opt.gather_sep,))
+log.debug('opt.no_dn=%r'%(opt.no_dn,))
+log.debug('opt.with_headings=%r'%(opt.with_headings,))
+log.debug('opt.infile=%r'%(opt.infile,))
+
 def string_to_tuple(s):
   "Convert a comma- and/or space-separated string into a proper tuple."
 
@@ -410,9 +462,19 @@ def string_to_tuple(s):
 def ldap_records(infile):
   "Return one LdapRecord object at a time from the given open file."
 
+  log.debug('Reading LDIF input from %s ...'%(infile.name))
+  if opt.ldap_filter:
+    log.debug('LDAP Filter: %r'%(opt.ldap_filter.condition,))
   while True:
     rec=LdapRecord(opt.infile)
     if rec:
+      log.debug('Input record ...\n'+str(rec))
+    if rec:
+      if opt.ldap_filter and not opt.filter.test(rec):
+        log.debug('Failed to match filter.')
+        continue
+      if opt.ldap_filter:
+        log.debug('Matched filter.')
       yield rec
     else:
       break
@@ -429,6 +491,7 @@ def get_single_input():
   return infile
 
 if opt.cmd=='csv':    # # # # # # # # # # # #  CSV  # # # # # # # # # # # # # #
+  log.debug("---- subcommand: csv ----")
   import csv
 
   if opt.columns:
@@ -473,6 +536,7 @@ if opt.cmd=='csv':    # # # # # # # # # # # #  CSV  # # # # # # # # # # # # # #
   writer.writerows(out)
 
 elif opt.cmd=='json':    # # # # # # # # # # #  JSON  # # # # # # # # # # # # #
+  log.debug("---- subcommand: json ----")
   import json
 
   # Read in our LDIF data.
@@ -495,4 +559,6 @@ elif opt.cmd=='json':    # # # # # # # # # # #  JSON  # # # # # # # # # # # # #
     json.dump(out,sys.stdout,sort_keys=True)
 
 elif opt.cmd=='diff':    # # # # # # # # # # #  diff  # # # # # # # # # # # # #
-  pass
+  log.debug("---- subcommand: diff ----")
+
+log.debug('---- Ending ---')
