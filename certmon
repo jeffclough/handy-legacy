@@ -1,6 +1,7 @@
 #!/usr/bin/env python2
 
 import argparse,atexit,datetime,json,os,re,socket,ssl,StringIO,subprocess,sys,time,threading
+from pprint import pprint
 
 # Put a little extra effort into finding our non-standard modules if needed.
 try:
@@ -24,8 +25,39 @@ def neg_check(n):
     return n
   return (str(n),neg_text(n))[n<type(n)(0)]
 
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+# Shamelessly stolen and altered from Python 2.6's ssl module because that
+# module's version of get_server_certificate() doesn't have a timeout
+# parameter, and that's not a capability I can add with a wrapper.
+#
+
+def get_server_certificate_with_to(addr,ssl_version=ssl.PROTOCOL_SSLv3,ca_certs=None,timeout=None):
+
+  """Retrieve the certificate from the server at the specified address,
+  and return it as a PEM-encoded string. If 'ca_certs' is specified,
+  validate the server cert against it. If 'ssl_version' is specified,
+  use it in the connection attempt."""
+
+  if (ca_certs is not None):
+    cert_reqs=ssl.CERT_REQUIRED
+  else:
+    cert_reqs=ssl.CERT_NONE
+  s=ssl.wrap_socket(ssl.socket(),ssl_version=ssl_version,cert_reqs=cert_reqs,ca_certs=ca_certs)
+  if timeout!=None:
+    # This is the only added functionality.
+    s.settimeout(timeout)
+  s.connect(addr)
+  dercert=s.getpeercert(True)
+  s.close()
+  return ssl.DER_cert_to_PEM_cert(dercert)
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 class Certificate(object):
-  def __init__(self,service):
+  def __init__(self,service,timeout=None):
     self.host,self.port=service
     self.service="%s:%s"%(self.host,self.port)
     # Store the values we get back we get out of the cert itself in this dict.
@@ -33,7 +65,7 @@ class Certificate(object):
     # Retrieve the certificate, and put it into a file.
     t0=time.time()
     try:
-      cert=ssl.get_server_certificate(service,ssl_version=2)
+      cert=get_server_certificate_with_to(service,ssl_version=2,timeout=timeout)
     except (socket.gaierror,socket.error) as e:
       t1=time.time()
       self.error=re.sub(r'^\[.*\] ','',str(e))
@@ -83,7 +115,7 @@ class Certificate(object):
     return self.values.get(key,None)
 
   def toDict(self):
-    d=dict(error=self.error,query_seconds=self.query_seconds)
+    d=dict(error=self.error,query_seconds=self.query_seconds,timeRemaining=None,daysRemaining=None)
     d.update(self.values)
     return d
 
@@ -95,17 +127,38 @@ ap.add_argument('-w','--warn',dest='warn',default=None,type=int,help="Output onl
 ap.add_argument('--scan',dest='scan',action='store_true',default=False,help="Only test each host:port argument for a listener and report how each such listener responds to an SSL certificate request.")
 ap.add_argument('--log-facility',dest='log_facility',metavar='FACILITY',action='store',default='local0',help="Log to the given syslog facility. (default: %(default)s)")
 ap.add_argument('--log-level',dest='log_level',metavar='LEVEL',action='store',default='info',help="Log at the given level. (default: %(default)s)")
+ap.add_argument('--timeout',dest='timeout',metavar='SECS',action='store',type=int,default=None,help="Number of seconds to wait for any given certificate.")
 ap.add_argument('services',metavar='HOST:PORT',nargs='*',help="One or more HOST:PORT arguments.")
 opt=ap.parse_args()
 
+# Adjust log level first (if needed).
 log=loggy.get_logger(facility=opt.log_facility,level=opt.log_level)
 
+# Get our saved config data if it's available.
+opt.data_file=os.path.expanduser("~/.%s.json"%(prog.name,))
+if os.path.exists(opt.data_file):
+  f=open(opt.data_file)
+  try:
+    opt.data=json.load(f)
+  except Exception as e:
+    sys.stderr.write("%s: Error reading %s: %s\n"%(prog.name,opt.data_file,e))
+    sys.exit(1)
+  f.close()
+else:
+  opt.data=dict(options={},services=[])
+
+# Cook some of our other command line options a bit.
 ansi.enabled=(opt.color or sys.stdout.isatty()) and opt.format=='text'
 if not sys.stdin.isatty():
   opt.services.extend([line.strip() for line in sys.stdin])
 if not opt.services:
-  ap.print_help()
-  sys.exit(1)
+  if opt.data["services"]:
+    opt.services=[
+      "%s:%d"%(s['host'],s['port']) for s in opt.data["services"]
+    ]
+  else:
+    ap.print_help()
+    sys.exit(1)
 for i in range(len(opt.services)):
   try:
     host,port=opt.services[i].split(':')
@@ -119,7 +172,7 @@ def add_cert(service):
 
   connections.acquire()
   log.info("Queuinig %s:%d for SSL cert retrieval"%service)
-  certs[service]=Certificate(service)
+  certs[service]=Certificate(service,timeout=opt.timeout)
   c=certs[service]
   if certs[service].error:
     log.error("Error (%s) from %s:%d after %0.3f seconds"%(c.error,service[0],service[1],c.query_seconds))
@@ -129,7 +182,7 @@ def add_cert(service):
 
 # Retrieve all our certs in a dict keyed by (host,port) tuples.
 certs={}
-connections=threading.Semaphore(16) # Allow only up to 8 concurrent cert retrievals.
+connections=threading.Semaphore(32) # Allow only up to 32 concurrent cert retrievals.
 
 # Create and start our threads.
 log.info("Starting retrieval of %s"%pluralize('certificate',len(opt.services),fmt='%d %s'))
