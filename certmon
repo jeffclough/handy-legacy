@@ -84,15 +84,18 @@ class Certificate(object):
     f.write(cert)
     f.close()
     # Let openssl do the x509 parsing.
-    cmd=("openssl x509 -in %s -noout -serial -subject -issuer -email -dates"%(fn,)).split()
+    cmd=("openssl x509 -in %s -noout -text -serial -subject -issuer -email -dates"%(fn,)).split()
     proc=subprocess.Popen(cmd,stdout=subprocess.PIPE)
     output,error=proc.communicate()
+    os.unlink(fn)
     for line in output.split('\n'):
       #print 'D: line=%r'%(line,)
       parts=line.split('=',1)
       #print 'D: parts=%r'%(parts,)
       if len(parts)==2:
-        var,val=parts
+        var,val=[p.strip() for p in parts]
+        if '.' in var:
+          continue
         if var in ('notBefore','notAfter'):
           while True:
             try:
@@ -110,6 +113,12 @@ class Certificate(object):
           val-=datetime.datetime.now()
           self.values['timeRemaining']=val
           self.values['daysRemaining']=val.days
+      elif 'DNS:' in line:
+        self.values['names']=[
+          y[4:] for y in [
+            x.strip() for x in line.split(',')
+          ] if y.startswith('DNS:')
+        ]
 
   def __getattr__(self,key):
     return self.values.get(key,None)
@@ -124,7 +133,7 @@ ap=argparse.ArgumentParser(description="Get certificate expiration data. The HOS
 ap.add_argument('-c','--color',dest='color',action='store_true',default=False,help="Turn on colored output.")
 ap.add_argument('--json',dest='format',action='store_const',const='json',default='text',help="Use JSON as output format.")
 ap.add_argument('-w','--warn',dest='warn',default=None,type=int,help="Output only warnings about certs expiring within the given number of days.")
-ap.add_argument('--scan',dest='scan',action='store_true',default=False,help="Only test each host:port argument for a listener and report how each such listener responds to an SSL certificate request.")
+ap.add_argument('--summary',dest='summary',action='store_true',default=False,help="""Only summarize each host:port argument's certificant's "valid from ___ to ___" information.""")
 ap.add_argument('--log-facility',dest='log_facility',metavar='FACILITY',action='store',default='local0',help="Log to the given syslog facility. (default: %(default)s)")
 ap.add_argument('--log-level',dest='log_level',metavar='LEVEL',action='store',default='info',help="Log at the given level. (default: %(default)s)")
 ap.add_argument('--timeout',dest='timeout',metavar='SECS',action='store',type=int,default=None,help="Number of seconds to wait for any given certificate.")
@@ -200,13 +209,17 @@ log.info("Finished retrieval of %s"%pluralize('certificate',len(opt.services),fm
 # them alphabetically by hostname and numerically by port number.
 opt.services.sort()
 
-if opt.scan:
+if opt.summary:
+  # Only summarize each certificate's "valid from ___ to ___" information.
   now=datetime.datetime.now()
+  soon=now+datetime.timedelta(30)
   for service in opt.services:
     c=certs[service]
     if c.notBefore and c.notAfter:
       if c.notAfter<now:
         info=error_text('Expired cert valid from %s to %s'%(c.notBefore,c.notAfter))
+      elif c.notAfter<soon:
+        info=warn_text('Expiring cert valid from %s to %s'%(c.notBefore,c.notAfter))
       elif c.notBefore>now:
         info=error_text('Premature cert valid from %s to %s'%(c.notBefore,c.notAfter))
       else:
@@ -243,6 +256,10 @@ else:
     for service in opt.services:
       c=certs[service]
       print '%s'%(c.service,)
+      if isinstance(c.names,list):
+        print '  names=%s'%(', '.join(c.names))
+      else:
+        print '  names=%s'%(c.names,)
       print '  serial=%s'%(c.serial,)
       print '  subject=%s'%(c.subject,)
       print '  issuer=%s'%(c.issuer,)
