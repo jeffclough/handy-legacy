@@ -525,12 +525,21 @@ def make(target_name):
   for target in getTargetsByName(target_name):
     target.build()
 
+def link_exists(link):
+  "Works just like os.path.lexists(), but this work on pre-2.4 Python."
+
+  try:
+    os.readlink(link)
+    return True
+  except Exception:
+    return False
+
 def symlink(target,link):
   """Create a symlink from link to target. If link already exists and is a
   symlink to link, no action is taken. Otherwise, target (whether it is a
   symlink or a regular file) is replaced with a symlink to link."""
 
-  if os.path.lexists(link):
+  if link_exists(link):
     if os.path.islink(link):
       ltarget=os.path.abspath(os.readlink(link))
       if ltarget==os.path.abspath(target):
