@@ -13,7 +13,7 @@ except:
   import ansi,loggy
   from handy import die,prog,Spinner
 
-host_text,port_text,error_text,warn_text,neg_text=ansi.Palette('cyan on black,green,red,yellow,red on yellow')
+norm_text,host_text,port_text,error_text,warn_text,neg_text=ansi.Palette('white on black,cyan,green,red,yellow,red on yellow')
 
 def neg_check(n):
   """Return some brightly colored version of n if it is less than 0.
@@ -134,9 +134,10 @@ ap.add_argument('-c','--color',dest='color',action='store_true',default=False,he
 ap.add_argument('--json',dest='format',action='store_const',const='json',default='text',help="Use JSON as output format.")
 ap.add_argument('-w','--warn',dest='warn',default=None,type=int,help="Output only warnings about certs expiring within the given number of days.")
 ap.add_argument('--summary',dest='summary',action='store_true',default=False,help="""Only summarize each host:port argument's certificant's "valid from ___ to ___" information.""")
+ap.add_argument('--light',dest='light',action='store_true',default=False,help="Use colors suitable for a light background.")
 ap.add_argument('--log-facility',dest='log_facility',metavar='FACILITY',action='store',default='local0',help="Log to the given syslog facility. (default: %(default)s)")
 ap.add_argument('--log-level',dest='log_level',metavar='LEVEL',action='store',default='info',help="Log at the given level. (default: %(default)s)")
-ap.add_argument('--timeout',dest='timeout',metavar='SECS',action='store',type=int,default=None,help="Number of seconds to wait for any given certificate.")
+ap.add_argument('--timeout',dest='timeout',metavar='SECS',action='store',type=int,default=20,help="Number of seconds to wait for any given certificate. (default: %(default)s)")
 ap.add_argument('services',metavar='HOST:PORT',nargs='*',help="One or more HOST:PORT arguments.")
 opt=ap.parse_args()
 
@@ -155,6 +156,11 @@ if os.path.exists(opt.data_file):
   f.close()
 else:
   opt.data=dict(options={},services=[])
+
+# Adjust our colors for a light-background palette if needed.
+if opt.light:
+  norm_text,host_text,port_text,error_text,warn_text,neg_text=ansi.Palette('norm black on white,white on blue,bold magenta on blue,norm white on red,black on yellow,red')
+  #norm_text,host_text,port_text,error_text,warn_text,neg_text=ansi.Palette('black on white,blue,magenta,red,black on yellow,red')
 
 # Cook some of our other command line options a bit.
 ansi.enabled=(opt.color or sys.stdout.isatty()) and opt.format=='text'
@@ -223,16 +229,17 @@ if opt.summary:
       elif c.notBefore>now:
         info=error_text('Premature cert valid from %s to %s'%(c.notBefore,c.notAfter))
       else:
-        info='Current cert valid from %s to %s'%(c.notBefore,c.notAfter)
+        info=norm_text('Current cert valid from %s to %s'%(c.notBefore,c.notAfter))
     else:
       info=error_text('error (%s) after %0.3f seconds'%(c.error,c.query_seconds))
     host_text(service[0]),port_text(service[1])
-    print '%s:%s: %s'%(host_text(service[0]),port_text(service[1]),info)
+    ansi.paint(host_text,service[0],':',port_text,service[1],norm_text,' ',info)
   sys.exit(0)
 
 if opt.warn!=None:
   warnings=dict([
-    ('%s:%s'%(host_text(c.host),port_text(c.port)),c.toDict())
+    ((c.host,c.port),c.toDict())
+    #('%s%s%s'%(host_text(c.host),port_text(c.port)),c.toDict())
       for c in certs.values()
         if c.daysRemaining<opt.warn
   ])
@@ -241,13 +248,15 @@ if opt.warn!=None:
     services.sort(key=lambda s:warnings[s]['daysRemaining'])
     print 'Certificates expiring in the next %s:'%pluralize('day',opt.warn,fmt='%d %s')
     for s in services:
+      h,p=s # Extract host and port from service s.
       info=warnings[s]['daysRemaining']
       if info==None:
         info=error_text('error (%s) after %0.3f seconds'%(warnings[s]['error'],warnings[s]['query_seconds']))
       else:
-        info="%s"%pluralize('day',info,fmt='%d %s')
-        info+=warn_text(' (%s)'%warnings[s]['notAfter'])
-      print '%s: %s'%(s,info)
+        info=norm_text("%s "%pluralize('day',info,fmt='%d %s'))
+        info+=warn_text('(%s)'%warnings[s]['notAfter'])
+      ansi.paint(host_text,h,':',port_text,p,norm_text,' ',info)
+      #print '%s: %s'%(s,info)
   elif opt.format=='json':
     print json.dumps(warnings,indent=2,sort_keys=True,default=str)
 else:
@@ -255,29 +264,29 @@ else:
   if opt.format=='text':
     for service in opt.services:
       c=certs[service]
-      print '%s'%(c.service,)
+      print norm_text('%s'%(c.service,))
       if isinstance(c.names,list):
-        print '  names=%s'%(', '.join(c.names))
+        print norm_text('  names=%s'%(', '.join(c.names)))
       else:
-        print '  names=%s'%(c.names,)
-      print '  serial=%s'%(c.serial,)
-      print '  subject=%s'%(c.subject,)
-      print '  issuer=%s'%(c.issuer,)
-      print '  notBefore=%s'%(c.notBefore,)
+        print norm_text('  names=%s'%(c.names,))
+      print norm_text('  serial=%s'%(c.serial,))
+      print norm_text('  subject=%s'%(c.subject,))
+      print norm_text('  issuer=%s'%(c.issuer,))
+      print norm_text('  notBefore=%s'%(c.notBefore,))
       if c.daysRemaining!=None and c.daysRemaining<=30:
-        print '  notAfter=%s'%warn_text(c.notAfter)
-        print '  timeRemaining=%s'%warn_text(c.timeRemaining)
-        print '  daysRemaining=%s'%warn_text(c.daysRemaining)
+        print norm_text('  notAfter=%s'%warn_text(c.notAfter))
+        print norm_text('  timeRemaining=%s'%warn_text(c.timeRemaining))
+        print norm_text('  daysRemaining=%s'%warn_text(c.daysRemaining))
       else:
-        print '  notAfter=%s'%(c.notAfter,)
-        print '  timeRemaining=%s'%(c.timeRemaining,)
-        print '  daysRemaining=%s'%(c.daysRemaining,)
+        print norm_text('  notAfter=%s'%(c.notAfter,))
+        print norm_text('  timeRemaining=%s'%(c.timeRemaining,))
+        print norm_text('  daysRemaining=%s'%(c.daysRemaining,))
       if c.error==None:
-        print '  error=%s'%(c.error,)
+        print norm_text('  error=%s'%(c.error,))
       else:
-        print '  error=%s'%error_text(c.error)
-      print '  query_seconds=%0.3f'%(c.query_seconds,)
-      print ''
+        print norm_text('  error=%s'%error_text(c.error))
+      print norm_text('  query_seconds=%0.3f'%(c.query_seconds,))
+      print norm_text('')
   elif opt.format=='json':
     # Output certs as a JSON dictionary. The diction
     print json.dumps(
