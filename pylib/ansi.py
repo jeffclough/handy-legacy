@@ -1,7 +1,5 @@
 #!/usr/bin/env python2
 
-import colorsys,math,sys
-
 """
 This module is all about sending colored text to an ANSI-compatibe
 terminal. You can control attributes (e.g. bold, italics, and
@@ -105,6 +103,8 @@ or
     python ansi.py bold red on blue
 
 """
+
+import colorsys,math,sys
 
 # Traditional 8-color ANSI color escape sequence values:
 attr=dict(
@@ -498,7 +498,8 @@ class Palette(list):
           [[pal[i],words[i],' '] for i in range(len(words))]
         ))
 
-    The only difference is how we index the pal variable.
+    The only (very subtle) difference is how we index the pal variable.
+    The first example uses pal(i), while the second uses pal[i].
     
     '''
 
