@@ -41,11 +41,11 @@ class Version(object):
   version data.
 
   >>> Version('1.2.3')._parsed_version
-  (1, 2, 3, None, None)
+  (1, 2, 3, '', 0)
   >>> Version('1.2.3.test')._parsed_version
-  (1, 2, 3, 'test', None)
+  (1, 2, 3, 'test', 0)
   >>> Version('1.2.3.123')._parsed_version
-  (1, 2, 3, None, 123)
+  (1, 2, 3, '', 123)
   >>> Version('1.2.3.test-123')._parsed_version
   (1, 2, 3, 'test-', 123)
   >>> Version('1.2.3.test-123.45')._parsed_version
@@ -63,7 +63,7 @@ class Version(object):
   >>> a._version
   [1, 2, 3, '']
   >>> a._parsed_version
-  (1, 2, 3, None, None)
+  (1, 2, 3, '', 0)
   >>> a.major
   1
   >>> a.minor
@@ -85,13 +85,13 @@ class Version(object):
   >>> a._version
   [1, 2, 3, 'beta']
   >>> a._parsed_version
-  (1, 2, 3, 'beta', None)
+  (1, 2, 3, 'beta', 0)
   >>> str(a)
   '1.2.3.beta'
   >>> str(b)
   '1.2.3'
   >>> b._parsed_version
-  (1, 2, 3, None, None)
+  (1, 2, 3, '', 0)
   >>> a<b
   True
   >>> a<=b
@@ -282,13 +282,13 @@ class Version(object):
     will be None.
 
     >>> Version.metaParser('')
-    (None, None)
+    ('', 0)
     >>> Version.metaParser('test')
-    ('test', None)
+    ('test', 0)
     >>> Version.metaParser('123')
-    (None, 123)
+    ('', 123)
     >>> Version.metaParser('123.45')
-    (None, 123.45)
+    ('', 123.45)
     >>> Version.metaParser('test-123.45')
     ('test-', 123.45)
     """
@@ -296,11 +296,11 @@ class Version(object):
     if not isinstance(val,stringtype):
       val=str(val)
     m=cls.__version_meta_parser.match(val)
-    s=n=None
+    s,n='',0
     if m:
       d=m.groupdict()
-      s=(None,d['s'])[bool(d['s'])]
-      n=(None,d['n'])[bool(d['n'])]
+      s=('',d['s'])[bool(d['s'])]
+      n=(0,d['n'])[bool(d['n'])]
       if n:
         try:
           n=int(n)
@@ -308,10 +308,10 @@ class Version(object):
           try:
             n=float(n)
           except:
-            n=None
+            n=0
             s=val
       else:
-        n=None
+        n=0
     return (s,n)
 
 python_version=Version(sys.version_info[:4])
@@ -341,18 +341,26 @@ class DtpVersion(Version):
   >>> a=DtpVersion('4.5.6')
   >>> str(a)
   '4.5.6'
+  >>> a._parsed_version
+  (4, 5, 6, 6, '', 0)
   >>> dev=DtpVersion(a)
   >>> dev.meta='dev'
   >>> str(dev)
   '4.5.6.dev'
+  >>> dev._parsed_version
+  (4, 5, 6, 1, '', 0)
   >>> test=DtpVersion(a)
   >>> test.meta='test'
   >>> str(test)
   '4.5.6.test'
+  >>> test._parsed_version
+  (4, 5, 6, 2, '', 0)
   >>> prod=DtpVersion(a)
   >>> prod.meta='prod'
   >>> str(prod)
   '4.5.6.prod'
+  >>> prod._parsed_version
+  (4, 5, 6, 5, '', 0)
   >>> dev==test
   False
   >>> test==prod
@@ -396,14 +404,19 @@ class DtpVersion(Version):
   )
 
   def __init__(self,arg):
-    # Leave everything to the superclass.
+    # Leave everything the superclass.
     super(DtpVersion,self).__init__(arg)
 
   @classmethod
   def metaParser(cls,val):
-    """Return an (env_rank,(string,number)) tuple from the given meta
-    value."""
+    """Return an (env_rank,string,number) tuple from the given meta
+    value.
 
+    This overloads Version's copy of this method and is called from
+    Version's tuplize() method during construction and whenever this
+    instance's data changes."""
+
+    log.debug('%s.metaParser(%r)'%(cls.__name__,val))
     if not val:
       # An empty meta value is greater than any standard value.
       rank,suffix=DtpVersion.env['prod']+1,''
@@ -412,16 +425,25 @@ class DtpVersion(Version):
       for e in DtpVersion.env:
         if val.startswith(e):
           l=len(e)
+          # Get the numeric rank and any remainder of the meta value.
           rank,suffix=DtpVersion.env[val[:l]],val[l:]
+          log.debug('rank=%r, suffix=%r'%(rank,suffix))
+          break
       else:
         # Whatever this is is valued less than "dev", and the whole string is the suffix.
         rank,suffix=0,val
     suffix=super(DtpVersion,cls).metaParser(suffix)
-    return (rank,suffix)
+    meta=tuple([rank]+list(suffix))
+    log.debug('--> %r'%(meta,))
+    return meta
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 if __name__=='__main__':
+  import loggy
+  log=loggy.get_logger(facility='d',level='debug')
+  log.info('starting --------')
+
   try:
     import argparse
   except:
@@ -432,6 +454,7 @@ if __name__=='__main__':
   opt=ap.parse_args()
 
   if opt.test:
+    log.info('running tests')
     import doctest
     failed,_=doctest.testmod()
     if failed==0:
