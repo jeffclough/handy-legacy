@@ -1,6 +1,7 @@
 #!/usr/bin/env python2
 import logging,os,platform,sys
 import logging.handlers
+from logging import CRITICAL,DEBUG,ERROR,FATAL,INFO,NOTSET,WARN,WARNING
 
 # Get an ordered list of syslog facility names.
 syslog_facilities=logging.handlers.SysLogHandler.facility_names.items()
