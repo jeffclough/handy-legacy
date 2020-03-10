@@ -50,9 +50,9 @@ def get_logger(**kwargs):
   default.)
 
   The name argument defaults to the name of the currently running
-  program, but any string will do. Note that providing says the caller
-  wants to either create a new logger by that name or use a logger
-  that's already been set up with that name.
+  program, but any string will do. Note that providing one says the
+  caller wants to either create a new logger by that name or use a
+  logger that's already been set up with that name.
 
   The logfmt string sets the format of the logged messages. See the
   logging.LogRecord class for details.
