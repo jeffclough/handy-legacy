@@ -605,14 +605,95 @@ def gripe(msg,output=sys.stderr,progname=prog.name):
 
   die(msg,output,progname,rc=None)
 
-def pluralize(root,n,suffixes=('','s'),fmt=None):
-  """Given a string root, integer n, and tuple (singular, plural),
-  return root with the appropriate suffix for n attached."""
+def decline(root,n,suffixes=None,fmt=None):
+  """This is all about performing numeric declension in English, though
+  it's versatile enough to exceed that charter just a bit. For example,
+  decline('box',2) returns 'boxes'.
 
+  Arguments:
+    root     - The root of the word whose proper declension is to be
+               computed.
+    n        - The number of the item in question.
+    suffixes - An optional 2-element sequence of suffixes to be appended
+               to root, depending on n's value. The sequence must be in
+               (singular, plural) order. If no sequence is given, we'll
+               take a guess base on some very coarse rules about making
+               nouns plural in English. (If root is a verb, we're going
+               to guess wrong, so supply your own suffix values for
+               verbs.)
+    fmt      - A map-based format string that produces this function's
+               return value. The default format is simply "%(word)s",
+               but a "count" value is also available. For example:
+
+                   decline('rabbit',5)
+
+               simply returns 'rabbits', but
+
+                   decline('rabbit',5,fmt='%(count)d %(word)s')
+
+               returns '5 rabbits'.
+  
+  >>> decline('gram',5)
+  'grams'
+  >>> decline('gram',1)
+  'gram'
+  >>> decline('gram',0)
+  'grams'
+  >>> decline('tree',2)
+  'trees'
+  >>> decline('bush',2)
+  'bushes'
+  >>> decline('bench',2)
+  'benches'
+  >>> decline('bunny',1,fmt='%(count)d %(word)s')
+  '1 bunny'
+  >>> decline('bunny',2,fmt='%(count)d %(word)s')
+  '2 bunnies'
+  >>> decline('',5,suffixes=('person','people'))
+  'people'
+  >>> decline('',1,suffixes=('person','people'))
+  'person'
+  >>> decline('',0,suffixes=('person','people'))
+  'people'
+  >>> decline('gram',5,fmt='%(count)d %(word)s')
+  '5 grams'
+  >>> decline('gram',1,fmt='%(count)d %(word)s')
+  '1 gram'
+  >>> decline('gram',0,fmt='%(count)d %(word)s')
+  '0 grams'
+  >>> decline('pe',5,suffixes=('rson','ople'),fmt='%(count)d %(word)s')
+  '5 people'
+  >>> decline('pe',1,suffixes=('rson','ople'),fmt='%(count)d %(word)s')
+  '1 person'
+  >>> decline('pe',0,suffixes=('rson','ople'),fmt='%(count)d %(word)s')
+  '0 people'
+  >>> decline('pe',5,suffixes=('rson','ople'),fmt='%(word)s (%(count)d)')
+  'people (5)'
+  """
+
+  # Return an empty string if that's what we've been given for a root value.
+  if not root and not suffixes:
+    return ''
+  # If this isn't a string value, make it one or raise an exception.
+  if not isinstance(root,basestring):
+    try:
+      root=str(root)
+    except:
+      raise TypeError("Value %r is not a string and cannot be made into one."%(root,))
+  # If the caller supplied no suffixes, take a guess.
+  if suffixes==None:
+    if any([root.endswith(x) for x in ('s','sh','ch','x')]):
+      suffixes=('','es')
+    elif len(root)>=2 and root[-1]=='y' and root[-2] not in 'aeiou':
+      suffixes=('y','ies')
+      root=root[:-1]
+    else:
+      suffixes=('','s')
+  # Apply the suffix to the root.
   s=root+suffixes[n!=1]
-  if fmt:
-    return fmt%(n,s)
-  return s
+  if not fmt:
+    fmt='%(word)s'
+  return fmt%dict(word=s,count=n)
 
 class Spinner(object):
   """Instantiate this class with any sequence, the elements of which
