@@ -23,6 +23,38 @@ def get_log_level_by_name(level):
       return logging._levelNames[L]
   raise ValueError,'bad log level value: %r'%(level,)
 
+def log_lines(log,level,data):
+  """Log individual lines at the given log level. If data is a string,
+  each line is logged individually. If it is a non-string sequence or an
+  iterable of some kind, each entry will be be logged."""
+
+  def line_iter(s):
+    """This iterator facilitates stepping through each line of a multi-
+    line string without having to use '\n'.split()."""
+
+    i=0
+    n=len(s)
+    while i<n:
+      j=s.find('\n',i)
+      if j<0:
+        yield s[i:]
+        j=n
+      else:
+        yield s[i:j]
+        j+=1
+      i=j
+
+  if isinstance(level,basestring):
+    level=get_log_level_by_name(level)
+  if isinstance(data,basestring):
+    for l in line_iter(data):
+      log.log(level,l)
+  else:
+    for l in data:
+      if not isinstance(l,basestring):
+        l=str(l)
+      log.log(level,l)
+
 def get_logger(**kwargs):
   """Return the default logging object (if facility==None), or set up a
   new logger in any other case, and return that. Keyword arguments and
