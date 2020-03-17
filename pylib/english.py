@@ -1,264 +1,342 @@
 #!/usr/bin/env python
 
+"""
+This module makes outputting sensible, correct english sentences much
+more practical. For instance, as programmers, it's way too easy to write
+code of this form:
 
-__all__=['Rule','Suffix','Declension','NounDeclension','VerbDeclension']
-import sys
+  print "Found %d new customers this week"%new_cust
 
-try:
-  # We might need to use a namedtuple under Python versions < 2.6.
-  from collections import namedtuple
-  Rule=namedtuple('Rule','test suffix')
-  Suffix=namedtuple('Suffix','singular plural replace')
-except:
-  # Once we know what the above namedtuples should look like, generate
-  # their definitions under Python 2.7 and paste in here. For now, we'll
-  # simply re-raise the exception.
-  raise
+The problem is when new_cust is 1, right? And we're often apathetic
+enough to take a "that's good enough" attitude about this kind of thing
+because we don't want to write code like this:
 
- # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+  if dcount==1:
+    print "We snipped 1 dog's tail this week."
+  else:
+    print "We snipped %d dogs' tails this week."
 
-class Declension(object):
+But what if we could do it this way instead:
 
-  @classmethod
-  def findSuffixFor(cls,root):
-    """Return the appropriate Suffix object for this root word. If no
-    matching rule is found, return the last rule defined for this
-    class."""
+  print "We snipped %s this week"%nounf('dog',dcount,'tail')
 
-    # Get the Suffix structure to express singular and plural forms for root.
-    suffix=cls._number_rules[-1].suffix
-    for r in cls._number_rules:
-      if r.test(root):
-        if hasattr(r.suffix,'__call__'):
-          suffix=r.suffix(root)
-        else:
-          suffix=r.suffix
+or
+
+  print "Found %s this week"%nounf('customer'%new_cust,fmt="%(count)d new %(noun)s")
+
+That's simple enough to do that even crusty old programmers (like me)
+might find themselves inclined to write code that outputs more standard
+english.
+
+That's the idea behind this module. I think we (lazy) programmers would
+be happy to write better code if it were just easier.
+
+Most of this module is linguistic "internals." See the global functions
+at the bottom for the practical part of the documentation.
+"""
+
+class Suffixer(object):
+  """This is mostly a base class that provides only the most general
+  functionality.
+
+  Think of Suffixer (and its derivatives) instances as rules that know
+  1) how to reconize when a given word is suitable for the rule, and 2)
+  how and when to apply either the singular or plural suffix to that
+  word, depending on a given count. For example, here's a very simple
+  rule set that will work on a surprising range of english nouns:
+
+    rules=[
+      Suffix('','es',
+        test=lambda s: any([
+          s.endswith(e) for e in ('s','sh','ch','x')
+      ])),
+      Suffix('y','ies',replace=-1,
+        test=lambda s: len(s)>2 and s[-1]=='y' and s[-2] not in 'aeiou'
+      ),
+      Suffix('','s'),
+    ]
+
+  Notice how the replace argument to Suffixer's constructor is used in
+  rules[1]. The -1 value indicates that whatever suffix is applied to the
+  root, should replace the last character of the given root. This is
+  helpful for pluralizing "penny" to "pennies".
+
+  Notice also that there's no "test" function for that last suffixing
+  rule. That means that its willing to be applied to any word you give
+  it. (And that's why it comes last.)
+
+  You might apply this list of suffixing rules to a given noun like
+  this:
+
+    noun="cow"
+    count=5
+    for r in rules:
+      if r.test(noun):
+        word=r(noun,count)
         break
-    return suffix
+    print word
 
-  @classmethod
-  def format(cls,root,count,fmt="%(n)d %(w)s"):
+  The result is to print the word, "cows" because the first matching
+  rule was rule[2], and there were 5 cows. But if you change the noun
+  in the above example to "church", you'll see "churches" printed
+  because "church" matches the conditions of rule[0].
 
-    word=cls.decline(root,count)
-    return fmt%(dict(w=word,n=count))
+  It's easy (and typical) to wrap all this in a convenient function, and
+  maybe subclass Suffixer for special parts of speech, like nouns and
+  verbs.
 
-  @classmethod
-  def decline(root,count,suffixes=None):
-    """Given a number in root, return the proper English declension of
-    the word in the root argument. If a suffixes argument is given, it
-    MUST be a sequence where the first item is the singular suffix and
-    the second is the plural suffix"""
+  The point of Suffixer is to provide a way to express suffixing rules
+  in a way that can be specialized and extended to particular parts of
+  speech in helpful ways. For instance NounSuffixer lets the caller say
+  whether the suffixed root should be expressed possessively."""
 
- # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-#
-# Set up some rules for "pluralizing" nouns.
-#
+  def __init__(self,singular,plural,replace=None,test=None):
+    self.singular=singular
+    self.plural=plural
+    self.replace=replace
+    # Ignore the caller's test function if we already have a test() method.
+    if not hasattr(self,'test'):
+      if test==None:
+        self.test=lambda s:True
+      else:
+        self.test=test
 
-#
-# These words don't pluralize according to "the rules." Feel free to add
-# your own. Use this as a template:
-#
-#   Declension.NounDeclension._irregular_plurals['some_word']=Suffix(...)
-#
-# For example, a helpful Suffix instance for "index" would be:
-#
-#   Suffix('index','indices',-6)
-#
-# _irregular_plurals[word] --> Suffix instance for that word.
-#
-_irregular_plurals=dict([(s,Suffix(s,p,-len(s))) for s,p in (
-  ('alumnus','alumni'),
-  ('appendix','appendices'),
-  ('buffalo','buffalo'),
-  ('cactus','cacti'),
-  ('child','children'),
-  ('cod','cod'),
-  ('deer','deer'),
-  ('die','dice'),
-  ('fish','fish'),
-  ('focus','foci'),
-  ('foot','feet'),
-  ('fungus','fungi'),
-  ('goose','geese'),
-  ('index','indices'),
-  ('louse','lice'),
-  ('man','men'),
-  ('moose','moose'),
-  ('mouse','mice'),
-  ('nucleus','nuclei'),
-  ('octopus','octopi'),
-  ('ox','oxen'),
-  ('person','people'),
-  ('quail','quail'),
-  ('radius','radii'),
-  ('sheep','sheep'),
-  ('shrimp','shrimp'),
-  ('swine','swine'),
-  ('tooth','teeth'),
-  ('trout','trout'),
-  ('vortex','vortices'),
-  ('woman','women'),
-)])
-del s,p # Don't leave these lying around.
+  def __call__(self,root,count):
+    "Return our root word suffixed appropriately for count's value."
 
-_number_rules_for_nouns=[
-  # Check for irregular cases first.
-  Rule(
-    (lambda s: s in _irregular_plurals),
-    lambda s: _irregular_plurals[s]
-  ),
-  # Words ending with "is" are often pluralised by replacing that with "es".
-  Rule(
-    (lambda s: s.endswith('is')),
-    Suffix('is','es',-2)
-  ),
-  # There are a few word-endings that call for "es" plural suffixes.
-  Rule(
-    (lambda s: any([s.endswith(ending) for ending in ('s','sh','ch','x')])),
-    Suffix('','es',None)
-  ),
-  # Words ending with a consonant followed by "y" generally have "ies" plural suffixes.
-  Rule(
-    (lambda s: len(s)>2 and s[-1]=='y' and s[-2] not in 'aeiou'),
-    Suffix('y','ies',-1)
-  ),
-  # Words ending with "f" or "fe" usually get special treatment.
-  Rule (
-    (lambda s: s.endswith('f')),
-    Suffix('f','ves',-1)
-  ),
-  Rule (
-    (lambda s: s.endswith('fe')),
-    Suffix('fe','ves',-2)
-  ),
-  # Words ending with "um" are often pluralised by replacing that with "a".
-  Rule(
-    (lambda s: s.endswith('um')),
-    Suffix('um','a',-2)
-  ),
-  # For everything else, we'll guess that a simple "s" suffix will pluralize this noun.
-  Rule(
-    (lambda s: True),
-    Suffix('','s',None)
-  ),
-]
-
- # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-class NounDeclension(Declension):
-  """
-  >>> noun=NounDeclension()
-  >>> noun.decline('alumnus')
-  'alumnus'
-  >>> noun.decline('Alumnus')
-  'Alumnus'
-  >>> noun.decline('alumnus',5)
-  'alumni'
-  >>> noun.decline('Alumnus',5)
-  'Alumni'
-  >>> noun.decline('index',5)
-  'indices'
-  >>> noun.decline('Index',5)
-  'Indices'
-  >>> noun.decline('watch',1)
-  'watch'
-  >>> noun.decline('watch',2)
-  'watches'
-  >>> noun.decline('penny',1)
-  'penny'
-  >>> noun.decline('penny',2)
-  'pennies'
-  >>> noun.decline('elf',1)
-  'elf'
-  >>> noun.decline('elf',2)
-  'elves'
-  >>> noun.decline('life',1)
-  'life'
-  >>> noun.decline('life',2)
-  'lives'
-  >>> noun.decline('axis',1)
-  'axis'
-  >>> noun.decline('axis',2)
-  'axes'
-  >>> noun.decline('curiculum',1)
-  'curiculum'
-  >>> noun.decline('curiculum',2)
-  'curicula'
-  >>> noun.decline('dog',1)
-  'dog'
-  >>> noun.decline('dog',2)
-  'dogs'
-  >>> noun.format('dog',5)
-  '5 dogs'
-  >>> noun.decline('cat',1,suffix=Suffix('n','p',-1))
-  'can'
-  >>> noun.decline('cat',2,suffix=Suffix('n','p',-1))
-  'cap'
-  >>> "I have %s."%noun.format('fish',1)
-  'I have 1 fish.'
-  >>> "I have %s."%noun.format('fish',2)
-  'I have 2 fish.'
-  >>> "I have %s."%noun.format('ox',1)
-  'I have 1 ox.'
-  >>> "I have %s."%noun.format('ox',2)
-  'I have 2 oxen.'
-  >>> "I have %s."%noun.format('emu',1)
-  'I have 1 emu.'
-  >>> "I have %s."%noun.format('emu',0)
-  'I have 0 emus.'
-  """
-
-  _number_rules=_number_rules_for_nouns
-
-  @classmethod
-  def decline(cls,root,count=1,possessive=False,suffix=None):
-    # Don't waste our time on an empty string (or None).
+    # Don't waste our time on an emptry string (or None):
     if not root:
       return ''
-
-    # Validate root's type.
+    # Make sure our root is a string.
     if not isinstance(root,basestring):
       try:
         root=str(root)
       except:
-        super_cls=super(NounDeclension,cls)
-        raise ValueError("%s.%s.decline() requires its first argument to be a string or an object that can be made into one, not %r (of type %s)."%(super_cls.__name__,cls.__name__,root,type(root)))
-
-    # Remember our plurality.
-    plural=count!=1
-
-    # If the caller didn't give us a Suffix structure to apply, take a guess at one.
-    if suffix==None:
-      suffix=cls.findSuffixFor(root.lower()) # The lower-case here is important.
-
-    # Construct our noun, assuming it's not possessive.
-    if suffix.replace==None:
-      word=root+suffix[count!=1]
+        raise ValueError('%r (type=%s) is not a string and cannot be converted to a string.'%(root,type(root)))
+        
+    # Use count to determine which suffix to use.
+    if count==1:
+      suffix=self.singular
     else:
-      word=root[:suffix.replace]+suffix[plural]
+      suffix=self.plural
+    # Apply the suffix to our root.
+    if self.replace==None:
+      word=root+suffix
+    else:
+      word=root[:self.replace]+suffix
 
-    # Match capitalization 
+    return self.matchCapitalization(root,word)
+
+  def matchCapitalization(self,root,word):
     if root[0].isupper() and not word[0].isupper():
       word=word[0].upper()+word[1:]
+    return word
 
-    # Plural possessives (usually
+class NounSuffixer(Suffixer):
 
+  def __init__(self,singular,plural,replace=None,test=None):
+    super(NounSuffixer,self).__init__(singular,plural,replace,test)
+
+  def __call__(self,root,count,pos=False):
+    """Return our root word suffixed appropriate for count's value and
+    approphized correctly to make it possessive if "pos" is True."""
+
+    # Let our superclass do any pluralization we might need.
+    word=super(NounSuffixer,self).__call__(root,count)
+    if not word:
+      return word
+
+    if pos:
+      # Apply "Chicago Manual of Style, 17th edition".
+      if count==1:
+        # Singular nouns are posessified with "'s", regardless of how they end.
+        word+="'s"
+      else:
+        # With plural possessives, it does depand on the word ending.
+        if word[-1]=='s':
+          word+="'"
+        else:
+          word+="'s"
 
     return word
 
- # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+class IrregularNounSuffixer(NounSuffixer):
 
-class VerbDeclension(Declension):
-  pass
+  # Make a map of irregularly pluralized nouns.
+  _irregular_noun_plurals=dict((
+    ('alumnus','alumni'),
+    ('appendix','appendices'),
+    ('buffalo','buffalo'),
+    ('cactus','cacti'),
+    ('child','children'),
+    ('cod','cod'),
+    ('deer','deer'),
+    ('die','dice'),
+    ('fish','fish'),
+    ('focus','foci'),
+    ('foot','feet'),
+    ('fungus','fungi'),
+    ('goose','geese'),
+    ('index','indices'),
+    ('louse','lice'),
+    ('man','men'),
+    ('moose','moose'),
+    ('mouse','mice'),
+    ('nucleus','nuclei'),
+    ('octopus','octopi'),
+    ('ox','oxen'),
+    ('person','people'),
+    ('quail','quail'),
+    ('radius','radii'),
+    ('sheep','sheep'),
+    ('shrimp','shrimp'),
+    ('swine','swine'),
+    ('tooth','teeth'),
+    ('trout','trout'),
+    ('vortex','vortices'),
+    ('woman','women'),
+  ))
+
+  def __init__(self):
+    super(IrregularNounSuffixer,self).__init__('','',replace=None,test=None)
+
+  def __call__(self,root,count,pos=False):
+    if count==1:
+      word=root
+    else:
+      word=self._irregular_noun_plurals[root.lower()]
+    return self.matchCapitalization(root,word)
+
+  def test(self,word):
+    return word.lower() in self._irregular_noun_plurals
+
+_noun_suffixing_rules=[
+  # Check for irregular cases first. The rules below don't apply to these.
+  IrregularNounSuffixer(),
+
+  # Words ending with "is" are often pluralised by replacing that with "es".
+  NounSuffixer('is','es',-2,lambda s: s.endswith('is')),
+
+  # There are a few word-endings that call for "es" plural suffixes.
+  NounSuffixer('','es',None,lambda s: any([s.endswith(ending) for ending in ('s','sh','ch','x')])),
+
+  # Words ending with a consonant followed by "y" generally have "ies" plural suffixes.
+  NounSuffixer('y','ies',-1,lambda s: len(s)>2 and s[-1]=='y' and s[-2] not in 'aeiou'),
+
+  # Words ending with "f" or "fe" usually get special treatment.
+  NounSuffixer('f','ves',-1,lambda s: s.endswith('f')),
+  NounSuffixer('fe','ves',-2,lambda s: s.endswith('fe')),
+
+  # Words ending with "um" are often pluralised by replacing that with "a".
+  NounSuffixer('um','a',-2,lambda s: s.endswith('um')),
+
+  # For everything else, we'll guess that a simple "s" suffix will pluralize this noun.
+  NounSuffixer('','s',None),
+]
+
+def nouner(root,count,pos=False):
+  """Return the form of the root word appropriate to the given count and
+  posessiveness."""
+
+  for r in _noun_suffixing_rules:
+    if r.test(root):
+      word=r(root,count,pos)
+      break
+  return word
+
+def nounf(root,count,pos=False,fmt=None):
+  """This function is useful for constructing noun phrases like:
+
+      "1 person's hat"
+      "5 people's hats"
+
+  Return the formatted string containing nouner(root,count,pos) as
+  "word", the count as "count", as nouner(pos,count) as "pos" if it
+  evaluates to a true value.
+
+  If pos is some false value, fmt defaults to "%(count)d %(noun)s".
+  Otherwise, fmt defaults to "%(count)d %(noun)s %(pos)s", and pos is
+  set to nouner(pos,count)."""
+
+  noun=nouner(root,count,pos)
+  if fmt==None:
+    if pos:
+      pos=nouner(pos,count)
+      fmt="%(count)d %(noun)s %(pos)s"
+    else:
+      fmt="%(count)d %(noun)s"
+  return fmt%(locals())
 
 if __name__=='__main__':
   import doctest,sys
-  from pprint import pprint
+
+  def tests():
+    """
+    >>> nouner('alumnus',1)
+    'alumnus'
+    >>> nouner('Alumnus',1)
+    'Alumnus'
+    >>> nouner('alumnus',5)
+    'alumni'
+    >>> nouner('Alumnus',5)
+    'Alumni'
+    >>> nouner('index',5)
+    'indices'
+    >>> nouner('Index',5)
+    'Indices'
+    >>> nouner('watch',1)
+    'watch'
+    >>> nouner('watch',2)
+    'watches'
+    >>> nouner('penny',1)
+    'penny'
+    >>> nouner('penny',2)
+    'pennies'
+    >>> nouner('elf',1)
+    'elf'
+    >>> nouner('elf',2)
+    'elves'
+    >>> nouner('life',1)
+    'life'
+    >>> nouner('life',2)
+    'lives'
+    >>> nouner('axis',1)
+    'axis'
+    >>> nouner('axis',2)
+    'axes'
+    >>> nouner('curiculum',1)
+    'curiculum'
+    >>> nouner('curiculum',2)
+    'curicula'
+    >>> nouner('dog',1)
+    'dog'
+    >>> nouner('dog',2)
+    'dogs'
+    >>> nounf('dog',5)
+    '5 dogs'
+    >>> NounSuffixer('n','p',-1)('cat',1)
+    'can'
+    >>> NounSuffixer('n','p',-1)('cat',2)
+    'cap'
+    >>> "I have %s."%nounf('fish',1)
+    'I have 1 fish.'
+    >>> "I have %s."%nounf('fish',2)
+    'I have 2 fish.'
+    >>> "I have %s."%nounf('ox',1)
+    'I have 1 ox.'
+    >>> "I have %s."%nounf('ox',2)
+    'I have 2 oxen.'
+    >>> "I have %s."%nounf('emu',1)
+    'I have 1 emu.'
+    >>> "I have %s."%nounf('emu',0)
+    'I have 0 emus.'
+    >>> nounf('dog',1,'tail')
+    "1 dog's tail"
+    >>> nounf('dog',2,'tail')
+    "2 dogs' tails"
+    """
 
   t,f=doctest.testmod()
   if f>0:
     sys.exit(1)
+
