@@ -267,6 +267,41 @@ def nounf(root,count,pos=False,fmt=None):
       fmt="%(count)d %(noun)s"
   return fmt%(locals())
 
+def join(seq,con='and',sep=None):
+  """Return the values in the given sequence as an english phrase,
+  employing the given conjunction and seaparator when needed.
+  
+  The conjunction defaults to 'and'. The separator defaults to ','
+  except when a comma is found in any sequence item, in which case it
+  defaults to ';'. You can override this default logic by providing your
+  own seqarator character.
+
+  An empty sequence returns an empty string. A one-item sequence simply
+  returns that item. A two-item sequence, returns a string of the form:
+
+      "1 <con> 2"
+
+  A sequence with more than two items, returns a string of the form:
+  
+      "1, 2, ..., <con> N"
+      
+  A separator (',' by default) *always* precedes the conjunction in such
+  a case. We are not barbarians."""
+
+  if not isinstance(seq,(dict,list,tuple)):
+    if isinstance(seq,basestring):
+      raise TypeError("%s.join() operates on a sequence. It's not intended for a single string."%__name__)
+    try:
+      seq=tuple(seq)
+    except:
+      raise TypeError("%s.join() requires a sequnece or something that can be turned into one."%__name__)
+  if len(seq)==0: return ''
+  if len(seq)==1: return str(seq[0])
+  if len(seq)==2: return "%s %s %s"%(seq[0],con,seq[1])
+  if sep==None:
+    sep=',;'[any([',' in item for item in seq])]
+  return "%s%s %s"%(''.join(['%s%s '%(x,sep) for x in seq[:-1]]),con,seq[-1])
+
 if __name__=='__main__':
   import doctest,sys
 
@@ -334,6 +369,38 @@ if __name__=='__main__':
     "1 dog's tail"
     >>> nounf('dog',2,'tail')
     "2 dogs' tails"
+    >>> join(('',))
+    ''
+    >>> join(('this',))
+    'this'
+    >>> join(('this','that'))
+    'this and that'
+    >>> join(('this','that','the other'))
+    'this, that, and the other'
+    >>> join(('this','that','the other'),con='or')
+    'this, that, or the other'
+    >>> flag_colors=(
+    ...   ('red','white','blue'),
+    ...   ('green','red','white'),
+    ...   ('red','white'),
+    ... )
+    >>> flags=tuple([join(f) for f in flag_colors])
+    >>> join(flags[:2],con='or')
+    'red, white, and blue or green, red, and white'
+    >>> join(flags,con='or')
+    'red, white, and blue; green, red, and white; or red and white'
+    >>> flags=tuple(['(%s)'%join(f) for f in flag_colors])
+    >>> join(flags,con='or',sep=',')
+    '(red, white, and blue), (green, red, and white), or (red and white)'
+    >>> join('this is a mistake')
+    Traceback (most recent call last):
+      ...
+    TypeError: __main__.join() operates on a sequence. It's not intended for a single string.
+    >>> x=Suffixer(('this is also','a mistake'),None)
+    >>> join(x)
+    Traceback (most recent call last):
+      ...
+    TypeError: __main__.join() requires a sequnece or something that can be turned into one.
     """
 
   t,f=doctest.testmod()
