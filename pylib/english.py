@@ -22,7 +22,7 @@ But what if we could do it this way instead:
 
 or
 
-  print "Found %s this week"%nounf('customer'%new_cust,fmt="%(count)d new %(noun)s")
+  print "Found %s this week"%nounf('customer',new_cust,fmt="%(count)d new %(noun)s")
 
 That's simple enough to do that even crusty old programmers (like me)
 might find themselves inclined to write code that outputs more standard
