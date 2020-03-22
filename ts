@@ -53,8 +53,8 @@ op.add_option('--time-format',dest='time_format',action='store',default='%Y%m%d_
 op.add_option('-n','--dry-run',dest='dry_run',action='store_true',default=False,help="Don't actually rename any files. Only output the new name of each file as it would be renamed.")
 op.add_option('--offset',dest='offset',action='store',default=None,help="Formatted as '[+|-]H:M' or '[+|-]S', where H is hours, M is minutes, and S is seconds, apply the given offset to the time.")
 op.add_option('-c','--copy',dest='copy',action='store_true',default=False,help="Copy the file rather than renaming it.")
-op.add_option('-s','--show-me',dest='showme',action='store_true',default=False,help="Only output the timestamped filename of the given file(s). No file is actually renamed or copied. The current time is used for any file that does not exist.")
-op.add_option('-q','--quiet',dest='quiet',action='store_true',default=False,help="Perform all renaming or copying silently. This option does not silence the --age or the -s (--show-me) option.")
+op.add_option('--filename',dest='filename_only',action='store_true',default=False,help="Only output the timestamped filename of the given file(s). No file is actually renamed or copied. The current time is used for any file that does not exist.")
+op.add_option('-q','--quiet',dest='quiet',action='store_true',default=False,help="Perform all renaming or copying silently. This option does not silence the --age or the --filename option.")
 op.add_option('--utc',dest='utc',action='store_true',default=False,help="Express all times as UTC (no time zone at all).")
 opt,args=op.parse_args()
 if opt.offset:
@@ -93,8 +93,8 @@ if args:
         else:
           t=os.stat(f).st_mtime
       except (IOError,OSError),e:
-        if e.errno==2 and opt.showme:
-          # Use the current time if we're in "show-me" mode and there's no such flie.
+        if e.errno==2 and opt.filename_only:
+          # Use the current time if we're in "--filename" mode and there's no such flie.
           t=int(time.time())
         else:
           raise
@@ -120,7 +120,7 @@ if args:
         # Re-attach the file extension to our original and new filenames.
         f+=ext
         filename+=ext
-      if opt.showme:
+      if opt.filename_only:
         print filename
       elif opt.dry_run:
         # Just output the new name of the file.
