@@ -1,6 +1,6 @@
 #!/usr/bin/env python2
 
-import optparse,os,re,shutil,stat,sys,time
+import gzip,optparse,os,re,shutil,stat,sys,time
 
 # By defalt, files with any of these extensions keep their extension when
 # they are renamed with a timestamp.
@@ -38,25 +38,48 @@ else:
         return False
     return True
 
+time_unit_divisors=dict(
+  seconds=1,
+  minutes=60,
+  hours=3600,
+  days=86400,
+  weeks=604800
+)
+
+def time_unit_divisor(unit):
+  u=[u for u in time_unit_divisors if u.startswith(unit)]
+  if u:
+    u=u[0]
+  else:
+    return None
+  return time_unit_divisors[u]
+
 op=optparse.OptionParser(
   usage='Usage: %prog [OPTIONS] filename ...',
-  description='''This command renames the given file(s) to include the date and
-time of each respective file. It renames filename to filename.YYYYMMDD_HHMMSS.
-If -c (--copy) is given, the file is copied rather than renamed. If no
-argument is given, the current (or offset) time is simply written to
-standard output.'''
+  description='''This command renames or coppies, and optionally compresses,
+  the given file(s) to include the date and time of each respective file. This
+  is very handy if you need to rotate log files or save a copy of a script
+  before modifying it. File permissions and times are preserved, even when
+  copying and/or compressing.'''
 )
-op.add_option('--age',dest='age',action='store_true',default=False,help="Report the age of the file in seconds. No copying or renaming is performed.")
-op.add_option('-t','--time',dest='time',choices=('created','accessed','modified'),default='modified',help="Choose which time to use for the timestamp. The choices are 'created', 'accessed', or 'modified'. (default: %default)")
-op.add_option('--format',dest='format',action='store',default='%(filename)s.%(time)s',help="Specify a new format for a time-stamped filename. (default: %default)")
-op.add_option('--time-format',dest='time_format',action='store',default='%Y%m%d_%H%M%S',help="Specify the format for expressing a file's timestamp. (default: %default)")
-op.add_option('-n','--dry-run',dest='dry_run',action='store_true',default=False,help="Don't actually rename any files. Only output the new name of each file as it would be renamed.")
-op.add_option('--offset',dest='offset',action='store',default=None,help="Formatted as '[+|-]H:M' or '[+|-]S', where H is hours, M is minutes, and S is seconds, apply the given offset to the time.")
+op.add_option('--age',metavar='UNITS',dest='age',action='store',default=None,help="Report the age of the file in the given UNITS. No copying or renaming is performed. If no filename is given on the command line, simply output the current (or offset) time in the given UNITS to standard output. UNITS is one of 'seconds', 'minutes', 'hours', 'days', or 'weeks' (or s, m, h, d, or w, or anywhere in between).")
 op.add_option('-c','--copy',dest='copy',action='store_true',default=False,help="Copy the file rather than renaming it.")
 op.add_option('--filename',dest='filename_only',action='store_true',default=False,help="Only output the timestamped filename of the given file(s). No file is actually renamed or copied. The current time is used for any file that does not exist.")
+op.add_option('--format',dest='format',action='store',default='%(filename)s.%(time)s',help="Specify a new format for a time-stamped filename. (default: %default)")
+op.add_option('-n','--dry-run',dest='dry_run',action='store_true',default=False,help="Don't actually rename any files. Only output the new name of each file as it would be renamed.")
+op.add_option('--offset',dest='offset',action='store',default=None,help="Formatted as '[+|-]H:M' or '[+|-]S', where H is hours, M is minutes, and S is seconds, apply the given offset to the time.")
 op.add_option('-q','--quiet',dest='quiet',action='store_true',default=False,help="Perform all renaming or copying silently. This option does not silence the --age or the --filename option.")
+op.add_option('-t','--time',dest='time',choices=('created','accessed','modified'),default='modified',help="Choose which time to use for the timestamp. The choices are 'created', 'accessed', or 'modified'. (default: %default)")
+op.add_option('--time-format',dest='time_format',action='store',default='%Y%m%d_%H%M%S',help="Specify the format for expressing a file's timestamp. (default: %default)")
 op.add_option('--utc',dest='utc',action='store_true',default=False,help="Express all times as UTC (no time zone at all).")
+op.add_option('-z',dest='zip',action='store_true',default=False,help="The new file is compressed with gzip. This may be used with or without -c (--copy).")
 opt,args=op.parse_args()
+if opt.age:
+  div=time_unit_divisor(opt.age)
+  if div==None:
+    print >>sys.stderr,'%s: Bad --age argument: %s'%(prog,opt.age)
+    sys.exit(1)
+  opt.age=div
 if opt.offset:
   # Convert our --offset argument to positive or negative seconds.
   m=re.match(r'(?P<sign>[-+])?((?P<hours>\d+):(?P<minutes>\d+)|(?P<seconds>\d+))$',opt.offset)
@@ -102,7 +125,7 @@ if args:
       t+=utc_offset
       t+=opt.offset
       if opt.age:
-        print int(time.time()-t+utc_offset)
+        print int(time.time()-t+utc_offset)/opt.age
         continue
       # Format the time as a string.
       t=time.strftime(opt.time_format,time.localtime(t))
@@ -120,6 +143,8 @@ if args:
         # Re-attach the file extension to our original and new filenames.
         f+=ext
         filename+=ext
+      if opt.zip:
+        filename+='.gz'
       if opt.filename_only:
         print filename
       elif opt.dry_run:
@@ -134,11 +159,28 @@ if args:
           sys.stderr.flush()
           continue
         else:
-          if opt.copy:
+          if opt.copy or opt.zip:
             # Copy f to filename.
             if not opt.quiet:
-              print "'%s' => '%s'"%(f,filename)
-            shutil.copy2(f,filename)
+              print "'%s' %s> '%s'"%(f,'-='[opt.copy],filename)
+            try:
+              src=file(f,'rb')
+              if opt.zip:
+                dst=gzip.GzipFile(filename,'wb')
+              else:
+                dst=file(filename,'wb')
+              shutil.copyfileobj(src,dst)
+              dst.close()
+              src.close()
+              shutil.copystat(f,filename) # Copy file perms and times.
+              if not opt.copy:
+                os.unlink(f)
+            except IOError as e:
+              sys.stdout.flush()
+              sys.stderr.write('%s: %s\n'%(prog,e))
+              sys.stderr.flush()
+            except:
+              raise
           else:
             # Rename f to filename.
             if not opt.quiet:
@@ -153,6 +195,6 @@ if args:
 else:
   # We're just outputting the current (or offset) time.
   if opt.age:
-    print int(time.time())+opt.offset+utc_offset
+    print (int(time.time())+opt.offset+utc_offset)/opt.age
   else:
     print time.strftime(opt.time_format,time.localtime(time.time()+opt.offset+utc_offset))
