@@ -1,5 +1,28 @@
 #!/usr/bin/env python2
 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+# This script needs to operate across a wide range of Python versions as far
+# back as 2.4 (yikes!), which means that its exception handling syntax needs to
+# avoid either of these forms:
+#
+#     # The old way.
+#     except Exception,e:
+# or
+#     # The new way.
+#     except Exception as e:
+#
+# The solution I've chosen (shamelessly ripping it of from a web search) is:
+#
+#     # The version-indifferent way.
+#     except Exception:
+#       _,e,_=sys.exc_info()
+#
+# This is a Python-version-indifferent form of exception handling that lets me
+# run on even ancient versions where I need to.
+#
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 import gzip,optparse,os,re,shutil,stat,sys,time
 
 # By defalt, files with any of these extensions keep their extension when
@@ -115,7 +138,8 @@ if args:
           t=os.stat(f).st_atime
         else:
           t=os.stat(f).st_mtime
-      except (IOError,OSError),e:
+      except (IOError,OSError):
+        _,e,_=sys.exc_info()
         if e.errno==2 and opt.filename_only:
           # Use the current time if we're in "--filename" mode and there's no such flie.
           t=int(time.time())
@@ -175,7 +199,8 @@ if args:
               shutil.copystat(f,filename) # Copy file perms and times.
               if not opt.copy:
                 os.unlink(f)
-            except IOError as e:
+            except IOError:
+              _,e,_=sys.exc_info()
               sys.stdout.flush()
               sys.stderr.write('%s: %s\n'%(prog,e))
               sys.stderr.flush()
@@ -186,7 +211,8 @@ if args:
             if not opt.quiet:
               print "'%s' -> '%s'"%(f,filename)
             os.rename(f,filename)
-  except (IOError,OSError),e:
+  except (IOError,OSError):
+    _,e,_=sys.exc_info()
     if e.filename==None:
       print >>sys.stderr,'%s: %s'%(prog,e.strerror)
     else:
