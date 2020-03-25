@@ -80,22 +80,22 @@ def time_unit_divisor(unit):
 op=optparse.OptionParser(
   usage='Usage: %prog [OPTIONS] filename ...',
   description='''This command renames or coppies, and optionally compresses,
-  the given file(s) to include the date and time of each respective file. This
-  is very handy if you need to rotate log files or save a copy of a script
-  before modifying it. File permissions and times are preserved, even when
-  copying and/or compressing.'''
+the given file(s) to include the date and time of each respective file. This is
+very handy for rotating log files or saving a copy of a script before modifying
+it. File permissions and times are preserved, even when copying and/or
+compressing.'''
 )
 op.add_option('--age',metavar='UNITS',dest='age',action='store',default=None,help="Report the age of the file in the given UNITS. No copying or renaming is performed. If no filename is given on the command line, simply output the current (or offset) time in the given UNITS to standard output. UNITS is one of 'seconds', 'minutes', 'hours', 'days', or 'weeks' (or s, m, h, d, or w, or anywhere in between).")
-op.add_option('-c','--copy',dest='copy',action='store_true',default=False,help="Copy the file rather than renaming it.")
+op.add_option('-c','--copy',dest='copy',action='store_true',default=False,help="Copy the file rather than rename it.")
 op.add_option('--filename',dest='filename_only',action='store_true',default=False,help="Only output the timestamped filename of the given file(s). No file is actually renamed or copied. The current time is used for any file that does not exist.")
 op.add_option('--format',dest='format',action='store',default='%(filename)s.%(time)s',help="Specify a new format for a time-stamped filename. (default: %default)")
 op.add_option('-n','--dry-run',dest='dry_run',action='store_true',default=False,help="Don't actually rename any files. Only output the new name of each file as it would be renamed.")
 op.add_option('--offset',dest='offset',action='store',default=None,help="Formatted as '[+|-]H:M' or '[+|-]S', where H is hours, M is minutes, and S is seconds, apply the given offset to the time.")
-op.add_option('-q','--quiet',dest='quiet',action='store_true',default=False,help="Perform all renaming or copying silently. This option does not silence the --age or the --filename option.")
+op.add_option('-q','--quiet',dest='quiet',action='store_true',default=False,help="Perform all renaming or copying silently. This option does not silence the --age or the --filename options.")
 op.add_option('-t','--time',dest='time',choices=('created','accessed','modified'),default='modified',help="Choose which time to use for the timestamp. The choices are 'created', 'accessed', or 'modified'. (default: %default)")
 op.add_option('--time-format',dest='time_format',action='store',default='%Y%m%d_%H%M%S',help="Specify the format for expressing a file's timestamp. (default: %default)")
 op.add_option('--utc',dest='utc',action='store_true',default=False,help="Express all times as UTC (no time zone at all).")
-op.add_option('-z',dest='zip',action='store_true',default=False,help="The new file is compressed with gzip. This may be used with or without -c (--copy).")
+op.add_option('-z',dest='zip',action='store_true',default=False,help="The file is compressed with gzip after renaming or copying.")
 opt,args=op.parse_args()
 if opt.age:
   div=time_unit_divisor(opt.age)
