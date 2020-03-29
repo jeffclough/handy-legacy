@@ -6,7 +6,8 @@ from pprint import pprint
 # Put a little extra effort into finding our non-standard modules if needed.
 try:
   import ansi,loggy
-  from handy import die,decline,prog,Spinner
+  from english import nounf
+  from handy import die,prog,Spinner
 except:
   sys.path.insert(1,os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])),'pylib'))
   sys.path.insert(1,os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])),'lib','python'))
@@ -33,12 +34,16 @@ def neg_check(n):
 # parameter, and that's not a capability I can add with a wrapper.
 #
 
-def get_server_certificate_with_to(addr,ssl_version=ssl.PROTOCOL_SSLv3,ca_certs=None,timeout=None):
+def get_server_certificate_with_to(addr,ssl_version=ssl.PROTOCOL_SSLv23,ca_certs=None,timeout=None):
 
   """Retrieve the certificate from the server at the specified address,
   and return it as a PEM-encoded string. If 'ca_certs' is specified,
   validate the server cert against it. If 'ssl_version' is specified,
   use it in the connection attempt."""
+
+  # This *might* be a solution to the "No SNI provided; please fix your client."
+  # responses from Google's web services.
+  # https://github.com/boto/boto/commit/79142a02aa14ba74d66c5a8bf7daf2829892abf9
 
   if (ca_certs is not None):
     cert_reqs=ssl.CERT_REQUIRED
@@ -200,17 +205,17 @@ certs={}
 connections=threading.Semaphore(32) # Allow only up to 32 concurrent cert retrievals.
 
 # Create and start our threads.
-log.info("Starting retrieval of %s"%decline('certificate',len(opt.services),fmt='%(count)d %(word)s'))
+log.info("Starting retrieval of %s"%nounf('certificate',len(opt.services)))
 for service in opt.services:
   threading.Thread(name='%s:%s'%service,target=add_cert,args=(service,)).start()
 
 # Wait for all our threads (except the main thread) to finish.
 spinner=Spinner(Spinner.cylon,True)
 while threading.activeCount()>1:
-  sys.stderr.write('Waiting for %s to finish [%s] \r'%(decline('thread',threading.activeCount()-1,fmt='%(count)d %(word)s'),spinner()))
+  sys.stderr.write('Waiting for %s to finish [%s] \r'%(nounf('thread',threading.activeCount()-1),spinner()))
   time.sleep(0.1)
 sys.stderr.write((' '*(prog.term_width-1))+'\r')
-log.info("Finished retrieval of %s"%decline('certificate',len(opt.services),fmt='%(count)d %(word)s'))
+log.info("Finished retrieval of %s"%nounf('certificate',len(opt.services)))
 # Now that we've retrieved our certs in the order given to us, we'll sort
 # them alphabetically by hostname and numerically by port number.
 opt.services.sort()
@@ -246,14 +251,14 @@ if opt.warn!=None:
   if opt.format=='text':
     services=warnings.keys()
     services.sort(key=lambda s:warnings[s]['daysRemaining'])
-    print 'Certificates expiring in the next %s:'%decline('day',opt.warn,fmt='%(count)d %(word)s')
+    print 'Certificates expiring in the next %s:'%nounf('day',opt.warn)
     for s in services:
       h,p=s # Extract host and port from service s.
       info=warnings[s]['daysRemaining']
       if info==None:
         info=error_text('error (%s) after %0.3f seconds'%(warnings[s]['error'],warnings[s]['query_seconds']))
       else:
-        info=norm_text("%s "%decline('day',info,fmt='%(count)d %(word)s'))
+        info=norm_text("%s "%nounf('day',info))
         info+=warn_text('(%s)'%warnings[s]['notAfter'])
       ansi.paint(host_text,h,':',port_text,p,norm_text,' ',info)
       #print '%s: %s'%(s,info)

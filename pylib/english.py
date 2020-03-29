@@ -310,6 +310,37 @@ class IrregularNounSuffixer(NounSuffixer):
   def test(self,root):
     return root.lower() in irregular_noun_plurals
 
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# An subclass of str that ensures "Title Case."
+
+class TitleCase(str):
+  """A TitleCase value is just like a str value, but it gets title-cased
+  when it is created.
+  """
+
+  # Articles, conjunctions, and prepositions are always lower-cased, unless
+  # they are the first or last word of the title.
+  lc_words=set("""
+    a an the
+    and but nor or
+    is
+    about as at by circa for from in into of on onto than till to until unto via with
+  """.split())
+
+  def __new__(self,value=''):
+    """Capitalize each word in value unless it's TitleCase.lc_words,
+    unless it's the first or last word in the string. We ALWAYS
+    capitalize the first and last words."""
+
+    words=[w for w in value.lower().split() if w]
+    last=len(words)-1
+    for i in range(last+1):
+      if i in (0,last) or words[i] not in self.lc_words:
+        words[i]=words[i].capitalize()
+    return str.__new__(self,' '.join(words))
+
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Here begin some functions that wrap the classes above into something more
@@ -450,6 +481,21 @@ if __name__=='__main__':
 
   def tests():
     """
+    >>> TitleCase('')
+    ''
+    >>> TitleCase('a fine kettle of fish')
+    'A Fine Kettle of Fish'
+    >>> TitleCase('    another     fine     kettle     of     fish    ')
+    'Another Fine Kettle of Fish'
+    >>> t=TitleCase("to remember what's yet to come")
+    >>> t
+    "To Remember What's Yet to Come"
+    >>> t.split()
+    ['To', 'Remember', "What's", 'Yet', 'to', 'Come']
+    >>> str(type(t)).endswith(".TitleCase'>")
+    True
+    >>> TitleCase('from in into of on onto than till to')
+    'From in into of on onto than till To'
     >>> nouner('alumnus',1)
     'alumnus'
     >>> nouner('Alumnus',1)

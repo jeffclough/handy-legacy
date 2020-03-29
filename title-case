@@ -14,7 +14,7 @@ try:
 except:
   import argparse27 as argparse
 import os,sys
-from handy import TitleCase
+from english import TitleCase
 
 #
 # Handle the command line.

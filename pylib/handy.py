@@ -240,54 +240,6 @@ def positive_int(s):
     pass
   raise ValueError('%r is not a non-negative integer.'%s)
 
-class TitleCase(str):
-  """A TitleCase value is just like a str value, but it gets title-cased
-  when it is created.
-
-  >>> TitleCase('')
-  ''
-  >>> TitleCase('a fine kettle of fish')
-  'A Fine Kettle of Fish'
-  >>> TitleCase('    another     fine     kettle     of     fish    ')
-  'Another Fine Kettle of Fish'
-  >>> t=TitleCase("to remember what's yet to come")
-  >>> t
-  "To Remember What's Yet to Come"
-  >>> t.split()
-  ['To', 'Remember', "What's", 'Yet', 'to', 'Come']
-  >>> str(type(t)).endswith(".TitleCase'>")
-  True
-  """
-  
-  # Articles, conjunctions, and prepositions are always lower-cased, unless
-  # they are the first word of the title.
-  lc=set("""
-    a an the
-    and but nor or
-    is
-    about as at by circa for from in into of on onto than till to until unto via with
-  """.split())
-
-  def __new__(cls,value=''):
-    # Divide this string into words, and then process it that way.
-    words=[w for w in value.lower().split() if w]
-
-    # Join this sequence of words into a title-cased string.
-    # Use this code for compatibility with Python versions < 2.5. This kludge
-    # is valid here only becasue words[i].lower() will never evaluate to False.
-    value=' '.join([
-      (words[i] in TitleCase.lc and i>0) and words[i].lower() or words[i].capitalize()
-        for i in range(len(words))
-    ])
-    # Use this code for compatibility with Python versions >= 2.5.
-    #value=' '.join([
-    #  words[i].lower() if words[i] in TitleCase.lc and i>0 else words[i].capitalize()
-    #    for i in range(len(words))
-    #])
-
-    # Now become our immutable value as a title-cased string.
-    return str.__new__(cls,value)
-
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #
@@ -606,7 +558,41 @@ def gripe(msg,output=sys.stderr,progname=prog.name):
   die(msg,output,progname,rc=None)
 
 def decline(root,n,suffixes=None,fmt=None):
-  """This is all about performing numeric declension in English, though
+  """
+  ---------------------------------------------------------------------
+  |
+  | DEPRICATION WARNING:
+  |
+  | THIS FUNCTION IS GOING AWAY AT SOME POINT. CONVERT YOUR CODE TO USE
+  | THE MUCH BETTER english.py MODULE'S nouner() and nounf() FUNCTIONS
+  | INSTEAD.
+  |
+  | It's an easy transition:
+  |
+  |   decline('rabbit',1) ==> 'rabbit'
+  |   decline('rabbit',5) ==> 'rabbits'
+  |   decline('rabbit',5,fmt='%(count)d %(word)s') ==> '5 rabbits'
+  |
+  |   nouner('rabbit',1) ==> 'rabbit'
+  |   nouner('rabbit',5) ==> 'rabbits'
+  |   nouner('rabbit',5,fmt='%(count)d %(noun)s') ==> '5 rabbits'
+  |
+  |   ... meh. But then look at this ...
+  |
+  |   nounf('rabbit',1) ==> '1 rabbit'
+  |   nounf('rabbit',5) ==> '5 rabbits'
+  |   nounf('rabbit',1,'tail') ==> "1 rabbit's tail"
+  |   nounf('rabbit',5,'tail') ==> "5 rabbits' tails"
+  |
+  |   "I stepped on %s."%nounf('person',3,'foot') evaluates to
+  |
+  |         "I stepped on 3 people's feet."
+  |
+  | NOW YOU SEE. MAKE THE SWITCH TO english.py!
+  |
+  ---------------------------------------------------------------------
+
+  This is all about performing numeric declension in English, though
   it's versatile enough to exceed that charter just a bit. For example,
   decline('box',2) returns 'boxes'.
 
