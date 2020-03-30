@@ -770,6 +770,37 @@ class Spinner(object):
 wheel_spinner=Spinner(r'-\|/')
 cylon_spinner=Spinner(Spinner.cylon,yoyo=True)
 
+def getch(prompt=None,echo=False):
+  """Read a single keystroke from stdin. The user needn't press Enter.
+  This function returns the character as soon has it is typed. The
+  character is not echoed to the screen unless the "echo" argument is
+  True.
+
+  If "prompt" is some true value, write that string to standard output
+  before getting the input character, and then after the input, write a
+  newline character to standard output."""
+
+  import termios
+  import sys, tty
+  def _getch():
+    fd = sys.stdin.fileno()
+    old_settings=termios.tcgetattr(fd)
+    try:
+      tty.setraw(fd)
+      ch = sys.stdin.read(1)
+    finally:
+      termios.tcsetattr(fd,termios.TCSADRAIN,old_settings)
+    return ch
+
+  if prompt:
+    sys.stdout.write(prompt)
+  ch=_getch()
+  if echo:
+    sys.stdout.write(ch)
+  if prompt:
+    sys.stdout.write('\n')
+  return ch
+
 if __name__=='__main__':
   import doctest,sys
   from pprint import pprint
