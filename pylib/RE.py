@@ -147,14 +147,17 @@ def extend(name,pattern,expand=False):
   Register an extension RE pattern that can be referenced with the
   "(?E<name>)" construct. You can call RE.extend() like this:
 
-      RE.extend('account_name','[-_a-z0-9]+')
+      RE.extend('id','[-_0-9A-Za-z]+')
 
   And then, anytime you want to match an account name, you can simply
-  use the '(?E<account_name>)' extension RE, making your code more
-  readable and less prone to errors in regular expressions. Such
-  references are replaced by '(?P<account_name>[-_a-z0-9]+)' by the time
-  the stock re module gets control, so any match can be extracted by
-  group number or group name.
+  use the '(?E<id>)' extension RE, making your code more readable and
+  less prone to errors in regular expressions. Also, there are certainly
+  other ways to accomplish this, a natural side-effect of this is that
+  the RE for an account name only exists in one place in your code if it
+  ever needs to be updated. Such references are replaced by
+  '([-_0-9A-Za-z]+)' by the time the stock re module gets control. If
+  you want to refer to matched groups by name, use the '(?E<user=id>)'
+  form which be substituted with '(?P<user>[-_0-9A-Za-z]+)'.
 
   """
 
@@ -225,8 +228,10 @@ def subn(pattern, repl, string, count=0, flags=0):
 
   return re.subn(_apply_extensions(pattern),repl,s,count,flags)
 
-# Account names often use the same rules as Python (or Java or C) identifiers.
-extend('id',r'[-_a-z0-9]+')
+# Account names.
+extend('id',r'[-_0-9A-Za-z]+')
+# Python (Java, C, et al.) identifiers.
+extend('ident',r'[_A-Za-z][_0-9A-Za-z]+')
 
 # Comments may begin with #, ;, or // and continue to the end of the line.
 # If you need to handle multi-line comments ... feel free to roll your own
