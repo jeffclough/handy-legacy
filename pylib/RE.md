@@ -3,45 +3,55 @@
 ## DESCRIPTION
 
 This module extends Python's re module just a touch, so re will be doing
-almost all the work. I love the stock re module, but I want it to
+almost all the work. I love the stock re module, but I'd also like it to
 support extensible regular expression syntax.
 
-So that's what I've done. You can register your own RE extensions by
-calling
+So that's what this module does. It is a pure Python wrapper around
+Python's standard re module that lets you register your own RE
+extensions by calling
 
 ```
 RE.extend(name,pattern)
 ```
 
-Doing so means that "(E\<name\>)" will be replaced with "(pattern)", and
-"(?E\<name\>)" will be replaced with "(?P\<name\>pattern)", in any regular
-expressions you use with this module. To keep things compatible with the
-common usage of Python's standard re module, it's a good idea to import
-RE like this:
+Doing so means that `(?E\<name\>)` in regular expressions used with *this*
+module will be replaced with "(pattern)", and "(?E\<label=name\>)" will be
+replaced with "(?P\<label\>pattern)", in any regular expressions you use
+with *this* module. To keep things compatible with the common usage of
+Python's standard re module, it's a good idea to import RE like this:
 
 ```
 import RE as re
 ```
 
-You can then create whatever custom extension you'd like in this way:
+This keeps your code from calling the standard re functions directly
+(which will report things like `(?E\<anything\>)` as errors, of course),
+it lets you then create whatever custom extension you'd like in this way:
 
 ```
 re.extend('last_first',r'([!,]+)\s*,\s*(.*)')
 ```
 
-Doing so means that
+This RE matches "Flanders, Ned" in this example string:
+
+```
+name: Flanders, Ned
+```
+
+And you can use it this way:
 
 ```
 re_name=re.compile(r'name:\s+(?E<last_first>)')
 ```
 
-becomes exactly the same as
+That statement is exactly the same as
 
 ```
 re_name=re.compile(r'name:\s+(([!,]+)\s*,\s*(.*))')
 ```
 
-If you use the extension like this,
+but it's much easier to read and understand what's going on. If you use
+the extension like this,
 
 ```
 re_name=re.compile(r'name:\s+(?E<name=last_first>)')
@@ -53,7 +63,8 @@ with "name=last_first" rather than just "last_first", that translates to
 re_name=re.compile(r'name:\s+(?P<name>([!,]+)\s*,\s*(.*))')
 ```
 
-so you can use groupdict() to get the value of "name".
+so you can use the match object's groupdict() method to get the value of
+the "name" group.
 
 It turns out having a few of these RE extensions predefined for your
 code can be a handy little step-saver that also tends to increase its
@@ -74,15 +85,15 @@ to appreciate.
 #### Network Extensions
 | Name | Description |
 | --- | --- |
-| ipv4     | E.g. "1.2.3.4".
-| ipv6     | E.g. "1:2:3:4:5:6".
+| ipv4     | E.g. "123.45.6.78".
+| ipv6     | E.g. "1234:5678:9abc:DEF0:2:345".
 | ipaddr   | Matches either ipv4 or ipv6.
-| cidr     | E.g. "1.2.3.4/24".
+| cidr     | E.g. "123.45.6.78/24".
 | macaddr  | Looks a lot like ipv6, but the colons may also be dashes or dots instead.
 | hostname | A DNS name.
 | host     | Matches either hostname or ipaddr.
-| email    | Any valid email address. (Well above average, but not quite perfect.) There's also an email_localpart extension, which is used inside both "email" and "url" (below), but it's really just for internal use. Take a look if you're curious.
-| url      | Any URL consisting of: <ul> <li>protocol - req (e.g. "http:" or "presto:http:")</li> <li>designator - req (either "email_localpart@" or "//")</li> <li>host - req (anything matching our "host" extension) port - opt (e.g. ":443")</li> <li>path - opt (e.g. "/path/to/content.html")</li> <li>params - opt (e.g. "q=regular%20expression&items=10")</li> </ul> |
+| email    | Any valid email address. (Well above average RFC 5322 compliance, but not quite perfect.) There's also an email_localpart extension, which is used inside both "email" and "url" (below), but it's really just for internal use. Take a look if you're curious.
+| url      | Any URL consisting of: <ul> <li>protocol - REQUIRED (e.g. "http:" or "presto:http:")</li> <li>designator - REQUIRED (either "email_localpart@" or "//")</li> <li>host - REQUIRED (anything matching our "host" extension)</li><li>port - OPTIONAL (e.g. ":443")</li> <li>path - OPTIONAL (e.g. "/path/to/content.html")</li> <li>params - OPTIONAL (e.g. "q=regular%20expression&items=10")</li> </ul> |
 
 #### Time and Date Extensions
 | Name | Description |
@@ -111,20 +122,46 @@ Escape all non-alphanumeric characters in pattern.
 
 ### extend(name, pattern, expand=False)
 Register an extension RE pattern that can be referenced with the
-"(?E<name>)" construct. You can call RE.extend() like this:
+`(?E<name>)` extension construct. You can call RE.extend() like this:
 
 ```
-    RE.extend('id','[-_0-9A-Za-z]+')
+RE.extend('id',r'[-_0-9A-Za-z]+')
 ```
 
-And then, anytime you want to match an account name, you can simply use the
-`'(?E<id>)'` extension RE, making your code more readable and less prone to
-errors in regular expressions. Also, there are certainly other ways to
-accomplish this, a natural side-effect of this is that the RE for an account
-name only exists in one place in your code if it ever needs to be updated. Such
-references are replaced by `'([-_0-9A-Za-z]+)'` by the time the stock re module
-gets control. If you want to refer to matched groups by name, use the
-`'(?E<user=id>)'` form, which be substituted with `'(?P<user>[-_0-9A-Za-z]+)'`.
+This registers an RE extension named id with a value of `r'[-_0-9A-Za-z]+'`. This means that rather than using `r'[-_0-9A-Za-z]+'` in every RE where you need to match a username, you can use `r'(?E<id>)'` or `r'(?E<user=id>)'` instead. The first form is simply expanded to
+
+```
+r'([-_0-9A-Za-z]+)'
+```
+
+Notice that parentheses are used so this becomes an RE group. If you use the `r'(?E<user=id>)'` form of the id RE extension, it is expanded
+to
+
+```
+r'(?P<user>[-_0-9A-Za-z]+)'
+```
+
+In addition to being a parenthesized RE group, this is a *named* group that can be retrived by the match object's groupdict() method.
+
+Normally, the pattern parameter is stored directly in this module's extension registry (browse through `RE._extensions` to see what this looks like). If the `expand` parameter is True, any RE extensions in the pattern are expanded before being added to the registry. So for example,
+
+```
+RE.extend('cred',r'^\s*cred\s*=\s*(?E<id>):(.*)$')
+```
+
+will simply store that regular expression in the registry labeled as "cred". But if you register it this way,
+
+```
+RE.extend('cred',r'^\s*cred\s*=\s*(?E<id>):(.*)$',expand=True)
+```
+
+this expands the RE before registering it, which means this is what's stored in the registry:
+
+```
+r'^\s*cred\s*=\s*([-_0-9A-Za-z]+):(.*)$'
+```
+
+The result of using `'(?E<cred>)'` in a regular expression is exactly the same in either case.
 
 ### findall(pattern, s, flags=0)
 Return a list of all non-overlapping matches in the string.
