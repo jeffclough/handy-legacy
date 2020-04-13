@@ -7,16 +7,16 @@ almost all the work. I love the stock re module, but I'd also like it to
 support extensible regular expression syntax.
 
 So that's what this module does. It is a pure Python wrapper around
-Python's standard re module that lets you register your own RE
+Python's standard re module that lets you register your own regexp
 extensions by calling
 
 ```
 RE.extend(name,pattern)
 ```
 
-Doing so means that `(?E\<name\>)` in regular expressions used with *this*
-module will be replaced with "(pattern)", and "(?E\<label=name\>)" will be
-replaced with "(?P\<label\>pattern)", in any regular expressions you use
+Doing so means that `(?E<name>)` in regular expressions used with *this*
+module will be replaced with `(pattern)`, and `(?E\<label=name\>)` will be
+replaced with `(?P<label>pattern)`, in any regular expressions you use
 with *this* module. To keep things compatible with the common usage of
 Python's standard re module, it's a good idea to import RE like this:
 
@@ -25,14 +25,14 @@ import RE as re
 ```
 
 This keeps your code from calling the standard re functions directly
-(which will report things like `(?E\<anything\>)` as errors, of course),
+(which will report things like `(?E<anything>)` as errors, of course),
 it lets you then create whatever custom extension you'd like in this way:
 
 ```
 re.extend('last_first',r'([!,]+)\s*,\s*(.*)')
 ```
 
-This RE matches "Flanders, Ned" in this example string:
+This regexp matches "Flanders, Ned" in this example string:
 
 ```
 name: Flanders, Ned
@@ -66,12 +66,12 @@ re_name=re.compile(r'name:\s+(?P<name>([!,]+)\s*,\s*(.*))')
 so you can use the match object's groupdict() method to get the value of
 the "name" group.
 
-It turns out having a few of these RE extensions predefined for your
+It turns out having a few of these regexp extensions predefined for your
 code can be a handy little step-saver that also tends to increase its
 readability, especially if it makes heavy use of regular expressions.
 
-### Pre-loaded RE Extensions
-This module comes with several pre-loaded RE extensions that I've come
+### Pre-loaded Regexp Extensions
+This module comes with several pre-loaded regexp extensions that I've come
 to appreciate.
 
 #### General Extensions
@@ -121,29 +121,28 @@ Compile a regular expression pattern, returning a pattern object.
 Escape all non-alphanumeric characters in pattern.
 
 ### extend(name, pattern, expand=False)
-Register an extension RE pattern that can be referenced with the
+Register an extension regexp pattern that can be referenced with the
 `(?E<name>)` extension construct. You can call RE.extend() like this:
 
 ```
 RE.extend('id',r'[-_0-9A-Za-z]+')
 ```
 
-This registers an RE extension named id with a value of `r'[-_0-9A-Za-z]+'`. This means that rather than using `r'[-_0-9A-Za-z]+'` in every RE where you need to match a username, you can use `r'(?E<id>)'` or `r'(?E<user=id>)'` instead. The first form is simply expanded to
+This registers a regexp extension named "id" with a regexp value of `r'[-_0-9A-Za-z]+'`. This means that rather than using `r'[-_0-9A-Za-z]+'` in every regexp where you need to match a username, you can use `r'(?E<id>)'` or maybe `r'(?E<user=id>)'` instead. The first form is simply expanded to
 
 ```
 r'([-_0-9A-Za-z]+)'
 ```
 
-Notice that parentheses are used so this becomes an RE group. If you use the `r'(?E<user=id>)'` form of the id RE extension, it is expanded
-to
+Notice that parentheses are used so this becomes a regexp group. If you use the `r'(?E<user=id>)'` form of the id regexp extension, it is expanded to
 
 ```
 r'(?P<user>[-_0-9A-Za-z]+)'
 ```
 
-In addition to being a parenthesized RE group, this is a *named* group that can be retrived by the match object's groupdict() method.
+In addition to being a parenthesized regexp group, this is a *named* group that can be retrived by the match object's groupdict() method.
 
-Normally, the pattern parameter is stored directly in this module's extension registry (browse through `RE._extensions` to see what this looks like). If the `expand` parameter is True, any RE extensions in the pattern are expanded before being added to the registry. So for example,
+Normally, the pattern parameter is stored directly in this module's extension registry (browse through `RE._extensions` to see what this looks like). If the `expand` parameter is True, any regexp extensions in the pattern are expanded before being added to the registry. So for example,
 
 ```
 RE.extend('cred',r'^\s*cred\s*=\s*(?E<id>):(.*)$')
@@ -155,7 +154,7 @@ will simply store that regular expression in the registry labeled as "cred". But
 RE.extend('cred',r'^\s*cred\s*=\s*(?E<id>):(.*)$',expand=True)
 ```
 
-this expands the RE before registering it, which means this is what's stored in the registry:
+this expands the regexp before registering it, which means this is what's stored in the registry:
 
 ```
 r'^\s*cred\s*=\s*([-_0-9A-Za-z]+):(.*)$'

@@ -160,11 +160,11 @@ def extend(name,pattern,expand=False):
 
       RE.extend('id',r'[-_0-9A-Za-z]+')
 
-  This registers a regexp extension named id with a value of
+  This registers a regexp extension named id with a regexp value of
   r'[-_0-9A-Za-z]+'. This means that rather than using r'[-_0-9A-Za-z]+'
   in every regexp where you need to match a username, you can use
-  r'(?E<id>)' or r'(?E<user=id>)' instead. The first form is simply
-  expanded to
+  r'(?E<id>)' or maybe r'(?E<user=id>)' instead. The first form is
+  simply expanded to
 
       r'([-_0-9A-Za-z]+)'
 
