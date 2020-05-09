@@ -5,15 +5,9 @@
 
 # Prefer the python modules in our pylib directory.
 import atexit,os,sys
-
-# Put a little extra effort into finding our non-standard modules if needed.
-try:
-  # Import make (which will handle the command line).
-  import make
-except:
-  sys.path.insert(1,os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])),'pylib'))
-  sys.path.insert(1,os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])),'lib','python'))
-  import make
+sys.path.insert(1,os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])),'pylib'))
+sys.path.insert(1,os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])),'lib','python'))
+import make
 
 # Change the current directory to the directory where this command lives, but
 # restore the original CWD when this command exits.
@@ -120,7 +114,7 @@ make.CExecutable('randword','randword.c')
 make.CExecutable('secdel','secdel.c')
 make.CExecutable('timeshift','timeshift.c')
 make.DependentTarget('cutcsv','xlrd')
-make.EasyInstall('xlrd',PYTHON_LIB_DIR,minver='2.6')
+make.PipInstall('xlrd',PYTHON_LIB_DIR,minver='2.6')
 
 # We need one installer for each target directory.
 make.Installer('install',make.path(make.opt.prefix,'bin'),CPROGS,SCRIPTS)

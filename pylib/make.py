@@ -373,9 +373,9 @@ class Installer(DependentTarget):
       self.built=True
 
 
-class EasyInstall(Target):
-  '''Run easy_install to install the package to the given directory, but
-  only if it's not already installed.'''
+class PipInstall(Target):
+  '''Run "pip install" to install the package to the given directory,
+  but only if it's not already installed.'''
 
   def __init__(self,package,dir,minver=None,maxver=None):
     filename=os.path.join(dir,package)
@@ -433,10 +433,10 @@ class EasyInstall(Target):
     except ImportError:
       # OK. So we need to install it.
       print '\n%s:'%self.package
-      cmd=build_command('easy_install','--install-dir',self.dir,self.package)
+      cmd=build_command('pip','install','--target',self.dir,self.package)
       if not opt.dryrun:
         os.system(cmd)
-    if self.__class__.__name__=='EasyInstall':
+    if self.__class__.__name__=='PipInstall':
       # Mark this target as "built," but only if not called from a subclass.
       # This logic is needed in order to make calling super(...).build() safe.
       self.built=True
