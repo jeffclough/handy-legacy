@@ -104,11 +104,11 @@ to appreciate.
 | month    | January through December, or any unambiguous prefix thereof.  |
 | month3   | First three letters of any month. |
 | MONTH    | Full name of any month. |
-| date_YMD | [CC]YY(-|/|.)[M]M(-|/|.)[D]D  |
-| date_YmD | [CC]YY(-|/|.)month_name(-|/|.)[D]D  |
+| date_YMD | [CC]YY(-\|/\|.)[M]M(-\|/\|.)[D]D  |
+| date_YmD | [CC]YY(-\|/\|.)month_name(-\|/\|.)[D]D  |
 | date_mD  | month_name DD  |
-| time_HM  | [H]H(-|:|.)MM  |
-| time_HMS | [H]H(-|:|.)MM(-|:|.)SS  |
+| time_HM  | [H]H(-\|:\|.)MM  |
+| time_HMS | [H]H(-\|:\|.)MM(-\|:\|.)SS  |
 
 ## CLASSES
 
