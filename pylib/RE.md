@@ -98,13 +98,17 @@ to appreciate.
 #### Time and Date Extensions
 | Name | Description |
 | --- | --- |
-| day      |   |
-| month    |   |
-| date_YMD |   |
-| date_YmD |   |
-| date_mD  |   |
-| time_HM  |   |
-| time_HMS |   |
+| day      | Day of week, Sunday through Saturday, or any unambiguous prefix thereof.  |
+| day3     | First three letters of any day of the week. |
+| DAY      | Full name of any day of the week. |
+| month    | January through December, or any unambiguous prefix thereof.  |
+| month3   | First three letters of any month. |
+| MONTH    | Full name of any month. |
+| date_YMD | [CC]YY(-|/|.)[M]M(-|/|.)[D]D  |
+| date_YmD | [CC]YY(-|/|.)month_name(-|/|.)[D]D  |
+| date_mD  | month_name DD  |
+| time_HM  | [H]H(-|:|.)MM  |
+| time_HMS | [H]H(-|:|.)MM(-|:|.)SS  |
 
 ## CLASSES
 

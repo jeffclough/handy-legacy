@@ -80,21 +80,29 @@ Network:
   url      - Any URL consisting of:
                protocol - req (e.g. "http" or "presto:http:")
                designator - req (either "email_localpart@" or "//")
-               host - req (anything matching our "host" extension) port - opt (e.g. ":443")
+               host - req (anything matching our "host" extension)
+               port - opt (e.g. ":443")
                path - opt (e.g. "/path/to/content.html")
                params - opt (e.g. "q=regular%20expression&items=10")
 
 Time and Date:
-  day      -
-  month    -
-  date_YMD -
-  date_YmD -
-  date_mD  -
-  time_HM  -
-  time_HMS -
+  day      - Day of week, Sunday through Saturday, or any unambiguous
+             prefix thereof.
+  day3     - Firt three letters of any month.
+  DAY      - Full name of month.
+  month    - January through December, or any unambiguous prefix
+             thereof.
+  month3   - First three letters of any month.
+  MONTH    - Full name of any month.
+  date_YMD - [CC]YY(-|/|.)[M]M(-|/|.)[D]D
+  date_YmD - [CC]YY(-|/|.)month(-|/|.)[D]D
+  date_mD  - "month DD"
+  time_HM  - [H]H(-|:|.)MM
+  time_HMS - [H]H(-|:|.)MM(-|:|.)SS
 
 """
 
+from datetime import date # We use day- and month-names of the current localle.
 import re
 from re import error,escape,purge,template
 from re import I,IGNORECASE,L,LOCALE,M,MULTILINE,S,DOTALL,U,UNICODE,X,VERBOSE,DEBUG
@@ -318,21 +326,31 @@ extend('url',
    #r'(([^=]+)=([^&]*))'
    #r'(&(([^=]+)=([^&]*)))*'
 
+# TODO: Compute the "day" and "month" extensions like we're doing for day3,
+# DAY, month3, and MONTH below. The way we're doing it now only kind of works.
+
 # Day, date, and time matching are furtile ground for improvement.
 # day = SUNDAY|MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY
 #       Case doesn't matter, and any distince beginning of those day names is
 #       sufficient to match.
-extend('day',r'(?i((su)|(m)|(tu)|(w)|(th)|(f)|(sa))[aedionsruty]*)')
+dnames=[date(2001,1,x+7).strftime('%A').lower() for x in range(7)]
+extend('day',r'(([Ss][Uu]|[Mm]|[Tt][Uu]|[Ww]|[Tt][Hh]|[Ff]|[Ss][Aa])[AEDIONSRUTYaedionsruty]*)')
+extend('day3',r'(%s)'%'|'.join(['(%s)'%''.join(['[%s%s]'%(c.upper(),c) for c in d[:3]]) for d in dnames]))
+extend('DAY',r'(%s)'%'|'.join(['(%s)'%''.join(['[%s%s]'%(c.upper(),c) for c in d]) for d in dnames]))
 # month = JANUARY|FEBRUARY|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER
 #         This works just like the day extension, but for month names.
-extend('month',r'(?i((ja)|(f)|(mar)|(ap)|(may)|(jun)|(jul)|(au)|(s)|(o)|(n)|(d))[acbegihmlonpsrutvy]*)')
-# date_YMD = [[CC]Y]Y(-|/|.)[M]M(-|/|.)[D]D
+mnames=[date(2001,x,1).strftime('%B').lower() for x in range(1,13)]
+extend('month',r'(([Jj][Aa]|[Ff]|[Mm][Aa][Rr]|[Aa][Pp]|[Mm][Aa][Yy]|[Jj][Uu][Nn]|[Jj][Uu][Ll]|[Aa][Uu]|[Ss]|[Oo]|[Nn]|[Dd])[ACBEGIHMLONPSRUTVYacbegihmlonpsrutvy]*)')
+# month3=JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC
+extend('month3',r'(%s)'%'|'.join(['(%s)'%''.join(['[%s%s]'%(c.upper(),c) for c in m[:3]]) for m in mnames]))
+extend('MONTH',r'(%s)'%'|'.join(['(%s)'%''.join(['[%s%s]'%(c.upper(),c) for c in m]) for m in mnames]))
+# date_YMD = [CC]YY(-|/|.)[M]M(-|/|.)[D]D
 #            Wow. the BNF format is uglier than the regexp. Just think YYYY-MM-DD
 #            where the dashes can be / or . instead.
-extend('date_YMD',r'((\d{2,4})([-/.])(\d{1,2})([-/.])(\d{1,2}))')
-# date_YmD is basically "YYYY-mon-DD" where mon is the name of a month as
+extend('date_YMD',r'((\d{2}(\d{2})?)([-/.])(\d{1,2})([-/.])(\d{1,2}))')
+# date_YmD is basically "[CC]YY-mon-DD" where mon is the name of a month as
 # defined by the "month" extension above.
-extend('date_YmD',r'((\d{2,4})([-/.])((?E<month>))([-/.])(\d{1,2}))')
+extend('date_YmD',r'((\d{2}(\d{2})?)([-/.])((?E<month>))([-/.])(\d{1,2}))')
 # date_mD is basically "mon DD" where mon is the name of a month as defined by
 # the "month" extension above.
 extend('date_mD',r'(?E<month>\s+(\d{1,2}))')
@@ -514,6 +532,44 @@ if __name__=='__main__':
     >>> # valid character. (And of course, we're not handling escaping at all,
     >>> # but I'm not sure that can even be expressed regularly.)
     >>> #search(p,'ftp://vault.com/path/to/file?encrypt=1&compress=0').groups()
+    >>> p='(?E<day=day>)'
+    >>> search(p,'Sunday').groupdict()['day']
+    'Sunday'
+    >>> search(p,'Sun').groupdict()['day']
+    'Sun'
+    >>> search(p,'M').groupdict()['day']
+    'M'
+    >>> search(p,'m').groupdict()['day']
+    'm'
+    >>> search(p,'tuesday').groupdict()['day']
+    'tuesday'
+    >>> search(p,'tu').groupdict()['day']
+    'tu'
+    >>> p='(?E<day=day3>)'
+    >>> search(p,'Sun').groupdict()['day']
+    'Sun'
+    >>> search(p,'sun').groupdict()['day']
+    'sun'
+    >>> search(p,'tu')==None
+    True
+    >>> p='(?E<month=month>)'
+    >>> search(p,'January').groupdict()['month']
+    'January'
+    >>> search(p,'ja').groupdict()['month']
+    'ja'
+    >>> search(p,'May').groupdict()['month']
+    'May'
+    >>> search(p,'D').groupdict()['month']
+    'D'
+    >>> p='(?E<month=month3>)'
+    >>> search(p,'Jan').groupdict()['month']
+    'Jan'
+    >>> search(p,'ja')==None
+    True
+    >>> search(p,'May').groupdict()['month']
+    'May'
+    >>> search(p,'Dec').groupdict()['month']
+    'Dec'
     """
 
   if True:
