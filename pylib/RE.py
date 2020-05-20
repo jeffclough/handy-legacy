@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
 This module extends Python's re module just a touch, so re will be doing
 almost all the work. I love the stock re module, but I'd also like it to
@@ -363,10 +364,57 @@ extend('time_HMS',r'(\d{1,2})([-:.])(\d{2})([-:.])(\d{2})')
 # TODO: Parse https://www.timeanddate.com/time/zones/ for TZ data, and hardcode
 # that into a regexp extension here.
 
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+# Behave like a command if we're being called as one.
+#
 if __name__=='__main__':
-  import sys
+  import argparse,os,sys
   from doctest import testmod
   from english import nounf
+
+  def find(opt):
+    "Find all matching conent according to the given argparse namespace."
+
+    all_matches=0 # Total matches over all scanned input files.
+    pat=compile(opt.args.pop(0))
+    opt.args=[a for a in opt.args if not os.path.isdir(a)]
+    show_filename=False
+    if len(opt.args)<1:
+      opt.args.append('-')
+    elif len(opt.args)>1 and not opt.one:
+      show_filename=True
+    for fn in opt.args:
+      matches=0 # Matches found in this file.
+      if fn=='-':
+        fn='stdin'
+        f=sys.stdin
+      else:
+        f=file(fn)
+      for line in f:
+        m=pat.search(line)
+        if m:
+          matches+=1
+          # Show each matches if we're supposed to.
+          if not (opt.count or opt.list):
+            if show_filename:
+              sys.stdout.write('%s: %s'%(fn,line))
+            else:
+              sys.stdout.write(line)
+      if matches:
+        if opt.count:
+          if show_filename:
+            print('%s: %d'%(fn,matches))
+          else:
+            print('%d'%matches)
+        elif opt.list:
+          print(fn)
+      all_matches+=matches
+      if fn!='-':
+        f.close()
+
+    return all_matches
 
   def tests():
     """
@@ -572,7 +620,31 @@ if __name__=='__main__':
     'Dec'
     """
 
-  if True:
+   # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+  # Parse our command line.
+  ap=argparse.ArgumentParser()
+  sp=ap.add_subparsers()
+
+  ap_find=sp.add_parser('find',description="This works a lot like grep.")
+  ap_find.set_defaults(cmd='find')
+  ap_find.add_argument('-1',dest='one',action='store_true',help="Do not output names of files containing matches, even if more than one file is to be scanned.")
+  ap_find.add_argument('-c',dest='count',action='store_true',help="Output only the number of matching lines of each file scanned.")
+  ap_find.add_argument('-i',dest='ignrore_case',action='store_true',help="Ignore the case of alphabetic characters when scanning.")
+  ap_find.add_argument('-l',dest='list',action='store_true',help="Output only the name of each file scanned. (Trumps -1.)")
+  ap_find.add_argument('args',action='store',nargs='+',help="A regular expression, optionally followed by one or more names of files to be scanned.")
+
+  ap_test=sp.add_parser('test',description="Just run internal tests and report the result.")
+  ap_test.set_defaults(cmd='test')
+
+  opt=ap.parse_args()
+
+   # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+  # Do whatever our command line says.
+  if opt.cmd=='find':
+    sys.exit((0,1)[find(opt)==0])
+  elif opt.cmd=='test':
     f,t=testmod(report=False)
     if f>0:
       print '*********************************************************************\n'
