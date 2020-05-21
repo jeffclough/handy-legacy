@@ -92,6 +92,7 @@ to appreciate.
 | macaddr  | Looks a lot like ipv6, but the colons may also be dashes or dots instead.
 | hostname | A DNS name.
 | host     | Matches either hostname or ipaddr.
+| service  | Matches host:port.
 | email    | Any valid email address. (Well above average RFC 5322 compliance, but not quite perfect.) There's also an email_localpart extension, which is used inside both "email" and "url" (below), but it's really just for internal use. Take a look if you're curious.
 | url      | Any URL consisting of: <ul> <li>protocol - REQUIRED (e.g. "http:" or "presto:http:")</li> <li>designator - REQUIRED (either "email_localpart@" or "//")</li> <li>host - REQUIRED (anything matching our "host" extension)</li><li>port - OPTIONAL (e.g. ":443")</li> <li>path - OPTIONAL (e.g. "/path/to/content.html")</li> <li>params - OPTIONAL (e.g. "q=regular%20expression&items=10")</li> </ul> |
 
