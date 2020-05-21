@@ -73,6 +73,7 @@ Network:
              be dashes or dots instead.
   hostname - A DNS name.
   host     - Matches either hostname or ipaddr.
+  service  - Matches host:port.
   email    - Any valid email address. (Well above average, but not
              quite perfect.) There's also an email_localpart extension,
              which is used inside both "email" and "url" (below), but
@@ -285,7 +286,7 @@ extend('ident',r'[_A-Za-z][_0-9A-Za-z]+')
 extend('comment',r'\s*([#;]|//).*')
 
 # Network
-extend('ipv4','.'.join([r'\d{1,3}']*4))
+extend('ipv4',r'\.'.join([r'\d{1,3}']*4))
 extend('ipv6',':'.join([r'[0-9A-Fa-f]{1,4}']*8))
 extend('ipaddr',r'(?E<ipv4>)|(?E<ipv6>)')
 extend('cidr',r'(?E<ipv4>)/\d{1,2}')
@@ -301,6 +302,7 @@ extend('macaddr64','(%s)|(%s)'%(
 extend('macaddr',r'(?E<macaddr48>)|(?E<macaddr64>)')
 extend('hostname',r'[0-9A-Za-z]+(\.[-0-9A-Za-z]+)*')
 extend('host','(?E<ipaddr>)|(?E<hostname>)')
+extend('service','(?E<host>):\d+')
 extend('hostport','(?E<host>)(:(\d{1,5}))?') # Host and optional port.
 extend('filename',r'[^/]+')
 extend('path',r'/?(?E<filename>)(/(?E<filename>))*')
@@ -385,6 +387,7 @@ if __name__=='__main__':
       opt.args.append('-')
     elif len(opt.args)>1 and not opt.one:
       show_filename=True
+
     for fn in opt.args:
       matches=0 # Matches found in this file.
       if fn=='-':
@@ -393,15 +396,27 @@ if __name__=='__main__':
       else:
         f=file(fn)
       for line in f:
+        if line[-1]=='\n':
+          line=line[:-1]
         m=pat.search(line)
         if m:
           matches+=1
-          # Show each matches if we're supposed to.
           if not (opt.count or opt.list):
+            # Show each match.
+            if opt.fmt:
+              line=opt.fmt.format(line,*m.groups(),**m.groupdict())
+            if opt.tuple or opt.dict:
+              print('')
+            if opt.tuple:
+              print(repr(m.groups()))
+            if opt.dict:
+              print('{%s}'%', '.join([
+                '"%s": "%s"'%(k,v) for k,v in sorted(m.groupdict().items())
+              ]))
             if show_filename:
-              sys.stdout.write('%s: %s'%(fn,line))
+              print('%s: %s'%(fn,line))
             else:
-              sys.stdout.write(line)
+              print(line)
       if matches:
         if opt.count:
           if show_filename:
@@ -630,14 +645,25 @@ if __name__=='__main__':
   ap_find.set_defaults(cmd='find')
   ap_find.add_argument('-1',dest='one',action='store_true',help="Do not output names of files containing matches, even if more than one file is to be scanned.")
   ap_find.add_argument('-c',dest='count',action='store_true',help="Output only the number of matching lines of each file scanned.")
+  ap_find.add_argument('-f',dest='fmt',action='store',help="Use standard Python template syntax to format output.")
+  ap_find.add_argument('-g',dest='tuple',action='store_true',help='Output the tuple of matching groups above each matching line.')
+  ap_find.add_argument('-G',dest='dict',action='store_true',help='Output the dictionary of matching groups above each matching line.')
   ap_find.add_argument('-i',dest='ignrore_case',action='store_true',help="Ignore the case of alphabetic characters when scanning.")
   ap_find.add_argument('-l',dest='list',action='store_true',help="Output only the name of each file scanned. (Trumps -1.)")
+  ap_find.add_argument('-x',dest='ext',action='append',help="""Add a "name=pattern" RE extension. Use as many -x options as you need.""")
+  ap_find.add_argument('--extensions',action='store_true',help="List our RE extensions.")
   ap_find.add_argument('args',action='store',nargs='+',help="A regular expression, optionally followed by one or more names of files to be scanned.")
 
   ap_test=sp.add_parser('test',description="Just run internal tests and report the result.")
   ap_test.set_defaults(cmd='test')
 
   opt=ap.parse_args()
+  if hasattr(opt,'ext'):
+    for x in opt.ext:
+      extend(*x.split('=',1))
+  if hasattr(opt,'extensions') and opt.extensions:
+    print '\n'.join(['%s: "%s"'%(n,p) for n,p in sorted(_extensions.items())])
+    sys.exit(0)
 
    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
   # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
