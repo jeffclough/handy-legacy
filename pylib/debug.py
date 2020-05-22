@@ -1,7 +1,7 @@
 import sys
 
 class DebugChannel(object):
-  def __init__(self,enabled=False,stream=sys.stderr):
+  def __init__(self,enabled=False,stream=sys.stderr,label='DEBUG'):
     """Initialize the stream and on/off state of this new DebugChannel
     object. The "enabled" state defaults to False, and the stream
     defaults to sys.stderr (though any object with a write() method will
@@ -12,9 +12,15 @@ class DebugChannel(object):
     self.stream=stream
     self.enabled=enabled
 
-    self.fmt='DEBUG: {indent}{message}\n'
+    self.fmt='{label}: {indent}{message}\n'
     self.ind=0
+    self.label=label
     self.indstr='  '
+
+  def __bool__(self):
+    "Return the Enabled state of this DebugChannel object."
+
+    return self.enabled
 
   def enable(self,state=True):
     """Allow this DebugChannel object to write messages if state is
@@ -27,13 +33,14 @@ class DebugChannel(object):
   def setFormat(self,fmt):
     """Set the format of our debug statements. The format defaults to:
 
-        'DEBUG: {indent}{message}\n'
+        '{label}: {indent}{message}\\n'
 
     Fields:
+      {label}    printed before the colon (default: 'DEBUG')
       {indent}   indention string multiplied by the indention level
       {message}  the message to be written
 
-    All non-field text is literal text. The '\n' at the end is required
+    All non-field text is literal text. The '\\n' at the end is required
     if you want a line ending at the end of each message.
     """
 
@@ -67,6 +74,7 @@ class DebugChannel(object):
 
     if self.enabled:
       indent=self.indstr*self.ind
+      label=self.label
       self.stream.write(self.fmt.format(**locals()))
     return self
 
@@ -81,7 +89,7 @@ if __name__=='__main__':
   d('Message 1')
   d('Message 2')
   d('ind=%r'%(d.ind,)).indent(1)
-  d('ind=%r'%(d.ind,)).indent(1).indstr='..'
+  d('ind=%r'%(d.ind,)).indent(1).indstr='| '
   d('ind=%r'%(d.ind,)).indent(1)
   d.indent(-1)('ind=%r'%(d.ind,))
   d.indent(-1)('ind=%r'%(d.ind,))
