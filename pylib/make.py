@@ -1,8 +1,4 @@
 #!/usr/bin/env python2
-import optparse,os,platform,shlex,shutil,sys,time
-from glob import glob
-from fnmatch import fnmatch
-
 """
 This module is intended to span the gap between Makefile and setup.py,
 bringing the power and versatility of Python to the basic functionality
@@ -10,8 +6,13 @@ of make.
 
 """
 
+import optparse,os,platform,shlex,shutil,sys,time
+from glob import glob
+from fnmatch import fnmatch
+
 # Get some system parameters
 OS_NAME,HOST,KERNEL,PLATFORM,MACHINE,PROCESSOR=platform.uname()
+SRCDIR=os.path.abspath(os.path.dirname(sys.argv[0]))
 if OS_NAME=='Darwin':
   OS_VER=platform.mac_ver()[0]
 else:
@@ -47,7 +48,7 @@ if not args:
   args=['all']
 
 if opt.sysinfo:
-  for var in sorted("OS_NAME HOST KERNEL PLATFORM MACHINE PROCESSOR OS_VER DISTRO_NAME DISTRO_VER".split()):
+  for var in sorted("OS_NAME HOST KERNEL PLATFORM MACHINE PROCESSOR OS_VER DISTRO_NAME DISTRO_VER SRCDIR".split()):
     print '%s=%r'%(var,eval(var))
   sys.exit(0)
 
@@ -539,6 +540,8 @@ def symlink(target,link):
   symlink to link, no action is taken. Otherwise, target (whether it is a
   symlink or a regular file) is replaced with a symlink to link."""
 
+  target=expand_all(target)
+  link=expand_all(link)
   if link_exists(link):
     if os.path.islink(link):
       ltarget=os.path.abspath(os.readlink(link))
@@ -555,7 +558,12 @@ def symlink(target,link):
       os.remove(link)
   print 'Creating %s --> %s'%(link,target)
   if not opt.dryrun:
-    os.symlink(target,link)
+    try:
+      os.symlink(target,link)
+    except OSError as e:
+      raise OSError(str(e)+' on os.symlink(%r,%r)'%(target,link))
+    except:
+      raise
 
 # I'd like to be able to call make.path() rather than os.path.join() ...
 # so here you go.

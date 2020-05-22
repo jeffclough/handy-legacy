@@ -131,6 +131,7 @@ for target in make.args:
   else:
     make.make(target)
 
+make.symlink(make.path(make.SRCDIR,'.RE.rc'),'~/.RE.rc')
 make.symlink('../../bin/strptime',make.path(make.opt.prefix,'lib','python','strptime.py'))
 make.symlink('../../bin/progress',make.path(make.opt.prefix,'lib','python','progress.py'))
 make.symlink('../../bin/ph',make.path(make.opt.prefix,'lib','python','ccso.py'))
