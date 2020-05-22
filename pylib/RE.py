@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 """
 This module extends Python's re module just a touch, so re will be doing
 almost all the work. I love the stock re module, but I'd also like it to
@@ -10,8 +10,8 @@ extensions by calling
 
     RE.extend(name,pattern)
 
-Doing so means that "(?E<name>)" in regular expressions used with *this*
-module will be replaced with "(pattern)", and "(?E<label=name>)" will be
+Doing so means that "(?E:name)" in regular expressions used with *this*
+module will be replaced with "(pattern)", and "(?E:label=name)" will be
 replaced with "(?P<name>pattern)", in any regular expressions you use
 with this module. To keep things compatible with the common usage of
 Python's standard re module, it's a good idea to import RE like this:
@@ -19,7 +19,7 @@ Python's standard re module, it's a good idea to import RE like this:
     import RE as re
 
 This keeps your code from calling the standard re functions directly
-(which will report things like "(?E<anything>)" as errors, of course),
+(which will report things like "(?E:anything)" as errors, of course),
 it lets you then create whatever custom extension you'd like in this
 way:
 
@@ -31,7 +31,7 @@ This regepx matches "Flanders, Ned" in this example string:
 
 And you can use it this way:
 
-    re_name=re.compile(r'name:\s+(?E<last_first>)')
+    re_name=re.compile(r'name:\s+(?E:last_first)')
 
 That statement is exactly the same as
 
@@ -40,7 +40,7 @@ That statement is exactly the same as
 but it's much easier to read and understand what's going on. If you use
 the extension like this,
 
-    re_name=re.compile(r'name:\s+(?E<name=last_first>)')
+    re_name=re.compile(r'name:\s+(?E:name=last_first)')
 
 with "name=last_first" rather than just "last_first", that translates to
 
@@ -59,7 +59,7 @@ come to appreciate:
 General:
   id      - This matches login account names, programming language
             identifiers (for Python, Java, C, etc., but not SQL or other
-            more special-purpose languages). Still '(?<id>)' is a nifty
+            more special-purpose languages). Still '(?E:id)' is a nifty
             way to match account names.
   comment - Content following #, ;, or //, possibly preceded by
             whitespace.
@@ -75,7 +75,7 @@ Network:
   host     - Matches either hostname or ipaddr.
   service  - Matches host:port.
   email    - Any valid email address. (Well above average, but not
-             quite perfect.) There's also an email_localpart extension,
+             quite perfect.) There's also an email_localpart extensior,
              which is used inside both "email" and "url" (below), but
              it's really just for internal use. Take a look if you're
              curious.
@@ -105,7 +105,7 @@ Time and Date:
 """
 
 from datetime import date # We use day- and month-names of the current localle.
-import re
+import re,os
 from re import error,escape,purge,template
 from re import I,IGNORECASE,L,LOCALE,M,MULTILINE,S,DOTALL,U,UNICODE,X,VERBOSE,DEBUG
 
@@ -118,11 +118,13 @@ __all__=[
   "findall",
   "match",
   "purge",
+  "read_extensions",
   "search",
   "split",
   "sub",
   "subn",
   "template",
+  "Error",
   "I","IGNORECASE", #   2
   "L","LOCALE",     #   4
   "M","MULTILINE",  #   8
@@ -132,9 +134,21 @@ __all__=[
   "DEBUG",          # 128
 ]
 
-_extensions={}
-_extpat=re.compile(r'(\(\?E<[_A-Za-z][_A-Za-z0-9]*(=[_A-Za-z][_A-Za-z0-9]*)?>\))')
+class Error(Exception):
+  pass
 
+# This dictionary holds all extension, keyed by name.
+_extensions={}
+
+# This RE matches an RE extension, possibly in a larger string.
+_extpat=re.compile(r'(\(\?E:[_A-Za-z][_A-Za-z0-9]*(=[_A-Za-z][_A-Za-z0-9]*)?\))')
+
+# This RE matches a line in ~/.RE.rc.
+_extdef=re.compile(r'^\s*([_A-Za-z][_A-Za-z0-9]*)\s*([=<])(.*)$')
+
+# This RE matches blank lines and comments in ~/.RE.rc.
+_extcmt=re.compile(r'^\s*(([#;]|//).*)?$')
+                                           
 def _apply_extensions(pattern,allow_named=True):
   """Return the given pattern with all regexp extension references
   expanded."""
@@ -145,7 +159,7 @@ def _apply_extensions(pattern,allow_named=True):
     if not extensions:
       break;
     for ref in extensions:
-      ext=ref[4:-2]
+      ext=ref[4:-1]
       #print 'D: ext=%r'%(ext,)
       if not ext:
         raise error('RE extension name is empty')
@@ -165,7 +179,7 @@ def _apply_extensions(pattern,allow_named=True):
 
 def extend(name,pattern,expand=False):
   """Register an extension regexp pattern that can be referenced with
-  the "(?E<name>)" extension construct. You can call RE.extend() like
+  the "(?E:name)" extension construct. You can call RE.extend() like
   this:
 
       RE.extend('id',r'[-_0-9A-Za-z]+')
@@ -173,13 +187,13 @@ def extend(name,pattern,expand=False):
   This registers a regexp extension named id with a regexp value of
   r'[-_0-9A-Za-z]+'. This means that rather than using r'[-_0-9A-Za-z]+'
   in every regexp where you need to match a username, you can use
-  r'(?E<id>)' or maybe r'(?E<user=id>)' instead. The first form is
+  r'(?E:id)' or maybe r'(?E:user=id)' instead. The first form is
   simply expanded to
 
       r'([-_0-9A-Za-z]+)'
 
   Notice that parentheses are used so this becomes a regexp group. If
-  you use the r'(?E<user=id>)' form of the id regexp extension, it is
+  you use the r'(?E:user=id)' form of the id regexp extension, it is
   expanded to
 
       r'(?P<user>[-_0-9A-Za-z]+)'
@@ -192,25 +206,49 @@ def extend(name,pattern,expand=False):
   True, any regexp extensions in the pattern are expanded before being
   added to the registry. So for example,
 
-      RE.extend('cred',r'^\s*cred\s*=\s*(?E<id>):(.*)$')
+      RE.extend('cred',r'^\s*cred\s*=\s*(?E:id):(.*)$')
 
   will simply store that regular expression in the registry labeled as
   "cred". But if you register it this way,
 
-      RE.extend('cred',r'^\s*cred\s*=\s*(?E<id>):(.*)$',expand=True)
+      RE.extend('cred',r'^\s*cred\s*=\s*(?E:id):(.*)$',expand=True)
 
   this expands the regexp extension before registering it, which means
   this is what's stored in the registry:
 
       r'^\s*cred\s*=\s*([-_0-9A-Za-z]+):(.*)$'
 
-  The result of using '(?E<cred>)' in a regular expression is exactly
+  The result of using '(?E:cred)' in a regular expression is exactly
   the same in either case.
   """
 
-  if expand:
-    pattern=_apply_extensions(pattern)
-  _extensions[name]=pattern
+  if not pattern:
+    # Remove name if it's already defined.
+    if name in _extensions:
+      del _extensions[name]
+  else:
+    # Add this named extension.
+    if expand:
+      pattern=_apply_extensions(pattern)
+    _extensions[name]=pattern
+
+def read_extensions(filename='~/.RE.rc'):
+  """Read RE extension definitions from the given file. The default
+  file is ~/.RE.rc."""
+
+  filename=os.path.expanduser(filename)
+  if os.path.isfile(filename):
+    with file(filename) as f:
+      count=0
+      for line in f:
+        count+=1
+        if _extcmt.match(line):
+          continue;
+        m=_extdef.match(line)
+        if not m:
+          raise Error('%s: Bad extension in line %d: "%s"'%(filename,count,line.rstrip()))
+        name,op,pat=m.groups()
+        extend(name,pat,expand=op=='<')
 
 def compile(pattern,flags=0):
   "Compile a regular expression pattern, returning a pattern object."
@@ -275,59 +313,9 @@ def subn(pattern, repl, string, count=0, flags=0):
 
   return re.subn(_apply_extensions(pattern),repl,s,count,flags)
 
-# Account names.
-extend('id',r'[-_0-9A-Za-z]+')
-# Python (Java, C, et al.) identifiers.
-extend('ident',r'[_A-Za-z][_0-9A-Za-z]+')
-
-# Comments may begin with #, ;, or // and continue to the end of the line.
-# If you need to handle multi-line comments ... feel free to roll your own
-# extension for that. (It CAN be done.)
-extend('comment',r'\s*([#;]|//).*')
-
-# Network
-extend('ipv4',r'\.'.join([r'\d{1,3}']*4))
-extend('ipv6',':'.join([r'[0-9A-Fa-f]{1,4}']*8))
-extend('ipaddr',r'(?E<ipv4>)|(?E<ipv6>)')
-extend('cidr',r'(?E<ipv4>)/\d{1,2}')
-extend('macaddr48','(%s)|(%s)|(%s)'%(
-  '[-:]'.join(['([0-9A-Fa-f]{2})']*6),
-  '[-:]'.join(['([0-9A-Fa-f]{3})']*4),
-  r'\.'.join(['([0-9A-Fa-f]{4})']*3)
-))
-extend('macaddr64','(%s)|(%s)'%(
-  '[-:.]'.join(['([0-9A-Fa-f]{2})']*8),
-  '[-:.]'.join(['([0-9A-Fa-f]{4})']*4)
-))
-extend('macaddr',r'(?E<macaddr48>)|(?E<macaddr64>)')
-extend('hostname',r'[0-9A-Za-z]+(\.[-0-9A-Za-z]+)*')
-extend('host','(?E<ipaddr>)|(?E<hostname>)')
-extend('service','(?E<host>):\d+')
-extend('hostport','(?E<host>)(:(\d{1,5}))?') # Host and optional port.
-extend('filename',r'[^/]+')
-extend('path',r'/?(?E<filename>)(/(?E<filename>))*')
-extend('abspath',r'/(?E<filename>)(/(?E<filename>))*')
-extend('email_localpart',
-  r"(\(.*\))?" # Comments are allowed in email addresses. Who knew!?
-  r"([0-9A-Za-z!#$%&'*+-/=?^_`{|}~]+)"
-  r"(\.([0-9A-Za-z!#$%&'*+-/=?^_`{|}~])+)*"
-  r"(\(.*\))?" # The comment is either before or after the local part.
-  r"@"
-)
-extend('email',r"(?E<email_localpart>)(?E<hostport>)")
-extend('url_scheme',r'([A-Za-z]([-+.]?[0-9A-Za-z]+)*:){1,2}')
-extend('url',
-  r'(?E<url_scheme>)'             # E.g. 'http:' or 'presto:http:'.
-  r'((?E<email_localpart>)|(//))' # Allows both 'mailto:addr' and 'http://host'.
-  r'(?E<hostport>)?'              # Host (required) and port (optional).
-  r'(?E<abspath>)?'               # Any path that MIGHT follow all that.
-  r'(\?'                          # Any parameters that MIGHT be present.
-    r'((.+?)=([^&]*))'
-    r'(&((.+?)=([^&]*)))*'
-  r')?'
-)
-   #r'(([^=]+)=([^&]*))'
-   #r'(&(([^=]+)=([^&]*)))*'
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Compute some extensions that are a pain to compose manually.
 
 # TODO: Compute the "day" and "month" extensions like we're doing for day3,
 # DAY, month3, and MONTH below. The way we're doing it now only kind of works.
@@ -347,24 +335,82 @@ extend('month',r'(([Jj][Aa]|[Ff]|[Mm][Aa][Rr]|[Aa][Pp]|[Mm][Aa][Yy]|[Jj][Uu][Nn]
 # month3=JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC
 extend('month3',r'(%s)'%'|'.join(['(%s)'%''.join(['[%s%s]'%(c.upper(),c) for c in m[:3]]) for m in mnames]))
 extend('MONTH',r'(%s)'%'|'.join(['(%s)'%''.join(['[%s%s]'%(c.upper(),c) for c in m]) for m in mnames]))
-# date_YMD = [CC]YY(-|/|.)[M]M(-|/|.)[D]D
-#            Wow. the BNF format is uglier than the regexp. Just think YYYY-MM-DD
-#            where the dashes can be / or . instead.
-extend('date_YMD',r'((\d{2}(\d{2})?)([-/.])(\d{1,2})([-/.])(\d{1,2}))')
-# date_YmD is basically "[CC]YY-mon-DD" where mon is the name of a month as
-# defined by the "month" extension above.
-extend('date_YmD',r'((\d{2}(\d{2})?)([-/.])((?E<month>))([-/.])(\d{1,2}))')
-# date_mD is basically "mon DD" where mon is the name of a month as defined by
-# the "month" extension above.
-extend('date_mD',r'(?E<month>\s+(\d{1,2}))')
-# time_HMS = HH:MM:SS
-# time_HM = HH:MM
-#            12- or 24-hour time will do, and the : can be . or - instead.
-extend('time_HM',r'(\d{1,2})([-:.])(\d{2})')
-extend('time_HMS',r'(\d{1,2})([-:.])(\d{2})([-:.])(\d{2})')
+
+if False: # These are defined in ~/.RE.rc now.
+  # Account names.
+  extend('id',r'[-_0-9A-Za-z]+')
+  # Python (Java, C, et al.) identifiers.
+  extend('ident',r'[_A-Za-z][_0-9A-Za-z]+')
+
+  # Comments may begin with #, ;, or // and continue to the end of the line.
+  # If you need to handle multi-line comments ... feel free to roll your own
+  # extension for that. (It CAN be done.)
+  extend('comment',r'\s*([#;]|//).*')
+
+  # Network
+  extend('ipv4',r'\.'.join([r'\d{1,3}']*4))
+  extend('ipv6',':'.join([r'[0-9A-Fa-f]{1,4}']*8))
+  extend('ipaddr',r'(?E:ipv4)|(?E:ipv6)')
+  extend('cidr',r'(?E:ipv4)/\d{1,2}')
+  extend('macaddr48','(%s)|(%s)|(%s)'%(
+    '[-:]'.join(['([0-9A-Fa-f]{2})']*6),
+    '[-:]'.join(['([0-9A-Fa-f]{3})']*4),
+    r'\.'.join(['([0-9A-Fa-f]{4})']*3)
+  ))
+  extend('macaddr64','(%s)|(%s)'%(
+    '[-:.]'.join(['([0-9A-Fa-f]{2})']*8),
+    '[-:.]'.join(['([0-9A-Fa-f]{4})']*4)
+  ))
+  extend('macaddr',r'(?E:macaddr48)|(?E:macaddr64)')
+  extend('hostname',r'[0-9A-Za-z]+(\.[-0-9A-Za-z]+)*')
+  extend('host','(?E:ipaddr)|(?E:hostname)')
+  extend('service','(?E:host):\d+')
+  extend('hostport','(?E:host)(:(\d{1,5}))?') # Host and optional port.
+  extend('filename',r'[^/]+')
+  extend('path',r'/?(?E:filename)(/(?E:filename))*')
+  extend('abspath',r'/(?E:filename)(/(?E:filename))*')
+  extend('email_localpart',
+    r"(\(.*\))?" # Comments are allowed in email addresses. Who knew!?
+    r"([0-9A-Za-z!#$%&'*+-/=?^_`{|}~]+)"
+    r"(\.([0-9A-Za-z!#$%&'*+-/=?^_`{|}~])+)*"
+    r"(\(.*\))?" # The comment is either before or after the local part.
+    r"@"
+  )
+  extend('email',r"(?E:email_localpart)(?E:hostport)")
+  extend('url_scheme',r'([A-Za-z]([-+.]?[0-9A-Za-z]+)*:){1,2}')
+  extend('url',
+    r'(?E:url_scheme)'             # E.g. 'http:' or 'presto:http:'.
+    r'((?E:email_localpart)|(//))' # Allows both 'mailto:addr' and 'http://host'.
+    r'(?E:hostport)?'              # Host (required) and port (optional).
+    r'(?E:abspath)?'               # Any path that MIGHT follow all that.
+    r'(\?'                          # Any parameters that MIGHT be present.
+      r'((.+?)=([^&]*))'
+      r'(&((.+?)=([^&]*)))*'
+    r')?'
+  )
+     #r'(([^=]+)=([^&]*))'
+     #r'(&(([^=]+)=([^&]*)))*'
+
+  # date_YMD = [CC]YY(-|/|.)[M]M(-|/|.)[D]D
+  #            Wow. the BNF format is uglier than the regexp. Just think YYYY-MM-DD
+  #            where the dashes can be / or . instead.
+  extend('date_YMD',r'((\d{2}(\d{2})?)([-/.])(\d{1,2})([-/.])(\d{1,2}))')
+  # date_YmD is basically "[CC]YY-mon-DD" where mon is the name of a month as
+  # defined by the "month" extension above.
+  extend('date_YmD',r'((\d{2}(\d{2})?)([-/.])((?E:month))([-/.])(\d{1,2}))')
+  # date_mD is basically "mon DD" where mon is the name of a month as defined by
+  # the "month" extension above.
+  extend('date_mD',r'(?E:month>\s+(\d{1,2}))')
+  # time_HMS = HH:MM:SS
+  # time_HM = HH:MM
+  #            12- or 24-hour time will do, and the : can be . or - instead.
+  extend('time_HM',r'(\d{1,2})([-:.])(\d{2})')
+  extend('time_HMS',r'(\d{1,2})([-:.])(\d{2})([-:.])(\d{2})')
 
 # TODO: Parse https://www.timeanddate.com/time/zones/ for TZ data, and hardcode
 # that into a regexp extension here.
+
+read_extensions()
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -373,14 +419,53 @@ extend('time_HMS',r'(\d{1,2})([-:.])(\d{2})([-:.])(\d{2})')
 #
 if __name__=='__main__':
   import argparse,os,sys
+  from debug import DebugChannel
   from doctest import testmod
   from english import nounf
 
-  def find(opt):
+  def grep(opt):
     "Find all matching conent according to the given argparse namespace."
 
+    def output(line,tgroups,dgroups):
+      "This sub-function helps us implement the -v option."
+
+      if not (opt.count or opt.list):
+        # Show each match.
+        if opt.fmt and (tgroups or dgroups):
+          line=opt.fmt.format(line,*tgroups,**dgroups)
+        if opt.tuple or opt.dict:
+          print('')
+        if opt.tuple:
+          print(repr(m.groups()))
+        if opt.dict:
+          print('{%s}'%', '.join([
+            '"%s": "%s"'%(k,v) for k,v in sorted(dgroups.items())
+          ]))
+        if show_filename:
+          print('%s: %s'%(fn,line))
+        else:
+          print(line)
+
+    opt.re_flags=0
+    if opt.ignore_case:
+      opt.re_flags|=re.IGNORECASE
+    if bug:
+      bug('Options').indent(1)
+      bug('count=%r'%(opt.count,))
+      bug('fmt=%r'%(opt.fmt,))
+      bug('tuple=%r'%(opt.tuple,))
+      bug('dict=%r'%(opt.dict,))
+      bug('ignore_case=%r'%(opt.ignore_case,))
+      bug('invert=%r'%(opt.invert,))
+      bug('ext=%r'%(opt.ext,))
+      bug('extensions=%r'%(opt.extensions,))
+      bug('re_flags=%r'%(opt.re_flags,))
+      bug.indent(-1)('Aguements').indent(1)
+      bug('args=%r'%(opt.args,))
+      bug.indent(-1)
+
     all_matches=0 # Total matches over all scanned input files.
-    pat=compile(opt.args.pop(0))
+    pat=compile(opt.args.pop(0),opt.re_flags)
     opt.args=[a for a in opt.args if not os.path.isdir(a)]
     show_filename=False
     if len(opt.args)<1:
@@ -399,24 +484,12 @@ if __name__=='__main__':
         if line[-1]=='\n':
           line=line[:-1]
         m=pat.search(line)
-        if m:
+        if bool(m)!=bool(opt.invert):
           matches+=1
-          if not (opt.count or opt.list):
-            # Show each match.
-            if opt.fmt:
-              line=opt.fmt.format(line,*m.groups(),**m.groupdict())
-            if opt.tuple or opt.dict:
-              print('')
-            if opt.tuple:
-              print(repr(m.groups()))
-            if opt.dict:
-              print('{%s}'%', '.join([
-                '"%s": "%s"'%(k,v) for k,v in sorted(m.groupdict().items())
-              ]))
-            if show_filename:
-              print('%s: %s'%(fn,line))
-            else:
-              print(line)
+          if m:
+            output(line,m.groups(),m.groupdict())
+          else:
+            output(line,(),{})
       if matches:
         if opt.count:
           if show_filename:
@@ -429,42 +502,42 @@ if __name__=='__main__':
       if fn!='-':
         f.close()
 
-    return all_matches
+    sys.exit((0,1)[all_matches==0])
 
-  def tests():
+  def test(opt):
     """
     >>> # Just to make testing dict result values predictable ...
     >>> def sdict(d):print '{%s}'%(', '.join(['%r: %r'%(k,v) for k,v in sorted(d.items())]))
     >>> # Basic expansion of a registered extension.
-    >>> _apply_extensions(r'user=(?E<user=id>)')
+    >>> _apply_extensions(r'user=(?E:user=id)')
     'user=(?P<user>[-_0-9A-Za-z]+)'
-    >>> _apply_extensions(r'user=(?E<id>)')
+    >>> _apply_extensions(r'user=(?E:id)')
     'user=([-_0-9A-Za-z]+)'
     >>> # "id"
     >>> s='    user=account123, client=123.45.6.78     '
-    >>> m=search(r'user=(?E<user=id>)',s)
+    >>> m=search(r'user=(?E:user=id)',s)
     >>> m.groups()
     ('account123',)
     >>> b,e=m.span()
     >>> s[b:e]
     'user=account123'
     >>> # "id" combined wih "ipv4"
-    >>> m=search(r'user=(?E<user=id>),\s*client=(?E<client=ipv4>)',s)
+    >>> m=search(r'user=(?E:user=id),\s*client=(?E:client=ipv4)',s)
     >>> m.groups()
     ('account123', '123.45.6.78')
     >>> sdict(m.groupdict())
     {'client': '123.45.6.78', 'user': 'account123'}
     >>> s='x=5 # This is a comment.    '
-    >>> m=search(r'(?E<comment>)',s)
+    >>> m=search(r'(?E:comment)',s)
     >>> s[:m.span()[0]]
     'x=5'
     >>> # "cidr"
     >>>
-    match(r'subnet=(?E<net=cidr>)','subnet=123.45.6.78/24').groupdict()['net']
+    match(r'subnet=(?E:net=cidr)','subnet=123.45.6.78/24').groupdict()['net']
     '123.45.6.78/24'
     >>> # "ipv6"
     >>> s='client=2001:0db8:85A3:0000:0000:8a2e:0370:7334'
-    >>> p=compile(r'client=(?E<client=ipv6>)')
+    >>> p=compile(r'client=(?E:client=ipv6)')
     >>> m=p.match(s)
     >>> m.groups()
     ('2001:0db8:85A3:0000:0000:8a2e:0370:7334',)
@@ -477,7 +550,7 @@ if __name__=='__main__':
     >>> # extensions can be. If you don't believe what a step-saver this is,
     >>> # run RE._expand_extensions the regexp that's compiled below.
     >>> s='server=2001:0db8:85A3:0000:0000:8a2e:0370:7334, client=123.45.6.78'
-    >>> p=compile(r'server=(?E<srv=ipaddr>),\s*client=(?E<cli=ipaddr>)')
+    >>> p=compile(r'server=(?E:srv=ipaddr),\s*client=(?E:cli=ipaddr)')
     >>> m=p.match(s)
     >>> m.groups()
     ('2001:0db8:85A3:0000:0000:8a2e:0370:7334', None, '2001:0db8:85A3:0000:0000:8a2e:0370:7334', '123.45.6.78', '123.45.6.78', None)
@@ -485,33 +558,33 @@ if __name__=='__main__':
     {'cli': '123.45.6.78', 'srv': '2001:0db8:85A3:0000:0000:8a2e:0370:7334'}
     >>> # "macaddr48"
     >>> s='from 01:23:45:67:89:aB to 012-345-678-9aB via 0123.4567.89aB'
-    >>> p=r'from\s+(?E<from=macaddr48>)\s+to\s+(?E<to=macaddr48>)\s+via\s+(?E<mid=macaddr48>)'
+    >>> p=r'from\s+(?E:from=macaddr48)\s+to\s+(?E:to=macaddr48)\s+via\s+(?E:mid=macaddr48)'
     >>> sdict(search(p,s).groupdict())
     {'from': '01:23:45:67:89:aB', 'mid': '0123.4567.89aB', 'to': '012-345-678-9aB'}
     >>> # "macaddr64"
     >>> s='from 01:23:45:67:89:ab:cd:EF to 0123.4567.89ab.cdEF'
-    >>> p=r'from\s+(?E<from=macaddr64>)\s+to\s+(?E<to=macaddr64>)'
+    >>> p=r'from\s+(?E:from=macaddr64)\s+to\s+(?E:to=macaddr64)'
     >>> sdict(match(p,s).groupdict())
     {'from': '01:23:45:67:89:ab:cd:EF', 'to': '0123.4567.89ab.cdEF'}
     >>> # "macaddr". Again, this is a pretty big regexp that we're getting for
     >>> # very little effort.
     >>> s='from 01:23:45:67:89:ab:cd:EF to 01:23:45:67:89:aB'
-    >>> p=r'from\s+(?E<src=macaddr>)\s+to\s+(?E<dst=macaddr>)'
+    >>> p=r'from\s+(?E:src=macaddr)\s+to\s+(?E:dst=macaddr)'
     >>> sdict(search(p,s).groupdict())
     {'dst': '01:23:45:67:89:aB', 'src': '01:23:45:67:89:ab:cd:EF'}
     >>> # "hostname". This should match any valid DNS name.
-    >>> p='\s*host\s*[ :=]?\s*(?E<host=hostname>)'
+    >>> p='\s*host\s*[ :=]?\s*(?E:host=hostname)'
     >>> match(p,'host=this.is.a.test').groupdict()['host']
     'this.is.a.test'
     >>> # "host". Matches "ipaddr" or "hostname".
-    >>> p='\s*host\s*[ :=]?\s*(?E<host=host>)'
+    >>> p='\s*host\s*[ :=]?\s*(?E:host=host)'
     >>> match(p,'host=this.is.a.test').groupdict()['host']
     'this.is.a.test'
     >>> s='host=123.45.6.78'
     >>> match(p,'host=123.45.6.78').groupdict()['host']
     '123.45.6.78'
     >>> # "hostport". Just like "host", but you can specify a port.
-    >>> p='\s*host\s*[ :=]\s*(?E<host=hostport>)'
+    >>> p='\s*host\s*[ :=]\s*(?E:host=hostport)'
     >>> match(p,'host=this.is.a.test').groupdict()['host']
     'this.is.a.test'
     >>> match(p,'host=123.45.6.78').groupdict()['host']
@@ -521,11 +594,11 @@ if __name__=='__main__':
     >>> match(p,'host=123.45.6.78:99').groupdict()['host']
     '123.45.6.78:99'
     >>> # "filename"
-    >>> p='\s*file\s*[ :=]\s*(?E<file=filename>)'
+    >>> p='\s*file\s*[ :=]\s*(?E:file=filename)'
     >>> search(p,'file=.file-name.EXT').groupdict()['file']
     '.file-name.EXT'
     >>> # "path"
-    >>> p='\s*file\s*[ :=]\s*(?E<file=path>)'
+    >>> p='\s*file\s*[ :=]\s*(?E:file=path)'
     >>> search(p,'file=.file-name.EXT').groupdict()['file']
     '.file-name.EXT'
     >>> search(p,'file=dir1/dir2/file-name.EXT').groupdict()['file']
@@ -533,13 +606,13 @@ if __name__=='__main__':
     >>> search(p,'file=/dir1/dir2/file-name.EXT').groupdict()['file']
     '/dir1/dir2/file-name.EXT'
     >>> # "abspath"
-    >>> p='\s*file\s*[ :=]\s*(?E<file=abspath>)'
+    >>> p='\s*file\s*[ :=]\s*(?E:file=abspath)'
     >>> search(p,'file=/dir1/dir2/file-name.EXT').groupdict()['file']
     '/dir1/dir2/file-name.EXT'
     >>> print search(p,'file=dir1/dir2/file-name.EXT')
     None
     >>> # "email_localpart"
-    >>> p='from: (?E<from=email_localpart>)'
+    >>> p='from: (?E:from=email_localpart)'
     >>> match(p,'from: some.person@').groupdict()['from']
     'some.person@'
     >>> match(p,'from: (comment)some.person@').groupdict()['from']
@@ -547,7 +620,7 @@ if __name__=='__main__':
     >>> match(p,'from: some.person(comment)@').groupdict()['from']
     'some.person(comment)@'
     >>> # "email"
-    >>> p='from: (?E<from=email>)'
+    >>> p='from: (?E:from=email)'
     >>> match(p,'from: some.person@someplace').groupdict()['from']
     'some.person@someplace'
     >>> match(p,'from: (comment)some.person@someplace').groupdict()['from']
@@ -555,7 +628,7 @@ if __name__=='__main__':
     >>> match(p,'from: some.person(comment)@someplace').groupdict()['from']
     'some.person(comment)@someplace'
     >>> # "url_scheme"
-    >>> p='(?E<proto=url_scheme>)'
+    >>> p='(?E:proto=url_scheme)'
     >>> match(p,'http:').groupdict()['proto']
     'http:'
     >>> match(p,'ht-tp:').groupdict()['proto']
@@ -569,7 +642,7 @@ if __name__=='__main__':
     >>> match(p,'presto:http:').groupdict()['proto']
     'presto:http:'
     >>> # "url"
-    >>> p='(?E<url=url>)'
+    >>> p='(?E:url=url)'
     >>> search(p,'mailto:some.person@someplace.com').groupdict()['url']
     'mailto:some.person@someplace.com'
     >>> search(p,'mailto:some.person@someplace.com?to=me').groupdict()['url']
@@ -595,7 +668,7 @@ if __name__=='__main__':
     >>> # valid character. (And of course, we're not handling escaping at all,
     >>> # but I'm not sure that can even be expressed regularly.)
     >>> #search(p,'ftp://vault.com/path/to/file?encrypt=1&compress=0').groups()
-    >>> p='(?E<day=day>)'
+    >>> p='(?E:day=day)'
     >>> search(p,'Sunday').groupdict()['day']
     'Sunday'
     >>> search(p,'Sun').groupdict()['day']
@@ -608,14 +681,14 @@ if __name__=='__main__':
     'tuesday'
     >>> search(p,'tu').groupdict()['day']
     'tu'
-    >>> p='(?E<day=day3>)'
+    >>> p='(?E:day=day3)'
     >>> search(p,'Sun').groupdict()['day']
     'Sun'
     >>> search(p,'sun').groupdict()['day']
     'sun'
     >>> search(p,'tu')==None
     True
-    >>> p='(?E<month=month>)'
+    >>> p='(?E:month=month)'
     >>> search(p,'January').groupdict()['month']
     'January'
     >>> search(p,'ja').groupdict()['month']
@@ -624,7 +697,7 @@ if __name__=='__main__':
     'May'
     >>> search(p,'D').groupdict()['month']
     'D'
-    >>> p='(?E<month=month3>)'
+    >>> p='(?E:month=month3)'
     >>> search(p,'Jan').groupdict()['month']
     'Jan'
     >>> search(p,'ja')==None
@@ -635,44 +708,50 @@ if __name__=='__main__':
     'Dec'
     """
 
-   # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-  # Parse our command line.
-  ap=argparse.ArgumentParser()
-  sp=ap.add_subparsers()
-
-  ap_find=sp.add_parser('find',description="This works a lot like grep.")
-  ap_find.set_defaults(cmd='find')
-  ap_find.add_argument('-1',dest='one',action='store_true',help="Do not output names of files containing matches, even if more than one file is to be scanned.")
-  ap_find.add_argument('-c',dest='count',action='store_true',help="Output only the number of matching lines of each file scanned.")
-  ap_find.add_argument('-f',dest='fmt',action='store',help="Use standard Python template syntax to format output.")
-  ap_find.add_argument('-g',dest='tuple',action='store_true',help='Output the tuple of matching groups above each matching line.')
-  ap_find.add_argument('-G',dest='dict',action='store_true',help='Output the dictionary of matching groups above each matching line.')
-  ap_find.add_argument('-i',dest='ignrore_case',action='store_true',help="Ignore the case of alphabetic characters when scanning.")
-  ap_find.add_argument('-l',dest='list',action='store_true',help="Output only the name of each file scanned. (Trumps -1.)")
-  ap_find.add_argument('-x',dest='ext',action='append',help="""Add a "name=pattern" RE extension. Use as many -x options as you need.""")
-  ap_find.add_argument('--extensions',action='store_true',help="List our RE extensions.")
-  ap_find.add_argument('args',action='store',nargs='+',help="A regular expression, optionally followed by one or more names of files to be scanned.")
-
-  ap_test=sp.add_parser('test',description="Just run internal tests and report the result.")
-  ap_test.set_defaults(cmd='test')
-
-  opt=ap.parse_args()
-  if hasattr(opt,'ext'):
-    for x in opt.ext:
-      extend(*x.split('=',1))
-  if hasattr(opt,'extensions') and opt.extensions:
-    print '\n'.join(['%s: "%s"'%(n,p) for n,p in sorted(_extensions.items())])
-    sys.exit(0)
-
-   # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-  # Do whatever our command line says.
-  if opt.cmd=='find':
-    sys.exit((0,1)[find(opt)==0])
-  elif opt.cmd=='test':
     f,t=testmod(report=False)
     if f>0:
       print '*********************************************************************\n'
     print "Passed %d of %s."%(t-f,nounf('test',t))
     sys.exit((1,0)[f==0])
+
+   # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+  # Parse our command line.
+  ap=argparse.ArgumentParser()
+  ap.add_argument('-d',dest='debug',action='store_true',help="Turn on debug messages.")
+  ap.add_argument('-x',dest='ext',action='append',default=[],help="""Add a "name=pattern" RE extension. Use as many -x options as you need.""")
+  ap.add_argument('--extensions',action='store_true',help="List our RE extensions.")
+  sp=ap.add_subparsers()
+
+  ap_find=sp.add_parser('grep',description="This works a lot like grep.")
+  ap_find.set_defaults(func=grep)
+  ap_find.add_argument('-1',dest='one',action='store_true',help="Do not output names of files containing matches, even if more than one file is to be scanned.")
+  ap_find.add_argument('-c',dest='count',action='store_true',help="Output only the number of matching lines of each file scanned.")
+  ap_find.add_argument('-f',dest='fmt',action='store',help="Use standard Python template syntax to format output.")
+  ap_find.add_argument('-g',dest='tuple',action='store_true',help='Output the tuple of matching groups above each matching line.')
+  ap_find.add_argument('-G',dest='dict',action='store_true',help='Output the dictionary of matching groups above each matching line.')
+  ap_find.add_argument('-i',dest='ignore_case',action='store_true',help="Ignore the case of alphabetic characters when scanning.")
+  ap_find.add_argument('-l',dest='list',action='store_true',help="Output only the name of each file scanned. (Trumps -1.)")
+  ap_find.add_argument('-v',dest='invert',action='store_true',help="Output (or count) non-matching lines rather than matching lines.")
+  ap_find.add_argument('args',action='store',nargs='+',help="A regular expression, optionally followed by one or more names of files to be scanned.")
+
+  ap_test=sp.add_parser('test',description="Just run internal tests and report the result.")
+  ap_test.set_defaults(func=test)
+
+  #from pprint import pprint
+  #pprint(ap.__dict__)
+  opt=ap.parse_args()
+  bug=DebugChannel(enabled=opt.debug,label='D')
+  
+  for x in opt.ext:
+    name,pat=x.split('=',1)
+    bug('Registering RE %r as "%s"'%(name,pat))
+    extend(name,pat)
+  if opt.extensions:
+    print '\n'.join(['%s=%s'%(n,p) for n,p in sorted(_extensions.items())])
+    sys.exit(0)
+
+   # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+  # Do whatever our command line says.
+  opt.func(opt)
