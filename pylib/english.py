@@ -478,6 +478,72 @@ def join(seq,con='and',sep=None):
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Humanizer and its subclasses are for expressing quantities of bytes in a form
+# that's easier for a human to read than "45 989 234 7923 bytes".
+
+class Humanizer(object):
+  def __init__(self,divisor,units,precision):
+    self.threshold=int(divisor)*10
+    self.divisor=float(divisor)
+    self.units=tuple(units)
+    self.precision=precision
+
+  def __repr__(self):
+    return '%s(%d,%r,%d)'%(__class__.__name__,divisor,units,precision)
+
+  def format(self,val,precision=None):
+    debug('format(%r,%r)'%(val,percision)).indent(1)
+    if precision==None:
+      precision=self.precision
+    for i in range(len(self.units)):
+      if val<self.threshold:
+        break
+      if val>=self.divisor:
+        val/=self.divisor
+    else:
+      i-=1
+    s=('%0.*f'%(precision,val)).rstrip('.0')
+    if not s:
+      s='0'
+    s=nounf(self.units[i],val,fmt="%s %%(noun)s"%s)
+    debug.indent(-1)('returning %r'%(s,))
+
+class DecimalHumanizer(Humanizer):
+  """DecimalHumanizer instances use a divisor of 10**3 to express a
+  given number of bytes in a form easy for humans to interpret."""
+
+  def __init__(self,precision=2):
+    super(self.__class__,self).__init__(1000,(
+      'byte','kilobyte','megabyte','gigabyte','terabyte','petabyte','exabyte','zettabyte','yottabyte'
+    ),precision)
+
+  #def __repr__(self):
+  #  return '%s(%d)'%(__class__.__name__,precision)
+
+class DecHumanizer(Humanizer):
+  """DecHumanizer is just like DecimalHumanizer, but it abbreviates the
+  units it uses to express the given number of bytes."""
+
+  def __init__(self,precision=2):
+    super(self.__class__,self).__init__(1000,('B','KB','MB','GB','TB','PB','EB','ZB','YB'),precision)
+
+  #def __repr__(self):
+  #  return '%s(%d)'%(__class__.__name__,precision)
+
+  def format(self,val):
+    if precision==None:
+      precision=self.precision
+    for i in range(len(self.units)):
+      if val<self.threshold:
+        break
+      if val>=self.divisor:
+        val/=self.divisor
+    else:
+      i-=1
+    return '%0.*g %s'%(precision,val,self.units[i])
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Test code. The code below runs only run if this module is run as the main
 # module.
 
@@ -486,6 +552,10 @@ if __name__=='__main__':
 
   def tests():
     """
+    >>> #
+    >>> # Testing TitleCase
+    >>> # It's a class, not a function. But it does double-duty.
+    >>> #
     >>> TitleCase('')
     ''
     >>> TitleCase('a fine kettle of fish')
@@ -501,6 +571,9 @@ if __name__=='__main__':
     True
     >>> TitleCase('from in into of on onto than till to')
     'From in into of on onto than till To'
+    >>> #
+    >>> # Testing nouner()
+    >>> #
     >>> nouner('alumnus',1)
     'alumnus'
     >>> nouner('Alumnus',1)
@@ -541,6 +614,9 @@ if __name__=='__main__':
     'dog'
     >>> nouner('dog',2)
     'dogs'
+    >>> #
+    >>> # Testing nounf()
+    >>> #
     >>> nounf('dog',5)
     '5 dogs'
     >>> NounSuffixer('n','p',-1)('cat',1)
@@ -565,6 +641,9 @@ if __name__=='__main__':
     "2 dogs' tails"
     >>> "I stepped on %s."%nounf('person',3,'foot')
     "I stepped on 3 people's feet."
+    >>> #
+    >>> # Testing english.join()
+    >>> #
     >>> join(('',))
     ''
     >>> join(('this',))
@@ -592,17 +671,40 @@ if __name__=='__main__':
     Traceback (most recent call last):
       ...
     TypeError: __main__.join() operates on a sequence. It's not intended for a single string.
+    >>> #
+    >>> # Test Suffixer's error handling.
+    >>> #
     >>> x=Suffixer(('this is also','a mistake'),None)
     >>> join(x)
     Traceback (most recent call last):
       ...
     TypeError: __main__.join() requires a sequnece or something that can be turned into one.
+    >>> #
+    >>> # Test Humanizer and its subclasses.
+    >>> #
+    >>> h=DecimalHumanizer()
+    >>> h.format(0)
+    '0 bytes'
+    >>> h.format(1)
+    '1 byte'
+    >>> h.format(2)
+    '2 bytes'
+    >>> h.format(1000)
+    '1000 bytes'
+    >>> h.format(9000)
+    '9000 bytes'
+    >>> h.format(10000)
+    '10 kilobytes'
     """
 
-  print noun_rule_summary()
+  #print noun_rule_summary()
+  #print('')
+
+  from debug import DebugChannel
+  debug=DebugChannel(True)
 
   f,t=doctest.testmod(report=False)
   if f>0:
-    print '*********************************************************************'
-  print "\nFailed %d of %s."%(f,nounf('test',t))
+    print '*********************************************************************\n'
+  print "Failed %d of %s."%(f,nounf('test',t))
   sys.exit((1,0)[f==0])
