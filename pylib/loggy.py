@@ -176,6 +176,27 @@ def get_logger(**kwargs):
   #log.name=name
   return log
 
+
+class LogStream(object):
+  """If you need to write to some log facility as if it were a stream,
+  instantiate LogStream using the parameters you'd use with
+  get_logger(). If you don't supply a "level" argument, it will default
+  to "debug"."""
+
+  def __init__(self,**kwargs):
+    if 'level' not in kwargs:
+      kwargs['level']='debug'
+    self.level=kwargs['level'].upper()
+    self.log=get_logger(**kwargs)
+
+  def write(self,s):
+    self.log.log(logging._levelNames[self.level],s)
+
+  def writelines(self,seq):
+    for s in seq:
+      self.write(s)
+
+
 if __name__=='__main__':
   import optparse
 
@@ -189,5 +210,11 @@ if __name__=='__main__':
   if opt.facility=='stdout':   opt.facility=sys.stdout
   elif opt.facility=='stderr': opt.facility=sys.stderr
 
-  log=get_logger(facility=opt.facility,level=opt.level)
-  log.log(logging._levelNames[opt.level.upper()],' '.join(args))
+  if False:
+    # Write log data in the usual way.
+    log=get_logger(facility=opt.facility,level=opt.level)
+    log.log(logging._levelNames[opt.level.upper()],' '.join(args))
+  else:
+    # Write log data as if to a proper stream.
+    f=LogStream(facility=opt.facility,level=opt.level)
+    f.write(' '.join(args))
