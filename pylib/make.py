@@ -538,7 +538,7 @@ def link_exists(link):
 def symlink(target,link):
   """Create a symlink from link to target. If link already exists and is a
   symlink to link, no action is taken. Otherwise, target (whether it is a
-  symlink or a regular file) is replaced with a symlink to link."""
+  symlink or a regular file) is replaced with a symlink to target."""
 
   target=expand_all(target)
   link=expand_all(link)
