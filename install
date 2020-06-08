@@ -73,6 +73,7 @@ SCRIPTS=( # These targets are simply copied during installation.
   'patch-cal',
   'ph',
   'pretty-json',
+  'prime',
   'progress',
   'pwgen',
   'pygrep',
