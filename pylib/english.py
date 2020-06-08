@@ -381,7 +381,7 @@ def nouner(root,count,pos=False):
       break
   return word
 
-def nounf(root,count,pos=False,fmt=None):
+def nounf(root,count,pos=False,fmt=None,formatter=None):
   """This function is useful for constructing noun phrases like:
 
       "1 dog"
@@ -393,18 +393,24 @@ def nounf(root,count,pos=False,fmt=None):
   "noun", the count as "count", and nouner(pos,count) as "pos" if pos
   evaluates to a non-false value.
 
-  If pos is some false value, fmt defaults to "%(count)d %(noun)s".
-  Otherwise, fmt defaults to "%(count)d %(noun)s %(pos)s", and pos is
-  set to nouner(pos,count)."""
+  If pos is some false value, fmt defaults to "{count} {noun}".
+  Otherwise, fmt defaults to "{count} {noun} {pos}", and pos is
+  set to nouner(pos,count).
+  
+  If formatter is given, it must be a function accepting whatever value
+  is in count and returning whatever value count should have in the
+  returned string. One handy example is " lambda x:pnum(x)"."""
 
   noun=nouner(root,count,pos)
   if fmt==None:
     if pos:
       pos=nouner(pos,count)
-      fmt="%(count)d %(noun)s %(pos)s"
+      fmt="{count} {noun} {pos}"
     else:
-      fmt="%(count)d %(noun)s"
-  return fmt%(locals())
+      fmt="{count} {noun}"
+  if formatter:
+    count=formatter(count)
+  return fmt.format(**locals())
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -455,16 +461,25 @@ def join(seq,con='and',sep=None):
 
 from math import log10
 
-def pfloat(val,sep=',3',digits=3):
-  """People need only so many significant digits. This function accepts
-  a (presumably float) value and some maximum number of significant
-  digits to be used in its expression as a string. This will only ever
-  be used to limit how many places to the right of the decimal point to
-  express. Digits to the left are always expressed."""
+def pnum(val,sep=',3',digits=3):
+  """People can have a hard time interpreting large numbers at a glance,
+  and many places past the decimal point are typically ignored. This
+  function accepts a numeric value and some formatting parameters and
+  returns the value as a string. This will only ever be used to limit
+  how many places to the right of the decimal point to express. Digits
+  to the left are always expressed.
 
-  debug("pfloat(%r,%r,%r)"%(val,sep,digits)).indent(1)
-  assert isinstance(val,(int,long,float)),"pfloat()'s val must have a numeric type."
-  assert isinstance(digits,int) and digits>=0,"pfloat()'s digits must be a non-negative integer."
+  val     The numeric (int, long, or float) to be expressed as a string.
+  sep     Specifies how group and separate digits. The first character
+          is the seperator, and the optional remainder of the string is
+          the number of digits per group. If sep is None, no separation
+          is performed. (default: ',3')
+  digits  The minimum number of significant digits to express, which may
+          be on either side of the decimal. (default: 3)
+  """
+
+  assert isinstance(val,(int,long,float)),"pnum()'s val must have a numeric type."
+  assert isinstance(digits,int) and digits>=0,"pnum()'s digits must be a non-negative integer."
 
   # Parse our sep argument into sep and dist values.
   if sep:
@@ -473,7 +488,6 @@ def pfloat(val,sep=',3',digits=3):
       sep=sep[0]
     else:
       dist=3
-    debug('sep=%r, dist=%r'%(sep,dist))
 
   # Remember and remove any sign on the front of our value.
   sign=('','-')[val<0]
@@ -481,9 +495,11 @@ def pfloat(val,sep=',3',digits=3):
     val=-val
 
   # Decide how many decimal places we need.
-  intdigs=int(log10(val))+1
+  if val==0:
+    intdigs=1
+  else:
+    intdigs=int(log10(val))+1
   prec=digits-intdigs
-  debug("intdigs=%r, prec=%r"%(intdigs,prec))
   if prec<0:
     prec=0
   # In case rounding chnages the number of digits to the left of the decimal:
@@ -506,7 +522,6 @@ def pfloat(val,sep=',3',digits=3):
   # Put our value sign back.
   s=sign+s
 
-  debug.indent(-1)("returning %r"%(s,))
   return s
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -519,45 +534,46 @@ def pfloat(val,sep=',3',digits=3):
 
 class HumanBytes(object):
   def __init__(self,divisor,units,precision):
-    debug("%s(%r,%r,%r)"%(self.__class__.__name__,divisor,units,precision)).indent(1)
     self.divisor=float(divisor)
     self.units=tuple(units)
     self.precision=precision
-    debug.indent(-1)
 
   def __repr__(self):
     return '%s(%d,%r,%d)'%(__class__.__name__,divisor,units,precision)
 
-  def format(self,val,precision=None):
-    debug("%s.format(%r,%r)"%(self.__class__.__name__,val,self.precision)).indent(1)
-    # Use the precision this instance was created with if necessary.
-    if precision==None:
-      precision=self.precision
-    # Find the right units to use, diving val by our divisor as we go.
+  def _findUnits(self,val):
+    """FOR INTERNAL USE ONLY: Divide val by our divisor as many times as
+    needed to find the appropriate units to use with it. Return a tuple
+    of the resulting val value (after repeated division) and the units
+    string for that new value."""
+
+    # Find the right units to use, dividing val by our divisor as we go.
     for i in range(len(self.units)):
-      debug('i=%r, val=%r'%(i,val))
       if val<self.divisor:
         break
       if val>=self.divisor:
         val/=self.divisor
     else:
       i-=1
-    # We need to pre-format the numeric value we're going to use.
-    s='%0.*f'%(precision,val)
-    if '.' in s:
-      s=s.rstrip('0')
-      if s.endswith('.'):
-        s=s[:-1]
-    s=nounf(self.units[i],val,fmt="%s %%(noun)s"%s)
-    debug.indent(-1)('returning %r'%(s,))
-    return s
+
+    return val,self.units[i]
+
+  def format(self,val,precision=None):
+    # Divite our value repeatedly to find the right unit.
+    val,units=self._findUnits(val)
+    # Use the precision this instance was created with if necessary.
+    if precision==None:
+      precision=self.precision
+    # Pre-format our number.
+    s=pnum(val,digits=precision)
+    # Put it all together
+    return nounf(units,val,fmt="%s {noun}"%s)
 
 class DecimalHumanBytes(HumanBytes):
   """DecimalHumanBytes instances use a divisor of 10**3 to express a
   given number of bytes in a form easy for humans to interpret."""
 
   def __init__(self,precision=2):
-    debug("%s(%r)"%(self.__class__.__name__,precision))
     super(self.__class__,self).__init__(1000,(
       'byte','kilobyte','megabyte','gigabyte','terabyte','petabyte','exabyte','zettabyte','yottabyte'
     ),precision)
@@ -575,7 +591,8 @@ class DecHumanBytes(HumanBytes):
   #def __repr__(self):
   #  return '%s(%d)'%(__class__.__name__,precision)
 
-  def format(self,val):
+  def format(self,val,precision=None):
+    # Use the precision this instance was created with if necessary.
     if precision==None:
       precision=self.precision
     for i in range(len(self.units)):
@@ -755,62 +772,66 @@ if __name__=='__main__':
       ...
     TypeError: __main__.join() requires a sequnece or something that can be turned into one.
     >>> #
-    >>> # Test pfloat().
+    >>> # Test pnum().
     >>> #
-    >>> pfloat(1.0)
+    >>> pnum(1.0)
     '1'
-    >>> pfloat(12)
+    >>> pnum(12)
     '12'
-    >>> pfloat(123)
+    >>> pnum(123)
     '123'
-    >>> pfloat(1234)
+    >>> pnum(1234)
     '1,234'
-    >>> pfloat(12345)
+    >>> pnum(12345)
     '12,345'
-    >>> pfloat(123456)
+    >>> pnum(123456)
     '123,456'
-    >>> pfloat(1234567)
+    >>> pnum(1234567)
     '1,234,567'
-    >>> pfloat(1234567,sep='.4')
+    >>> pnum(1234567,sep='.4')
     '123.4567'
-    >>> pfloat(-12345678,sep='.4')
+    >>> pnum(-12345678,sep='.4')
     '-1234.5678'
+    >>> pnum(1.23456)
+    '1.23'
+    >>> pnum(1.23456,digits=4)
+    '1.235'
+    >>> #
+    >>> # Test HumanBytes and its subclasses.
+    >>> #
+    >>> h=DecimalHumanBytes()
+    >>> h.format(0)
+    '0 bytes'
+    >>> h.format(1)
+    '1 byte'
+    >>> h.format(2)
+    '2 bytes'
+    >>> h.format(999)
+    '999 bytes'
+    >>> h.format(1000)
+    '1 kilobyte'
+    >>> h.format(9000)
+    '9 kilobytes'
+    >>> h.format(10000)
+    '10 kilobytes'
+    >>> h.format(10**9)
+    '1 gigabyte'
+    >>> h.format(459892347923)
+    '460 gigabytes'
     """
-    #>>> #
-    #>>> # Test HumanBytes and its subclasses.
-    #>>> #
-    #>>> h=DecimalHumanBytes()
-    #>>> h.format(0)
-    #'0 bytes'
-    #>>> h.format(1)
-    #'1 byte'
-    #>>> h.format(2)
-    #'2 bytes'
-    #>>> h.format(999)
-    #'999 bytes'
-    #>>> h.format(1000)
-    #'1 kilobyte'
-    #>>> h.format(9000)
-    #'9 kilobytes'
-    #>>> h.format(10000)
-    #'10 kilobytes'
-    #>>> h.format(10**9)
-    #'1 gigabyte'
-    #>>> h.format(459892347923)
-    #'459.89 gigabytes'
 
   #print noun_rule_summary()
   #print('')
 
-  from debug import DebugChannel
-  from loggy import LogStream
-  debug=DebugChannel(True,LogStream(facility='local0',level='debug'))
-  debug.setFormat('{indent}{message}')
-  debug('-------- Starting --------')
+  #from debug import DebugChannel
+  #from loggy import LogStream
+  #debug=DebugChannel(True,LogStream(facility='local0',level='debug'))
+  #debug.setFormat('{indent}{message}')
+  #debug('-------- Starting --------')
 
   f,t=doctest.testmod(report=False)
   if f>0:
     print '*********************************************************************\n'
   print "Failed %d of %s."%(f,nounf('test',t))
-  debug('-------- Stopping --------')
+  #debug('-------- Stopping --------')
   sys.exit((1,0)[f==0])
