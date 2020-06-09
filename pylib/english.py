@@ -399,7 +399,7 @@ def nounf(root,count,pos=False,fmt=None,formatter=None):
   
   If formatter is given, it must be a function accepting whatever value
   is in count and returning whatever value count should have in the
-  returned string. One handy example is " lambda x:pnum(x)"."""
+  returned string. One handy example is "lambda x:pnum(x)"."""
 
   noun=nouner(root,count,pos)
   if fmt==None:
@@ -533,19 +533,40 @@ def pnum(val,sep=',3',digits=3):
 #
 
 class HumanBytes(object):
-  def __init__(self,divisor,units,precision):
+  """HumanBytes and its subclasses are for expressing quantities of
+  bytes in a form that's easier for people to read than "459892347923
+  bytes." It's much easier to read "459.89 GB."
+  """
+
+  def __init__(self,divisor,units,formatter=None):
+    """Initialize this HumanBytes object with enough information for it
+    to format itself.
+
+    divisor    The number of bytes being expressed is repeatedly divided
+               by this divisor until that value falls below the divisor
+               or we run out of units strings.
+    units      A sequence of strings expressing increasing units of
+               bytes.
+    formatter  Optionally, a function accepting a numeric value and
+               returning that number formatted in a string as desired by
+               the caller."""
+
     self.divisor=float(divisor)
     self.units=tuple(units)
-    self.precision=precision
+    if formatter==None:
+      self.formatter=lambda x:pnum(x,sep=None,digits=3)
+    else:
+      self.formatter=formatter
 
   def __repr__(self):
-    return '%s(%d,%r,%d)'%(__class__.__name__,divisor,units,precision)
+    return '%s(%d,%r,%r)'%(__class__.__name__,divisor,units,formatter)
 
   def _findUnits(self,val):
     """FOR INTERNAL USE ONLY: Divide val by our divisor as many times as
     needed to find the appropriate units to use with it. Return a tuple
     of the resulting val value (after repeated division) and the units
     string for that new value."""
+
 
     # Find the right units to use, dividing val by our divisor as we go.
     for i in range(len(self.units)):
@@ -558,51 +579,79 @@ class HumanBytes(object):
 
     return val,self.units[i]
 
-  def format(self,val,precision=None):
-    # Divite our value repeatedly to find the right unit.
+  def format(self,val,formatter=None):
+    """Divide val by this object's divisor until its value falls below
+    that divisor, incrementing the units as we go. Return the formatted
+    string."""
+
     val,units=self._findUnits(val)
-    # Use the precision this instance was created with if necessary.
-    if precision==None:
-      precision=self.precision
-    # Pre-format our number.
-    s=pnum(val,digits=precision)
-    # Put it all together
-    return nounf(units,val,fmt="%s {noun}"%s)
+    if formatter==None:
+      formatter=self.formatter
+    s=nounf(units,val,formatter=formatter)
+    return s
 
 class DecimalHumanBytes(HumanBytes):
   """DecimalHumanBytes instances use a divisor of 10**3 to express a
-  given number of bytes in a form easy for humans to interpret."""
+  given number of bytes in a form easy for humans to interpret. These
+  are the available units, while are expressed as plural when
+  appropriate:
 
-  def __init__(self,precision=2):
+      byte
+      kilobyte
+      megabyte
+      gigabyte
+      terabyte
+      petabyte
+      exabyte
+      zettabyte
+      yottabyte"""
+
+  def __init__(self,formatter=None):
+    """Initialize this DecimalHumanBytes object, optionally providing a
+    formatter function that takes a numeric value and returns that
+    number formatted in a string."""
+
     super(self.__class__,self).__init__(1000,(
       'byte','kilobyte','megabyte','gigabyte','terabyte','petabyte','exabyte','zettabyte','yottabyte'
-    ),precision)
+    ),formatter=formatter)
 
-  #def __repr__(self):
-  #  return '%s(%d)'%(__class__.__name__,precision)
 
 class DecHumanBytes(HumanBytes):
-  """DecHumanBytes is just like DecimalHumanBytes, but it abbreviates the
-  units it uses to express the given number of bytes."""
+  """DecimalHumanBytes instances use a divisor of 10**3 to express a
+  given number of bytes in a form easy for humans to interpret. These
+  are the available units:
 
-  def __init__(self,precision=2):
-    super(self.__class__,self).__init__(1000,('B','KB','MB','GB','TB','PB','EB','ZB','YB'),precision)
+      B
+      KB
+      MB
+      GB
+      TB
+      PB
+      EB
+      ZB
+      YB"""
+
+  def __init__(self,formatter=None):
+    """Initialize this DecHumanBytes object, optionally providing a
+    formatter function that takes a numeric value and returns that
+    number formatted in a string."""
+
+    super(self.__class__,self).__init__(1000,(
+      'B','KB','MB','GB','TB','PB','EB','ZB','YB'
+    ),formatter=formatter)
 
   #def __repr__(self):
   #  return '%s(%d)'%(__class__.__name__,precision)
 
-  def format(self,val,precision=None):
-    # Use the precision this instance was created with if necessary.
-    if precision==None:
-      precision=self.precision
-    for i in range(len(self.units)):
-      if val<self.divisor:
-        break
-      if val>=self.divisor:
-        val/=self.divisor
-    else:
-      i-=1
-    return '%0.*g %s'%(precision,val,self.units[i])
+  def format(self,val,formatter=None):
+    """Divide val by this object's divisor until its value falls below
+    that divisor, incrementing the units as we go. Return the formatted
+    string."""
+
+    if formatter==None:
+      formatter=self.formatter
+    val,units=self._findUnits(val)
+    return "{0} {1}".format(formatter(val),units)
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -640,7 +689,16 @@ class TitleCase(str):
 # module.
 
 if __name__=='__main__':
-  import doctest,sys
+  import doctest,os,sys
+
+  if os.path.isdir(os.path.join(os.path.basename(sys.argv[0]),'pylib')):
+    # Make sure we're working with the local modules.
+    sys.path.insert(0,os.path.join(os.path.basename(sys.argv[0]),'pylib'))
+
+  #from debug import DebugChannel
+  #from loggy import LogStream
+  #debug=DebugChannel(True,LogStream(facility='local0',level='debug'))
+  #debug.setFormat('{line}: {indent}{message}')
 
   def tests():
     """
@@ -810,28 +868,57 @@ if __name__=='__main__':
     '999 bytes'
     >>> h.format(1000)
     '1 kilobyte'
+    >>> h.format(1250)
+    '1.25 kilobytes'
     >>> h.format(9000)
     '9 kilobytes'
     >>> h.format(10000)
     '10 kilobytes'
+    >>> h.format(12345)
+    '12.3 kilobytes'
+    >>> h.format(12345,formatter=lambda x:pnum(x,digits=4))
+    '12.35 kilobytes'
     >>> h.format(10**9)
     '1 gigabyte'
     >>> h.format(459892347923)
     '460 gigabytes'
+    >>> h=DecHumanBytes()
+    >>> h.format(0)
+    '0 B'
+    >>> h.format(1)
+    '1 B'
+    >>> h.format(2)
+    '2 B'
+    >>> h.format(999)
+    '999 B'
+    >>> h.format(1000)
+    '1 KB'
+    >>> h.format(1250)
+    '1.25 KB'
+    >>> h.format(9000)
+    '9 KB'
+    >>> h.format(10000)
+    '10 KB'
+    >>> h.format(12345)
+    '12.3 KB'
+    >>> h.format(12345,formatter=lambda x:pnum(x,digits=4))
+    '12.35 KB'
+    >>> h.format(10**9)
+    '1 GB'
+    >>> h.format(459892347923)
+    '460 GB'
     """
 
   #print noun_rule_summary()
   #print('')
 
-  #from debug import DebugChannel
-  #from loggy import LogStream
-  #debug=DebugChannel(True,LogStream(facility='local0',level='debug'))
-  #debug.setFormat('{indent}{message}')
   #debug('-------- Starting --------')
 
   f,t=doctest.testmod(report=False)
   if f>0:
     print '*********************************************************************\n'
   print "Failed %d of %s."%(f,nounf('test',t))
+
   #debug('-------- Stopping --------')
+
   sys.exit((1,0)[f==0])

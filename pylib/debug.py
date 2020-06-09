@@ -1,4 +1,4 @@
-import sys
+import inspect,sys
 
 class DebugChannel(object):
   def __init__(self,enabled=False,stream=sys.stderr,label='DEBUG'):
@@ -46,11 +46,22 @@ class DebugChannel(object):
 
     self.fmt=fmt
 
-  def indent(self,indent):
+  def indent(self,indent=1):
     """Increase this object's current indenture by this value (which
-    might be negative. Return the new indenture value."""
+    might be negative. Return this DebugChannel opject with the adjusted
+    indenture. See write() for how this might be used."""
 
     self.ind+=indent
+    if self.ind<0:
+      self.ind=0
+    return self
+
+  def undent(self,indent=1):
+    """Decrease this object's current indenture by this value (which
+    might be negative. Return this DebugChannel object with the adjusted
+    indenture. See write() for how this might be used."""
+
+    self.ind-=indent
     if self.ind<0:
       self.ind=0
     return self
@@ -73,6 +84,11 @@ class DebugChannel(object):
     after the message is written."""
 
     if self.enabled:
+      if self.line:
+        line=self.line
+      else:
+        line=inspect.currentframe().f_back.f_lineno
+      self.line=None
       indent=self.indstr*self.ind
       label=self.label
       self.stream.write(self.fmt.format(**locals()))
@@ -81,7 +97,10 @@ class DebugChannel(object):
   def __call__(self,message):
     "Just a wrapper for the write() method."
 
-    return self.write(message)
+    self.line=inspect.currentframe().f_back.f_lineno
+    self.write(message)
+    self.line=None
+    return self
 
 if __name__=='__main__':
   # Create our DebugChannel object that is switched on.
