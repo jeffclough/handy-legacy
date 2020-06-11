@@ -480,6 +480,7 @@ def pnum(val,sep=',3',digits=3):
 
   assert isinstance(val,(int,long,float)),"pnum()'s val must have a numeric type."
   assert isinstance(digits,int) and digits>=0,"pnum()'s digits must be a non-negative integer."
+  #debug("pnum(%r,%r,%r)"%(val,sep,digits)).indent()
 
   # Parse our sep argument into sep and dist values.
   if sep:
@@ -522,6 +523,7 @@ def pnum(val,sep=',3',digits=3):
   # Put our value sign back.
   s=sign+s
 
+  #debug.undent()("returning %r"%(s,))
   return s
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -567,7 +569,7 @@ class HumanBytes(object):
     of the resulting val value (after repeated division) and the units
     string for that new value."""
 
-
+    #debug("%s._findUnits(%r)"%(self.__class__.__name__,val)).indent()
     # Find the right units to use, dividing val by our divisor as we go.
     for i in range(len(self.units)):
       if val<self.divisor:
@@ -577,6 +579,7 @@ class HumanBytes(object):
     else:
       i-=1
 
+    #debug.undent()("returning (%r,%r)"%(val,self.units[i]))
     return val,self.units[i]
 
   def format(self,val,formatter=None):
@@ -584,10 +587,14 @@ class HumanBytes(object):
     that divisor, incrementing the units as we go. Return the formatted
     string."""
 
+    #debug("%s.format(%r,%r)"%(self.__class__.__name__,val,formatter)).indent()
     val,units=self._findUnits(val)
     if formatter==None:
+      #debug("setting formatter=%r"%(self.formatter,))
       formatter=self.formatter
+    #debug("val=%r, units=%r"%(val,units))
     s=nounf(units,val,formatter=formatter)
+    #debug.undent()("returning %r"%(s,))
     return s
 
 class DecimalHumanBytes(HumanBytes):
@@ -615,11 +622,36 @@ class DecimalHumanBytes(HumanBytes):
       'byte','kilobyte','megabyte','gigabyte','terabyte','petabyte','exabyte','zettabyte','yottabyte'
     ),formatter=formatter)
 
+class BinaryHumanBytes(HumanBytes):
+  """BinaryHumanBytes instances use a divisor of 2**10 to express a
+  given number of bytes in a form easy for humans to interpret. These
+  are the available units, while are expressed as plural when
+  appropriate:
+
+      byte
+      kibibyte
+      mebibyte
+      gibibyte
+      tebibyte
+      pebibyte
+      exbibyte
+      zebibyte
+      yobibyte
+"""
+
+  def __init__(self,formatter=None):
+    """Initialize this BinaryHumanBytes object, optionally providing a
+    formatter function that takes a numeric value and returns that
+    number formatted in a string."""
+
+    super(self.__class__,self).__init__(1024,(
+      'byte','kibibyte','mebibyte','gibibyte','tebibyte','pebibyte','exbibyte','zebibyte','yobibyte'
+    ),formatter=formatter)
 
 class DecHumanBytes(HumanBytes):
-  """DecimalHumanBytes instances use a divisor of 10**3 to express a
-  given number of bytes in a form easy for humans to interpret. These
-  are the available units:
+  """DecHumanBytes instances use a divisor of 10**3 to express a given
+  number of bytes in a form easy for humans to interpret. These are the
+  available units:
 
       B
       KB
@@ -640,8 +672,39 @@ class DecHumanBytes(HumanBytes):
       'B','KB','MB','GB','TB','PB','EB','ZB','YB'
     ),formatter=formatter)
 
-  #def __repr__(self):
-  #  return '%s(%d)'%(__class__.__name__,precision)
+  def format(self,val,formatter=None):
+    """Divide val by this object's divisor until its value falls below
+    that divisor, incrementing the units as we go. Return the formatted
+    string."""
+
+    if formatter==None:
+      formatter=self.formatter
+    val,units=self._findUnits(val)
+    return "{0} {1}".format(formatter(val),units)
+
+class BinHumanBytes(HumanBytes):
+  """BinHumanBytes instances use a divisor of 10**3 to express a given
+  number of bytes in a form easy for humans to interpret. These are the
+  available units:
+
+      B
+      KB
+      MB
+      GB
+      TB
+      PB
+      EB
+      ZB
+      YB"""
+
+  def __init__(self,formatter=None):
+    """Initialize this BinHumanBytes object, optionally providing a
+    formatter function that takes a numeric value and returns that
+    number formatted in a string."""
+
+    super(self.__class__,self).__init__(1024,(
+      'B','KB','MB','GB','TB','PB','EB','ZB','YB'
+    ),formatter=formatter)
 
   def format(self,val,formatter=None):
     """Divide val by this object's divisor until its value falls below
@@ -694,11 +757,6 @@ if __name__=='__main__':
   if os.path.isdir(os.path.join(os.path.basename(sys.argv[0]),'pylib')):
     # Make sure we're working with the local modules.
     sys.path.insert(0,os.path.join(os.path.basename(sys.argv[0]),'pylib'))
-
-  #from debug import DebugChannel
-  #from loggy import LogStream
-  #debug=DebugChannel(True,LogStream(facility='local0',level='debug'))
-  #debug.setFormat('{line}: {indent}{message}')
 
   def tests():
     """
@@ -907,7 +965,62 @@ if __name__=='__main__':
     '1 GB'
     >>> h.format(459892347923)
     '460 GB'
+    >>> h=BinaryHumanBytes()
+    >>> h.format(0)
+    '0 bytes'
+    >>> h.format(1)
+    '1 byte'
+    >>> h.format(2)
+    '2 bytes'
+    >>> h.format(1023)
+    '1023 bytes'
+    >>> h.format(1024)
+    '1 kibibyte'
+    >>> h.format(1280)
+    '1.25 kibibytes'
+    >>> h.format(9216)
+    '9 kibibytes'
+    >>> h.format(10240)
+    '10 kibibytes'
+    >>> h.format(12544)
+    '12.2 kibibytes'
+    >>> h.format(12544,formatter=lambda x:pnum(x,digits=4))
+    '12.25 kibibytes'
+    >>> h.format(2**30)
+    '1 gibibyte'
+    >>> h.format(460*(2**30)-1)
+    '460 gibibytes'
+    >>> h=BinHumanBytes()
+    >>> h.format(0)
+    '0 B'
+    >>> h.format(1)
+    '1 B'
+    >>> h.format(2)
+    '2 B'
+    >>> h.format(1023)
+    '1023 B'
+    >>> h.format(1024)
+    '1 KB'
+    >>> h.format(1280)
+    '1.25 KB'
+    >>> h.format(9216)
+    '9 KB'
+    >>> h.format(10240)
+    '10 KB'
+    >>> h.format(12544)
+    '12.2 KB'
+    >>> h.format(12544,formatter=lambda x:pnum(x,digits=4))
+    '12.25 KB'
+    >>> h.format(2**30)
+    '1 GB'
+    >>> h.format(460*(2**30)-1)
+    '460 GB'
     """
+
+  #from debug import DebugChannel
+  #from loggy import LogStream
+  #debug=DebugChannel(True,LogStream(facility='local0',level='debug'))
+  #debug.setFormat('{line}: {indent}{message}')
 
   #print noun_rule_summary()
   #print('')
