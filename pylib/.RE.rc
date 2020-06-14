@@ -38,7 +38,7 @@ ident=[_A-Za-z][_0-9A-Za-z]+
 // extension for that. (It CAN be done.)
 comment=\s*(([#;]|//).*)?$
 
-// Network
+# Network
 ipv4=\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}
 ipv6=[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}
 ipaddr=(?E:ipv4)|(?E:ipv6)
@@ -48,11 +48,9 @@ macaddr64=(([0-9A-Fa-f]{2})[-:.]([0-9A-Fa-f]{2})[-:.]([0-9A-Fa-f]{2})[-:.]([0-9A
 macaddr=(?E:macaddr48)|(?E:macaddr64)
 hostname=[0-9A-Za-z]+(\.[-0-9A-Za-z]+)*
 host=(?E:ipaddr)|(?E:hostname)
-
-// Host and non-optional port.
+# Host and non-optional port.
 service=(?E:host):\d+
-
-// Host and optional port.
+# Host and optional port.
 hostport=(?E:host)(:(\d{1,5}))?
 filename=[^/]+
 path=/?(?E:filename)(/(?E:filename))*
@@ -61,16 +59,3 @@ email_localpart=(\(.*\))?([0-9A-Za-z!#$%&'*+-/=?^_`{|}~]+)(\.([0-9A-Za-z!#$%&'*+
 email=(?E:email_localpart)(?E:hostport)
 url_scheme=([A-Za-z]([-+.]?[0-9A-Za-z]+)*:){1,2}
 url=(?E:url_scheme)((?E:email_localpart)|(//))(?E:hostport)?(?E:abspath)?(\?((.+?)=([^&]*))(&((.+?)=([^&]*)))*)?
-
-// Time and Date Extensions
-//   The day, day3, DAY, month, month3, and MONTH extensions are define
-//   algorithmically in RE.py itself because it easy to do it that way and 
-//   very messy to do it here. If you don't like the way they're defined
-//   in the module, any redefinition you provide in this file will take
-//   precedence.
-
-date_YMD=(\d{2}(\d{2})?)([-/.])(\d{1,2})([-/.])(\d{1,2})
-date_YmD=(\d{2}(\d{2})?)([-/.])((?E:month))([-/.])(\d{1,2})
-date_mD=(?E:month)\s+(\d{1,2})
-time_HM=(\d{1,2})([-:.])(\d{2})
-time_HMS=(\d{1,2})([-:.])(\d{2})([-:.])(\d{2})

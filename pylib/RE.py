@@ -394,13 +394,13 @@ if False: # These are defined in ~/.RE.rc now.
   # date_YMD = [CC]YY(-|/|.)[M]M(-|/|.)[D]D
   #            Wow. the BNF format is uglier than the regexp. Just think YYYY-MM-DD
   #            where the dashes can be / or . instead.
-  extend('date_YMD',r'((\d{2}(\d{2})?)([-/.])(\d{1,2})([-/.])(\d{1,2}))')
+  extend('date_YMD',r'(\d{2}(\d{2})?)([-/.])(\d{1,2})([-/.])(\d{1,2})')
   # date_YmD is basically "[CC]YY-mon-DD" where mon is the name of a month as
   # defined by the "month" extension above.
-  extend('date_YmD',r'((\d{2}(\d{2})?)([-/.])((?E:month))([-/.])(\d{1,2}))')
+  extend('date_YmD',r'(\d{2}(\d{2})?)([-/.])((?E:month))([-/.])(\d{1,2})')
   # date_mD is basically "mon DD" where mon is the name of a month as defined by
   # the "month" extension above.
-  extend('date_mD',r'(?E:month>\s+(\d{1,2}))')
+  extend('date_mD',r'(?E:month)\s+(\d{1,2})')
   # time_HMS = HH:MM:SS
   # time_HM = HH:MM
   #            12- or 24-hour time will do, and the : can be . or - instead.
