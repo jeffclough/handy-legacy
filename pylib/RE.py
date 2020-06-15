@@ -102,9 +102,17 @@ Time and Date:
   time_HM  - [H]H(-|:|.)MM
   time_HMS - [H]H(-|:|.)MM(-|:|.)SS
 
+Some of these preloaded RE extensions are computed directly in the
+module. For instance the day, day3, DAY, month, month3, and MONTH
+extensions are computed according to the current locale when this module
+loads. The rest are loaded from /etc/RE.rc and/or ~/.RE.rc (in that
+order). For this to work, you need to copy the .RE.rc file that came
+with this module to your home directory or copy it to /etc/RE.rc. Or
+make your own. It's up to you.
+
 """
 
-from datetime import date # We use day- and month-names of the current localle.
+from datetime import date # We use day- and month-names of the current locale.
 import re,os
 from re import error,escape,purge,template
 from re import I,IGNORECASE,L,LOCALE,M,MULTILINE,S,DOTALL,U,UNICODE,X,VERBOSE,DEBUG
@@ -132,6 +140,7 @@ __all__=[
   "U","UNICODE",    #  32
   "X","VERBOSE",    #  64
   "DEBUG",          # 128
+  "_extensions",
 ]
 
 class Error(Exception):
@@ -143,10 +152,10 @@ _extensions={}
 # This RE matches an RE extension, possibly in a larger string.
 _extpat=re.compile(r'(\(\?E:[_A-Za-z][_A-Za-z0-9]*(=[_A-Za-z][_A-Za-z0-9]*)?\))')
 
-# This RE matches a line in ~/.RE.rc.
+# This RE matches a line in /etc/RE.rc and ~/.RE.rc.
 _extdef=re.compile(r'^\s*([_A-Za-z][_A-Za-z0-9]*)\s*([=<])(.*)$')
 
-# This RE matches blank lines and comments in ~/.RE.rc.
+# This RE matches blank lines and comments in /etc/RE.rc and ~/.RE.rc.
 _extcmt=re.compile(r'^\s*(([#;]|//).*)?$')
                                            
 def _apply_extensions(pattern,allow_named=True):
@@ -410,6 +419,7 @@ if False: # These are defined in ~/.RE.rc now.
 # TODO: Parse https://www.timeanddate.com/time/zones/ for TZ data, and hardcode
 # that into a regexp extension here.
 
+read_extensions('/etc/RE.rc')
 read_extensions()
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
