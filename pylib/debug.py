@@ -12,7 +12,7 @@ class DebugChannel(object):
     self.stream=stream
     self.enabled=enabled
 
-    self.fmt='{label}: {indent}{message}\n'
+    self.fmt='{label}: {line}: {indent}{message}\n'
     self.ind=0
     self.label=label
     self.indstr='  '
