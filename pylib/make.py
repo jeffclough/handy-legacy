@@ -560,7 +560,7 @@ def symlink(target,link):
   if not opt.dryrun:
     try:
       os.symlink(target,link)
-    except OSError as e:
+    except OSError,e:
       raise OSError(str(e)+' on os.symlink(%r,%r)'%(target,link))
     except:
       raise
