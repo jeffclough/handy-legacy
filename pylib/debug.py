@@ -1,21 +1,63 @@
-import inspect,sys
+import inspect,os,sys
 
 class DebugChannel(object):
+  """Objects of this class are really useful for debugging, and this is
+  even more powerful when combined with loggy.LogStream to write all
+  debug output to some appropriate syslog facility. Here's an example,
+  put into an executable script called x:
+
+      #!/usr/bin/env python
+
+      from debug import DebugChannel
+      from loggy import LogStream
+
+      d=DebugChannel(True,LogStream(facility='user'))
+      d.setFormat('{filename}({line}): {indent}{message}')
+      d('Testing')
+
+  The output in /var/log/user.log might look like this
+
+      Aug 16 22:58:16 pi4 x[18478] D: /home/jclough/my/bin/x(8): Testing
+
+  What I really like about this is that the source filename and line
+  number are included in the log output. The "d('Testing')" call is on
+  line 8."""
+
   def __init__(self,enabled=False,stream=sys.stderr,label='DEBUG'):
     """Initialize the stream and on/off state of this new DebugChannel
     object. The "enabled" state defaults to False, and the stream
     defaults to sys.stderr (though any object with a write() method will
-    do)."""
+    do).
+
+    DebugChannel.write() goes to some length to ensure that the filename
+    and line number reported in its output is something helpful to the
+    caller. For instance, the source line shouldn't be anything in this
+    class.
+    
+    Since it's perfectly plausible for a DebugChannel object to be used
+    from within another reporting class that should be similarly
+    ignored, you can add to the ignore_modules attribute (a set), the
+    name of any module you'd like DebugChannel's write() method to skip
+    over as it searches downward through the stack. For example, the
+    ignore_modules attribute is initialized with 'loggy.py' so that
+    anything in that module will be skipped over, and whatever called
+    loggy's code will be reported instead. Feel free to add the names of
+    any other modules you'd like to ignore in the call stack."""
 
     assert hasattr(stream,'write'),"DebugChannel REQUIRES a stream object with a write() method."
 
     self.stream=stream
     self.enabled=enabled
 
-    self.fmt='{label}: {line}: {indent}{message}\n'
-    self.ind=0
+    self.fmt='{label}: {filename}({line}): {indent}{message}\n'
+    self.indlev=0
     self.label=label
     self.indstr='  '
+    self.ignore_modules=set(['loggy.py'])
+
+  @staticmethod
+  def filenamer(filename):
+    return filename
 
   def __bool__(self):
     "Return the Enabled state of this DebugChannel object."
@@ -33,16 +75,17 @@ class DebugChannel(object):
   def setFormat(self,fmt):
     """Set the format of our debug statements. The format defaults to:
 
-        '{label}: {indent}{message}\\n'
+        '{label}: {filename}({line}): {indent}{message}\\n'
 
     Fields:
       {label}    printed before the colon (default: 'DEBUG')
+      {filename} name of the calling source file
+      {line}     number of the calling line of code in its source file
       {indent}   indention string multiplied by the indention level
       {message}  the message to be written
 
     All non-field text is literal text. The '\\n' at the end is required
-    if you want a line ending at the end of each message.
-    """
+    if you want a line ending at the end of each message."""
 
     self.fmt=fmt
 
@@ -51,9 +94,9 @@ class DebugChannel(object):
     might be negative. Return this DebugChannel opject with the adjusted
     indenture. See write() for how this might be used."""
 
-    self.ind+=indent
-    if self.ind<0:
-      self.ind=0
+    self.indlev+=indent
+    if self.indlev<0:
+      self.indlev=0
     return self
 
   def undent(self,indent=1):
@@ -61,9 +104,9 @@ class DebugChannel(object):
     might be negative. Return this DebugChannel object with the adjusted
     indenture. See write() for how this might be used."""
 
-    self.ind-=indent
-    if self.ind<0:
-      self.ind=0
+    self.indlev-=indent
+    if self.indlev<0:
+      self.indlev=0
     return self
 
   def write(self,message):
@@ -84,12 +127,23 @@ class DebugChannel(object):
     after the message is written."""
 
     if self.enabled:
-      if self.line:
-        line=self.line
-      else:
-        line=inspect.currentframe().f_back.f_lineno
-      self.line=None
-      indent=self.indstr*self.ind
+      filename,line=None,None
+      stack=inspect.stack()
+      max_frame=len(stack)-1
+      #sys.stderr.write("stack length=%d\n"%(max_frame+1,))
+      #sys.stderr.write("%s\n"%('\n'.join(["  %d: %r"%(i,stack[i]) for i in range(max_frame+1)])))
+      if len(stack)>=2:
+        if stack[0][1]==stack[1][1] and stack[1][3]=='__call__':
+          # write() was called from our own __call__ method.
+          i=2
+        else:
+          i=1
+        if self.ignore_modules:
+          while i<max_frame and stack[i] in self.ignore_modules:
+            i+=1
+        filename=self.filenamer(stack[i][1])
+        line=stack[i][2]
+      indent=self.indstr*self.indlev
       label=self.label
       self.stream.write(self.fmt.format(**locals()))
     return self
@@ -97,24 +151,30 @@ class DebugChannel(object):
   def __call__(self,message):
     "Just a wrapper for the write() method."
 
-    self.line=inspect.currentframe().f_back.f_lineno
     self.write(message)
-    self.line=None
     return self
+
+class DebugChannelBasename(DebugChannel):
+  def __init__(self,enabled=False,stream=sys.stderr,label='DEBUG'):
+    super(self.__class__,self).__init__(enabled,stream,label)
+
+  @staticmethod
+  def filenamer(filename):
+    return os.path.basename(filename)
 
 if __name__=='__main__':
   # Create our DebugChannel object that is switched on.
   d=DebugChannel(True)
   d('Message 1')
   d('Message 2')
-  d('ind=%r'%(d.ind,)).indent(1)
-  d('ind=%r'%(d.ind,)).indent(1).indstr='| '
-  d('ind=%r'%(d.ind,)).indent(1)
-  d.indent(-1)('ind=%r'%(d.ind,))
-  d.indent(-1)('ind=%r'%(d.ind,))
-  d.indent(-1)('ind=%r'%(d.ind,))
-  d.indent(-1)('ind=%r'%(d.ind,))
-  d.indent(-1)('ind=%r'%(d.ind,))
+  d('indlev=%r'%(d.indlev,)).indent(1)
+  d('indlev=%r'%(d.indlev,)).indent(1).indstr='| '
+  d('indlev=%r'%(d.indlev,)).indent(1)
+  d.indent(-1)('indlev=%r'%(d.indlev,))
+  d.indent(-1)('indlev=%r'%(d.indlev,))
+  d.indent(-1)('indlev=%r'%(d.indlev,))
+  d.indent(-1).write('indlev=%r'%(d.indlev,))
+  d.indent(-1).write('indlev=%r'%(d.indlev,))
   prev=d.enable(False)
   d("Disabled debug output (so you shouldn't see this).")
   print 'Previous DebugChannel enabled state: %r'%(prev,)
