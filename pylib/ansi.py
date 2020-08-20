@@ -56,7 +56,7 @@ elements or its append() method to add to it.
 
 A Palette class is can be created using, among other things, an
 extension of Color's spec string. Just use the single-string version of
-hte constructor, and separate the color spec strings with commas. Here's
+the constructor, and separate the color spec strings with commas. Here's
 an example:
 
     import ansi
@@ -68,12 +68,12 @@ an example:
     ansi.paint(ERROR,"This is an error message. No soup for you!")
 
 Notice that when specifying a palette all at once, attribute and
-background are persistent from the previous entry. We start by giving
-everything about the NORM text (normal attribute, green foreground, and
-black background). The next entry, WARN, specifies a bold yellow
-foreground and keeps the black background from the first entry. The last
-entry, ERROR, keeps "bold" from the WARN entry and then specifies a
-white foreground on a red background.
+background are persistent from the previous entry. We start the palette
+string by giving everything about the NORM text (normal attribute, green
+foreground, and black background). The next entry, WARN, specifies a
+bold yellow foreground and keeps the black background from the first
+entry. The last entry, ERROR, keeps "bold" from the WARN entry and then
+specifies a white foreground on a red background.
 
 Another option for Palette's constructor's argument is to give either
 "dark" or "light".  The author is very lazy, usually uses terminals with
@@ -90,7 +90,7 @@ rather than doing what it's told. The particulars vary from terminal to
 terminal. Run this module directly to find out how YOUR terminal
 behaves:
 
-    python ansi.py
+    python -m ansi
 
 You'll need a terminal window that's at least 88 columns wide and 34
 lines tall to see the output all at once.
@@ -98,9 +98,9 @@ lines tall to see the output all at once.
 To test a specific color combination, you can pass it directly on the
 command line:
 
-    python ansi.py blue on yellow
+    python -m ansi blue on yellow
 or
-    python ansi.py bold red on blue
+    python -m ansi bold red on blue
 
 """
 
@@ -205,9 +205,9 @@ def complete(word,wordlist):
 
   l=[x for x in wordlist if x.startswith(word)] # Find anything that might fit.
   if len(l)<1:
-    raise AnsiException("I don't understand %r. Choices are %s"%(word,englishList(wordlist)))
+    raise AnsiException("I don't understand %r. Choices are %s."%(word,englishList(wordlist,'or')))
   if len(l)>1:
-    raise AnsiException("%r is ambiguous. Choose from %s"%(word,englishList(l)))
+    raise AnsiException("%r is ambiguous. Choose from %s."%(word,englishList(l,'or')))
   return l[0]
 
 class Color(object):
@@ -215,8 +215,11 @@ class Color(object):
   background of the color such an object represents.'''
 
   attribute_list=attr.keys()
+  attribute_list.sort()
   foreground_list=foreground.keys()
+  foreground_list.sort()
   background_list=background.keys()
+  background_list.sort()
 
   def  __init__(self,*args):
     """Construct a Color object.
@@ -228,7 +231,7 @@ class Color(object):
     Create this Color object with the given attribute, foreground, and
     background. (See the parse() method below.)
 
-    Form 3: Color('[ATTR ] FG [on BG]')
+    Form 3: Color('[ATTR] FG [on BG]')
     Create this Color object with the given attribute, foreground, and
     background, but parse them all from the given string argument.
 
@@ -492,16 +495,20 @@ class Palette(list):
           [[pal(i),words[i],' '] for i in range(len(words))]
         ))
 
-    But this would will create an "index out of range" error:
+    Notice that even though we have 6 words and only 3 colors in our
+    palette, we don't get an "index out of range" error. That's because
+    this __call__(i) method performs modulo indexing on i.
 
+    To see the difference, try out this WRONG example:
+
+        pal=ansi.Palette('norm red on black,green,bold blue')
+        words='this is a list of words'.split()
         ansi.paint(*ansi.flattenList(
           [[pal[i],words[i],' '] for i in range(len(words))]
         ))
 
     The only (very subtle) difference is how we index the pal variable.
-    The first example uses pal(i), while the second uses pal[i].
-    
-    '''
+    The first example uses pal(i), while the second uses pal[i].'''
 
     return self[index%len(self)]
 
@@ -510,7 +517,8 @@ norm=Color('normal',None,None) #'\033['+attr['normal']+'m'
 def flattenList(l,result=None):
   '''Recursively flatten the given list [of lists [of lists]]. This
   comes in handy when buiding arguments for ansi.paint() from list
-  comprehensions. (See example under Palette.__call__().)
+  comprehensions. (See example under Palette.__call__().) But it's
+  more broadly useful from time to time.
   
   The l argument is the list [of lists [of lists]] to be flattened. The
   second argument, if supplied, is the flattened list that's being built
@@ -570,7 +578,7 @@ def paint(*args):
   '''Kind of like print, but supports coloring its output.
 
   An argument of class Color is used to paint all subsequent arguments
-  until another such argument is found. All other arguments are rendered
+  until another Color object is found. All other arguments are rendered
   the same as print would render them.
 
   Painting is always turned off before this function returns, and this
@@ -606,7 +614,7 @@ if __name__=='__main__': # TEST CODE TEST CODE TEST CODE TEST CODE TEST CODE
       # Foreground colors and attributes change from one line to the next.
       for fg in colors:
         # The first line of a given foreground color is labeled. Note that the
-        # color name in the row label is given as flattenLists()'s result
+        # color name in the row label is given as flattenList()'s result
         # initializer.
         paint(*flattenList(
           [[Color('norm',fg,bg),'Normal   ',norm,' '] for bg in colors],
