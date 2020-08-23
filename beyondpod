@@ -2,50 +2,63 @@
 
 import argparse,sys
 import xml.etree.ElementTree as ET
+from debug import DebugChannel
 
 ap=argparse.ArgumentParser()
-ap.add_argument('--html',dest='html',action='store_true',default=False,help="Output the list of podcasts as HTML");
+ap.add_argument('--html',dest='html',action='store_true',default=False,help="Output the list of podcasts as HTML")
+ap.add_argument('--debug',dest='debug',action='store_true',help="This is here for me, not you. :-)")
 ap.add_argument('infile',metavar='INPUT_FILE',action='store',default='-',help="""Name of the .opml file to read. Use "-" (or nothing at all) to read from standard input.""")
 opt=ap.parse_args()
+debug=DebugChannel()
+debug.enable(opt.debug)
+debug.label='D'
 if opt.infile=='-':
   opt.infile=sys.stdin
+
+debug("opt.infile=%r"%(opt.infile),)
 
 tree=ET.parse(opt.infile)
 root=tree.getroot()
 
 # Iterate over BeyondPod groups.
+if opt.html:
+  print '<ul>'
 for group in root[1]:
   children=sorted([
     (g.get('text').encode('utf8'),g.get('xmlUrl').encode('utf8'))
       for g in list(group)
   ])
-  #print >>sys.stderr,children
+  if len(children)==0:
+    continue;
+  gname=group.get('text').encode('utf8')
+  debug("gname=%r"%(gname,))
+  debug("Children: %d"%len(children))
 
-  child_count=len(children)
-  if child_count>0:
-    gname=group.get('text').encode('utf8')
-    #if opt.html:
-    #  print '<p>'
-    print '%s:'%gname
+  if opt.html:
+    print '  <li style="margin-top: 1em">%s'%gname
+  else:
+    print gname
 
-    # Iterate over each group.
+  # Iterate through this group's children.
+  if opt.html:
+    print '    <ol style="margin-top: 0px">'
+  for name,url in children:
+    #print p.items()
+    #name=p.get('text').encode('utf8')
+    #url=p.get('xmlUrl').encode('utf8')
     if opt.html:
-      print '  <ol style="margin-top: 0px">'
-
-    for name,url in children:
-      #print p.items()
-      #name=p.get('text').encode('utf8')
-      #url=p.get('xmlUrl').encode('utf8')
-      if opt.html:
-        print '    <li><a href="%s">%s</a></li>'%(url,name)
-      else:
-        print '    '+name
-        #print >>sys.stderr,'      %r'%(p.items(),)
-    if opt.html:
-      print '  </ol>'
-    #  print '</p>'
+      print '      <li><a href="%s">%s</a></li>'%(url,name)
     else:
-      print ''
+      print '    '+name
+      #print >>sys.stderr,'      %r'%(p.items(),)
+  if opt.html:
+    print '    </ol>'
 
+  if opt.html:
+    print '  </li>'
+  else:
+    print
+if opt.html:
+  print '</ul>'
 
 

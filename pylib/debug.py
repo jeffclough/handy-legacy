@@ -55,10 +55,11 @@ class DebugChannel(object):
     ignored, you can add to the ignore_modules attribute (a set), the
     name of any module you'd like DebugChannel's write() method to skip
     over as it searches downward through the stack. For example, the
-    ignore_modules attribute is initialized with 'loggy.py' so that
-    anything in that module will be skipped over, and whatever called
-    loggy's code will be reported instead. Feel free to add the names of
-    any other modules you'd like to ignore in the call stack."""
+    ignore_modules attribute is initialized with the full pathname of
+    THIS copy of debug.py so that anything in this module will be
+    skipped over, and the most recent line of the caller's code will be
+    reported instead. Feel free to add the names of any other modules
+    you'd like to ignore in the call stack."""
 
     assert hasattr(stream,'write'),"DebugChannel REQUIRES a stream object with a write() method."
 
@@ -70,7 +71,8 @@ class DebugChannel(object):
     self.label=label
     self.indstr='  '
     # So we don't report anything in this module as the caller ...
-    self.ignore_modules=set([__loader__.filename])
+    self.this_module=inspect.stack()[0][1]
+    self.ignore_modules=set([self.this_module])
 
   def __bool__(self):
     """Return the Enabled state of this DebugChannel object. It is
