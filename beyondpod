@@ -1,0 +1,51 @@
+#!/usr/bin/env python
+
+import argparse,sys
+import xml.etree.ElementTree as ET
+
+ap=argparse.ArgumentParser()
+ap.add_argument('--html',dest='html',action='store_true',default=False,help="Output the list of podcasts as HTML");
+ap.add_argument('infile',metavar='INPUT_FILE',action='store',default='-',help="""Name of the .opml file to read. Use "-" (or nothing at all) to read from standard input.""")
+opt=ap.parse_args()
+if opt.infile=='-':
+  opt.infile=sys.stdin
+
+tree=ET.parse(opt.infile)
+root=tree.getroot()
+
+# Iterate over BeyondPod groups.
+for group in root[1]:
+  children=sorted([
+    (g.get('text').encode('utf8'),g.get('xmlUrl').encode('utf8'))
+      for g in list(group)
+  ])
+  #print >>sys.stderr,children
+
+  child_count=len(children)
+  if child_count>0:
+    gname=group.get('text').encode('utf8')
+    #if opt.html:
+    #  print '<p>'
+    print '%s:'%gname
+
+    # Iterate over each group.
+    if opt.html:
+      print '  <ol style="margin-top: 0px">'
+
+    for name,url in children:
+      #print p.items()
+      #name=p.get('text').encode('utf8')
+      #url=p.get('xmlUrl').encode('utf8')
+      if opt.html:
+        print '    <li><a href="%s">%s</a></li>'%(url,name)
+      else:
+        print '    '+name
+        #print >>sys.stderr,'      %r'%(p.items(),)
+    if opt.html:
+      print '  </ol>'
+    #  print '</p>'
+    else:
+      print ''
+
+
+
