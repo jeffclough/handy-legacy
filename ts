@@ -31,20 +31,20 @@ extensions='''
   .3ctype .3fr .a .ac .aiff .ani .anim .ar .arc .ari .arw .asc .asm .awk .bay
   .bin .bmp .bom .book .bsd .c .c++ .cache .cc .cdf .cfg .cgm .cix .class .cmd
   .coffee .collection .com .conf .config .cpp .cr2 .crl .crw .css .csv .cvf .d
-  .data .db .dcr .dcs .djvu .dll .dng .doc .docx .drf .dtml .dylib .egg .eip
-  .el .eot .eps .epub .erf .exe .exif .fff .gif .git .gnu .gpg .gz .h .hdr
+  .data .db .dcr .dcs .dev .djvu .dll .dng .doc .docx .drf .dtml .dylib .egg
+  .eip .el .eot .eps .epub .erf .exe .exif .fff .gif .git .gnu .gpg .gz .h .hdr
   .help .hpp .htm .html .hts .ico .iiq .inc .info .ini .jar .java .jfif .jpeg
   .jpg .jps .js .jshint .jsm .json .k25 .kdc .key .keystore .kml .l .ldb .lij
   .lnk .lock .log .lrtemplate .lua .m4 .m4a .machelp .makefile .map .markdown
   .mbox .mcl .md .mdc .mef .model .mos .mov .mp3 .mp4 .mpo .mrw .mustache .nef
-  .net .nib .node .nrw .o .oab .obm .odg .opml .opts .orf .org .otf .pack .pak
-  .pal .pbm .pcf .pdf .pef .pem .pgm .php .pict .pimx .pkg .pl .plist .pm .png
-  .pnm .pns .postscript .ppm .prefs .psd .psp .psv .psw .ptx .pub .pxn .py .pyc
-  .pyd .qyp .r3d .raf .raw .rb .ref .rif .rpm .rtv .rw2 .rwl .rwz .scpt .scss
-  .settings .sh .sig .so .sql .sqlite .sqlite3 .sqlitedb .sr2 .srf .srw .sst
-  .sublime-keymap .sublime-menu .svg .svn .swf .tab .tar .tcl .tgz .tif .tiff
-  .todo .tsv .ttf .txt .url .uue .vdi .war .watchr .webm .webp .x3f .xaml .xbm
-  .xls .xml .xsd .yaml .z .zip'''.split()
+  .net .new .nib .node .nrw .o .oab .obm .odg .opml .opts .orf .org .otf .pack
+  .pak .pal .pbm .pcf .pdf .pef .pem .pgm .php .pict .pimx .pkg .pl .plist .pm
+  .png .pnm .pns .postscript .ppm .prefs .prod .psd .psp .psv .psw .ptx .pub
+  .pxn .py .pyc .pyd .qyp .r3d .raf .raw .rb .ref .rif .rpm .rtv .rw2 .rwl .rwz
+  .scpt .scss .settings .sh .sig .so .sql .sqlite .sqlite3 .sqlitedb .sr2 .srf
+  .srw .sst .sublime-keymap .sublime-menu .svg .svn .swf .tab .tar .tcl .test
+  .tgz .tif .tiff .todo .tsv .ttf .txt .url .uue .vdi .war .watchr .webm .webp
+  .x3f .xaml .xbm .xls .xml .xsd .yaml .z .zip'''.split()
 
 prog=os.path.basename(sys.argv[0])
 
