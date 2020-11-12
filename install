@@ -57,7 +57,7 @@ SCRIPTS=( # These targets are simply copied during installation.
   'factors',
   'freq',
   'gensig/gensig',
-  'indent',
+  'ind',
   'ip2host',
   'json',
   'json2csv',
