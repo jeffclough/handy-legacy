@@ -720,8 +720,8 @@ if __name__=='__main__':
 
     f,t=testmod(report=False)
     if f>0:
-      print '*********************************************************************\n'
-    print "Passed %d of %s."%(t-f,nounf('test',t))
+      print("---------------------------------------------------------------------\n")
+    print("Passed %d of %s."%(t-f,nounf('test',t)))
     sys.exit((1,0)[f==0])
 
    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -758,7 +758,7 @@ if __name__=='__main__':
     bug('Registering RE %r as "%s"'%(name,pat))
     extend(name,pat)
   if opt.extensions:
-    print '\n'.join(['%s=%s'%(n,p) for n,p in sorted(_extensions.items())])
+    print('\n'.join(['%s=%s'%(n,p) for n,p in sorted(_extensions.items())]))
     sys.exit(0)
 
    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
