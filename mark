@@ -293,7 +293,7 @@ elif opt.diff:
 elif opt.input_from=='diff':
   opt.patterns.insert(0,'^==================+')
   opt.patterns.insert(0,'^[+>].*')
-  opt.patterns.insert(0,'^[-<].*')
+  opt.patterns.insert(0,'^[-!<].*')
 elif opt.input_from=='du':
   opt.patterns.insert(0,'^\s*[0-9.]+K') # Blue
   opt.patterns.insert(0,'^\s*[0-9.]+G') # Yellow
