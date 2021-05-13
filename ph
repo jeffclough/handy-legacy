@@ -62,7 +62,7 @@ class Search(object):
   timeout argument is in seconds and is as long as we'll wait for more
   data from the server. It should be greater than 0."""
 
-  def __init__(self,host,query,port=105,timeout=0.2):
+  def __init__(self,host,query,port=105,timeout=20):
     self.host=host
     self.port=port
     self.query=query
