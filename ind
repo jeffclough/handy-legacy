@@ -1,0 +1,48 @@
+#!/usr/bin/env python2
+try:
+  import argparse
+except:
+  import argparse27 as argparse
+import os,sys
+from handy import die,prog,non_negative_int
+
+def fit_formatting(formatter):
+  "Return a formatter that uses the whole width of our terminal."
+
+  width,_=prog.getTerminalSize()
+  kwargs=dict(width=width)
+  formatter(None,**kwargs)
+  return lambda prog:formatter(prog,**kwargs)
+
+ap=argparse.ArgumentParser(
+  formatter_class=fit_formatting(argparse.ArgumentDefaultsHelpFormatter),
+  description="Prefix text read from standard input with white space on its way to standard output. If the n argument is 0, the input text is un-indented by the number of spaces found on the input's first indented line."
+)
+ap.add_argument('--with',dest='prefix',action='store',default=' ',help="The caracter or string to be used for indenting. (default=%(default)r)")
+ap.add_argument('n',action='store',type=non_negative_int,default=2,nargs='?',help="The number of PREFIX strings to prepend to each output line. If n is 0, the text will be un-indented instead. (default=%(default)d)")
+opt=ap.parse_args()
+
+prefix=opt.prefix*opt.n
+
+if opt.n>0:
+  for s in sys.stdin:
+    s=s.expandtabs()
+    sys.stdout.write(prefix+s)
+else:
+  spaces=None
+  for s in sys.stdin:
+    s=s.expandtabs()
+    if spaces==None:
+      n=len(s.lstrip())
+      if n:
+        spaces=len(s)-n
+      else:
+        sys.stdout.write(s)
+        continue
+    if s[:spaces].isspace():
+      s=s[spaces:]
+    else:
+      s=s.lstrip()
+    if not (s and s.endswith(os.linesep)):
+      s+=os.linesep
+    sys.stdout.write(s)

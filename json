@@ -1,0 +1,343 @@
+#!/usr/bin/env python2
+
+import argparse,datetime,csv,json,os,re,sys
+from pprint import pprint
+# Put a little extra effort into finding our non-standard modules if needed.
+try:
+  from handy import die,prog
+except:
+  sys.path.insert(1,os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])),'pylib'))
+  sys.path.insert(1,os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])),'lib','python'))
+  from handy import die,prog
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Handle the command line.
+
+default_dialect=dict(
+  delimiter=',',
+  quotechar='"',
+  escapechar=None,
+  doublequote=True,
+  skipinitialspace=False,
+  lineterminator='\n',
+  quoting=csv.QUOTE_MINIMAL,
+)
+
+import OptionParserFormatters
+progname=os.path.basename(sys.argv[0])
+ap=argparse.ArgumentParser(
+  formatter_class=argparse.RawTextHelpFormatter
+)
+ap.add_argument('-D','--dialect',dest='dialect',action='append',default=[],
+help='''Accept any one of the following dialect parameters.
+As many -D options may be specified as are needed.
+  delimiter=,
+  quotechar="
+  escapechar=None
+  doublequote=True
+  skipinitialspace=False
+  lineterminator=\\n
+  quoting=QUOTE_MINIMAL''')
+ap.add_argument('--output-format','-O',dest='output_format',action='store',choices=('csv','json','json-pretty','python','traverse'),default='json-pretty',help="Set the output format. (default: %(default)s)")
+ap.add_argument('--quote-numbers',dest='quote_numbers',action='store_true',default=False,help="Output numeric values with quotes around them. Normally, numbers are not quoted in this way.")
+ap.add_argument('--show-structure','-S',dest='show_structure',action='store_true',default=False,help="Rather than outputting the data itself, just\noutput the structure of the data.")
+ap.add_argument('filename',action='store',nargs='?',default=None,help="Name of the file to read JSON data from.")
+try:
+  opt=ap.parse_args()
+except Exception,e:
+  print >>sys.stderr,str(e)
+  sys.exit(2)
+
+# Set up our dialects.
+dialect=dict(default_dialect)
+dialect.update(dict(
+  [([x.strip() for x in spec.split('=',1)]) for spec in opt.dialect]
+))
+ 
+## Validate our field stripping specification.
+#for ch in opt.strip:
+#  if ch not in 'lr':
+#    print >>sys.stderr,'%s: arguments to -s may include only l and r'%progname
+#    sys.exit(2)
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+def strip_field(s,sides):
+  '''Return s stripped of left and/or right white space depending on
+  whether sides includes l and/or r.'''
+
+  if type(s) in (str,unicode):
+    l='l' in sides
+    r='r' in sides
+    if l and r:
+      s=s.strip()
+    elif l:
+      s=s.lstrip()
+    elif r:
+      s=s.rstrip()
+  return s
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+norm_color='\033[0m'
+
+def type_description(value):
+  "Return a (color,name) tuple representing the type of the given value."
+
+  c='\033['
+  t=type(value)
+  if t==dict:
+    c+='32' # Green
+    t='dictionary of %d keys'%len(d.keys())
+  elif t==list:
+    c+='36' # Cyan
+    t='list of %d items'%len(value)
+  elif t in (str,unicode):
+    c+='33' # Yellow
+    t='string of %d characters'%len(value)
+  elif t==int:
+    c+='1;34' # Bright blue
+    t='integer = %d = 0x%x'%(value,value)
+  elif t==float:
+    c+='35' # Magenta
+    t='float = %f'%value
+  elif t==bool:
+    c+='1;34' # Bright blue
+    t='boolean = %s'%value
+  elif value==None:
+    c+='31' # Red
+    t='NULL'
+  else:
+    c+='0'
+    t=str(t)
+  return (c+'m',t)
+
+def show_structure(d,indent=0):
+  """Show the scructure of the given dictionary as an indented heirarchy."""
+
+  if indent==0:
+    c,t=type_description(d)
+    print '%s/%s (%s)'%(c,norm_color,t)
+    indent+=2
+
+  if not (isinstance(d,dict) or isinstance(d,list)):
+    return
+
+  if type(d)==dict:
+    for k in sorted(d.keys()):
+      c,t=type_description(d[k])
+      print '%*s%s%s%s (%s)'%(indent,'',c,k,norm_color,t)
+      show_structure(d[k],indent+2)
+  elif isinstance(d,list):
+    if len(d):
+      show_structure(d[0],indent+2)
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+#  Type parsing:
+#
+
+class TypeParser(object):
+
+  novalue='OPjhMQY84pAp6pL5xEUoFmlFl2w5zglu'
+
+  def __call__(self,string):
+    "Return the parsed value of string or TypeParser.novalue"
+
+    return self.value
+
+class NumberParser(TypeParser):
+  def __call__(self,string):
+    if not opt.quote_numbers:
+      try: return int(string)
+      except: pass
+      try: return float(string)
+      except: pass
+    return TypeParser.novalue
+
+class TimeParser(TypeParser):
+  patterns=(
+    re.compile(r'(?P<hour>\d{1,2}):(?P<minute>\d{1,2})(:(?P<second>\d{1,2}))?\s?(?P<am>([Aa]|[Pp])[Mm]?)?$'),
+  )
+
+  def __call__(self,string):
+    value=TypeParser.novalue
+    for p in TimeParser.patterns:
+      m=p.match(string)
+      if m:
+        break
+    if m:
+      d=m.groupdict()
+      if 'am' in d:
+        dt=datetime.datetime.strptime("%(hour)s:%(minute)s:%(second)s %(am)s"%d,"%I:%M:%S %p")
+      else:
+        dt=datetime.datetime.strptime("%(hour)s:%(minute)s:%(second)s"%d,"%H:%M:%S")
+      value=datetime.time(dt.hour,dt.minute,dt.second)
+    return value
+
+class DateTimeParser(TypeParser):
+  patterns=(
+    re.compile(r'(?P<month>\d{1,2})[-/](?P<day>\d{1,2})[-/](?P<year>\d{4})\s+(?P<hour>\d{1,2}):(?P<minute>\d{1,2})(:(?P<second>\d{1,2}))?\s?(?P<am>([Aa]|[Pp])[Mm]?)?$'),
+    re.compile(r'(?P<year>\d{4})[-/](?P<month>\d{1,2})[-/](?P<day>\d{1,2})\s+(?P<hour>\d{1,2}):(?P<minute>\d{1,2})(:(?P<second>\d{1,2}))?\s?(?P<am>([Aa]|[Pp])[Mm]?)?$'),
+  )
+
+  def __call__(self,string):
+    #print 'D: %s(%r)'%(self.__class__.__name__,string)
+    value=TypeParser.novalue
+    for p in DateTimeParser.patterns:
+      m=p.match(string)
+      if m:
+        #print 'D: matched %s'%p.pattern
+        #print 'D: match: %r'%m.groupdict()
+        break
+    if m:
+      d=m.groupdict()
+      day=int(d['day'])
+      month=int(d['month'])
+      if month>12 and day<=12:
+        # Try to use some common sense about which is day and which is month.
+        d['day'],d['month']=month,day
+      if 'am' in d:
+        value=datetime.datetime.strptime("%(year)s-%(month)s-%(day)s %(hour)s:%(minute)s:%(second)s %(am)s"%d,"%Y-%m-%d %I:%M:%S %p")
+      else:
+        value=datetime.datetime.strptime("%(year)s-%(month)s-%(day)s %(hour)s:%(minute)s:%(second)s %(am)s"%d,"%Y-%m-%d %H:%M:%S")
+    #print 'D: returning %r'%(value,)
+    return value
+
+# A tuple of TypeParser instances for identifying and converting parsable types
+# from strings into something more useful.
+type_parsers=(
+  NumberParser(),
+  TimeParser(),
+  DateTimeParser(),
+)
+
+def evaluate(val):
+  if isinstance(val,basestring):
+    for parser in type_parsers:
+      v=parser(val)
+      if v!=TypeParser.novalue:
+        return v
+  return val
+
+def reading_traversal(d,func,depth=0):
+  if isinstance(d,dict):
+    for key,val in d.items():
+      func(key,val,depth)
+      if isinstance(val,(dict,list)):
+        reading_traversal(val,func,depth+1)
+  elif isinstance(d,(list,tuple)):
+    for i in range(len(d)):
+      func(i,d[i],depth)
+      if isinstance(d[i],(dict,list)):
+        reading_traversal(d[i],func,depth+1)
+
+def iterating_traversal(d):
+  items=[]
+  reading_traversal(d,lambda i,val,depth:items.append((i,val,depth)))
+  for i,val,depth in items:
+    yield i,val,depth
+
+def modifying_traversal(d,func):
+  if isinstance(d,dict):
+    for key,val in d.items():
+      if isinstance(val,(dict,list)):
+        modifying_traversal(val,func)
+      else:
+        d[key]=func(val)
+  elif isinstance(d,(list,tuple)):
+    for i in range(len(d)):
+      if isinstance(d[i],(dict,list)):
+        modifying_traversal(d[i],func)
+      else:
+        d[i]=func(d[i])
+
+# End of type parsing.
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class BetterJsonEncoder(json.JSONEncoder):
+  """This JSON encoder adds to json.JSONEncoder some Python data types
+  that we'd like to be able to serialize in JSON data.
+  
+    datetime.datetime
+    datetime.time
+  """
+
+  def default(self,obj):
+    if isinstance(obj,datetime.time):
+      return obj.strftime("%H:%M:%S")
+    if isinstance(obj,datetime.datetime):
+      return obj.strftime("%Y-%m-%d %H:%M:%S")
+    # Let the base class default method raise any TypeError
+    return json.JSONEncoder.default(self, obj)
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+def all_values(d):
+  values=[]
+  reading_traversal(d,lambda i,v:values.append((i,v)))
+  for i,v in values:
+    print 'i=%r, val=%r'%(i,v)
+
+#def query_hierarchy(data,*args,**kwargs):
+#  """This gererator function returns an iterator over any matching
+#  pieces of the given nested hierarchy of lists, tuples, and dicts in
+#  "data"."""
+#
+#  # Get the given or default values of our keyword arguments.
+#  sep=kwargs.get('sep','/')
+#
+#  # Get the "path" to the data the caller wants.
+#  if len(args)==0:
+#    raise ValueError("No path components given.")
+#  args=list(args)
+#  for i in len(args):
+#    if not isinstance(args[i],basestring):
+#      args[i]=str(args[i])
+#    if sep!=None and sep in args[i]:
+#      # Replace args[i] with the separate path items it contains.
+#      args[i:i+1]=args[i].split(sep)
+
+url_parser=re.compile(r'(?P<protocol>\w+)://(?P<host>.[^:/]+)(:(?P<port>\d+))?(?P<path>/.*)?$')
+
+# Read our JSON data.
+if opt.filename==None or opt.filename=='-':
+  # From standard input.
+  opt.filename='/dev/stdin'
+if url_parser.match(opt.filename):
+  # From a web app.
+  import urllib2
+  f=urllib2.urlopen(opt.filename)
+  d=f.read()
+  f.close()
+  d=json.loads(d)
+else:
+  # From a regular file.
+  f=open(opt.filename)
+  d=json.load(f)
+  f.close()
+modifying_traversal(d,evaluate) # Parse and convert what values we can.
+
+if opt.show_structure:
+  show_structure(d)
+  sys.exit(0)
+else:
+  if opt.output_format=='csv':
+    die("Output format csv has not yet been implemented. Please complain to the developer.")
+  elif opt.output_format=='json':
+    json.dump(d,sys.stdout,cls=BetterJsonEncoder)
+  elif opt.output_format=='json-pretty':
+    json.dump(d,sys.stdout,indent=2,cls=BetterJsonEncoder)
+  elif opt.output_format=='python':
+    pprint(d,indent=2,width=prog.term_width)
+  elif opt.output_format=='traverse':
+    for i,val,depth in iterating_traversal(d):
+      if isinstance(val,(dict,list,tuple)):
+        print '%s%s:'%('\t'*depth,i)
+      else:
+        print '%s%s=%r'%('\t'*depth,i,val)
+  else:
+    die("Unrecognized output format %s!. Please complain to the developer."%(opt.output_format,))
+sys.exit(0)

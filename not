@@ -1,74 +1,72 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
-import fnmatch,optparse,os,re,stat,sys
+import argparse,fnmatch,os,re,stat,sys
 from glob import glob
-from OptionParserFormatters import IndentedHelpFormatterWithNL
+from handy import file_walker
 
-def die(msg,rc=1):
-  if msg:
-    sys.stderr.write(os.path.basename(sys.argv[0])+': '+msg+'\n')
-  sys.exit(rc)
+def non_negative_integer(s):
+  try:
+    n=int(s)
+    if n>=0:
+      return n
+  except:
+    pass
+  raise argparse.ArgumentTypeError('%r is not a non-negative integer.'%(s,))
 
-op=optparse.OptionParser(
-  formatter=IndentedHelpFormatterWithNL(2,8),
-  usage='%prog [OPTIONS] FILESPEC ...',
-  description="Output all filenames not matching either the -f or -r arguments. At least one -f or -r argument MUST be given."
-)
-op.add_option('-b',dest='base',action='store_true',default=False,help="Compare FS or RE patterns only against the basename of each filename, ignoring any path prefixing it.")
-op.add_option('-f',dest='fs',action='append',default=[],help="Unix-style filespec matching filenames to exclude. Use -f once for each such filespec.")
-op.add_option('-i',dest='ignore_case',action='store_const',const=re.IGNORECASE,default=0,help="Ignore case when matching filenames.")
-op.add_option('-R','--root',dest='root',action='store',default=None,help="Look in the given root path and its subdirectories.")
-op.add_option('-r',dest='re',action='append',default=[],help="Regular expression matching filenames to exclude. Use -r once for each such filespec.")
-op.add_option('-v',dest='invert',action='store_true',default=False,help="Invert the exclusion function so that only the files that would be excluded are reported.")
-opt,args=op.parse_args()
+def compile_pattern(s):
+  """Return a compled RE for s. If s begins with 're:', the remainder of
+  s is the regular expression. Otherwise, s is a filespec and must be
+  converted to a regular expression. In either case, the compiled RE is
+  returned."""
 
-# Translate any -f arguments into -r arguments.
-while opt.fs:
-  opt.re.append(fnmatch.translate(opt.fs.pop(0)))
-if not opt.re:
-  die('At least one of -f or -r options must be given.')
-
-# Compile our REs.
-opt.re=[re.compile(x,opt.ignore_case) for x in opt.re]
-
-# If stdin isn't a terminal, read filespecs from it into args.
-mode=os.fstat(sys.stdin.fileno()).st_mode
-if stat.S_ISFIFO(mode) or stat.S_ISREG(mode):
-  for fs in sys.stdin:
-    fs=fs.strip()
-    args.extend(glob(fs))
-
-# If we have no filenames to match against, use all files in the current
-# directory.
-if len(args)<1:
-  args=glob('*')
-
-##
-## Output all filenames that DON'T match the patterns to be excluded.
-##
-output=set([])
-if opt.root:
-  top=opt.root
-else:
-  top='.'
-for root,dirs,files in os.walk(top):
-  if not opt.root:
-    # Don't process subdirectories.
-    del(dirs[:])
-  for fn in files:
-    path=os.path.join(root,fn)
-    if opt.base:
-      is_match=any([p.match(fn) for p in opt.re])
-    else:
-      is_match=any([p.match(path) for p in opt.re])
-    if is_match==opt.invert:
-      output.add(path)
-
-# Output each distinct filename alphabetically.
-output=list(output)
-output.sort()
-for fn in output:
-  if fn.startswith('./'):
-    print fn[2:]
+  if s.startswith('r:'):
+    s=s[2:]
   else:
-    print fn
+    s=fnmatch.translate(s)
+  return re.compile(s)
+
+ap=argparse.ArgumentParser(
+  description="Output all filenames not matching any filespec on the command line."
+)
+ap.add_argument('--path',action='store',nargs='*',default='.',help="One or more paths to search for the filespecs given on the command line.")
+ap.add_argument('--recursive','-r',action='store_true',default=False,help="Ordinarilly, only the given paths (with --path) or the current working directory are searched for files not matching those on the command line. This option searches those paths and all subdirectories beneath them.")
+ap.add_argument('--depth',type=non_negative_integer,default=sys.maxsize,help="Limit the depth of any recursive search.")
+ap.add_argument('--follow',action='store_true',default=True,help="Follow symlinks to directories if recursing.")
+ap.add_argument('--prune',nargs='+',action='store',default=[],help="List filespecs and regular expressions (starting with 're:') to specify directories NOT to recurse into.")
+ap.add_argument('-v',dest='invert',action='store_true',default=False,help="Invert the function of this command so that only MATCHING files are output.")
+ap.add_argument('filespecs',metavar='filespec',nargs='+',action='store',help="These are the filespecs and regular expressions (those starting with 're:') that will be suppressed in the output.")
+ap.add_argument('--debug',action='store_true',default=False,help="Enable debugging messages.")
+opt=ap.parse_args()
+
+# Use a DebugChannel to stdout for debugging.
+from debug import DebugChannel
+debug=DebugChannel(enabled=opt.debug,stream=sys.stdout)
+debug('opt.path=%r'%(opt.path))
+debug('opt.recursive=%r'%(opt.recursive))
+debug('opt.depth=%r'%(opt.depth))
+debug('opt.follow=%r'%(opt.follow))
+debug('opt.prune=%r'%(opt.prune))
+debug('opt.invert=%r'%(opt.invert))
+debug('opt.filespecs=%r'%(opt.filespecs))
+
+# Compile our filespecs into RE objects.
+opt.patterns=[compile_pattern(s) for s in opt.filespecs]
+debug('opt.patterns=%r'%([p.pattern for p in opt.patterns],))
+
+def find_match(s,patterns):
+  """Return the first RE in patterns that matches s. Return None if no
+  match is found."""
+
+  for p in patterns:
+    if p.match(s):
+      return p
+  return None
+
+for p in opt.path:
+  debug('p=%r'%(p,))
+  for fn in file_walker(p,depth=opt.depth,follow_links=opt.follow,prune=opt.prune):
+    debug('fn=%r'%(fn,))
+    if bool(find_match(os.path.basename(fn),opt.patterns))==opt.invert:
+      print(fn)
+    else:
+      debug('Rejecting %r'%(fn,))

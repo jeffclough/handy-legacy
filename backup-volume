@@ -13,9 +13,15 @@ export DATE=/bin/date
 export DIRNAME=/usr/bin/dirname
 export EGREP=/usr/bin/egrep
 export HEAD=/usr/bin/head
+export TAIL=/usr/bin/tail
+export TOUCH=/usr/bin/touch
 export ID=/usr/bin/id
 export LS=/bin/ls
 export RSYNC=/usr/bin/rsync
+export GREP=/Users/jclough/my/bin/pygrep
+export MARK=/Users/jclough/my/bin/mark
+
+export PYTHONPATH="$PYTHONPATH:/Users/jclough/my/lib/python"
 
 # Return the real, canonical name of the given path.
 realpath() {
@@ -47,6 +53,7 @@ die() {
 src="$1"
 volname=$($BASENAME "$src")
 dst="$backup_to/$volname.$($DATE '+%Y%m%d_%H%M%S')"
+t="$($DATE '+%Y%m%d%H%M')"
 
 rsync_opts="-av --delete --delete-excluded"
 
@@ -60,4 +67,4 @@ cmp="$($LS -dt "$backup_to/$volname".* | $EGREP '[0-9]{8}_[0-9]{6}$' | $HEAD -1)
 
 # Perform the backup.
 echo "$RSYNC $rsync_opts \"$src/\" \"$dst/\""
-$RSYNC $rsync_opts "$src/" "$dst/"
+($RSYNC $rsync_opts "$src/" "$dst/" | $EGREP -v '(/$)|(Previews.lrdata)' && $TOUCH -t "$t" "$dst") | $MARK '.*?\.(rw2|cr2|dng)$' '.*?\.je?pg$' '.*?\.xmp$' '.*?\.lrcat$' '.*?\.tiff?$'

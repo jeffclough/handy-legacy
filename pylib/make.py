@@ -1,8 +1,4 @@
-#!/usr/bin/env python
-import optparse,os,platform,shlex,shutil,sys,time
-from glob import glob
-from fnmatch import fnmatch
-
+#!/usr/bin/env python2
 """
 This module is intended to span the gap between Makefile and setup.py,
 bringing the power and versatility of Python to the basic functionality
@@ -10,8 +6,13 @@ of make.
 
 """
 
+import optparse,os,platform,shlex,shutil,sys,time
+from glob import glob
+from fnmatch import fnmatch
+
 # Get some system parameters
 OS_NAME,HOST,KERNEL,PLATFORM,MACHINE,PROCESSOR=platform.uname()
+SRCDIR=os.path.abspath(os.path.dirname(sys.argv[0]))
 if OS_NAME=='Darwin':
   OS_VER=platform.mac_ver()[0]
 else:
@@ -47,7 +48,7 @@ if not args:
   args=['all']
 
 if opt.sysinfo:
-  for var in sorted("OS_NAME HOST KERNEL PLATFORM MACHINE PROCESSOR OS_VER DISTRO_NAME DISTRO_VER".split()):
+  for var in sorted("OS_NAME HOST KERNEL PLATFORM MACHINE PROCESSOR OS_VER DISTRO_NAME DISTRO_VER SRCDIR".split()):
     print '%s=%r'%(var,eval(var))
   sys.exit(0)
 
@@ -105,14 +106,19 @@ def filetime(filename,default=0):
   except:
     pass
   if opt.verbosity>=V_TIME:
-    print '  %s:\t%s'%(filename,time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(default)))
+    print '  %s:\tt=%0.6f (%s)'%(filename,default,time.strftime('%Y-%m-%d %H:%M:%S.%f',time.localtime(default)))
   return default
 
-def isnewer(src,dst):
+def isnewer(src,dst,bias=-0.001):
   """Return true if src names a file that is newer than the file dst
-  names (or if dst doesn't exist)."""
+  names (or if dst doesn't exist).
+  
+  The bias argument is the number of seconds to add to the source time
+  in order to bias comparison with the time of the destination file. It
+  defaults to -0.001 seconds (-1 miliseconds) to avoid needless file
+  copies on some operating systems. (I'm looking at you, Mac OS.)"""
 
-  return opt.force or filetime(src,1)>filetime(dst)
+  return opt.force or (filetime(src,1)+bias)>filetime(dst)
 
 def flatten(*args):
   '''Return a list of all arguments, breaking out elements of any tuples
@@ -356,7 +362,6 @@ class Installer(DependentTarget):
 
     # Copy each dependency to the given directory.
     for dep in self.deps:
-      dep=os.path.realpath(dep)
       dest=os.path.join(self.dir,os.path.basename(dep))
       if isnewer(dep,dest) and not any([fnmatch(dep,pat) for pat in IGNORE]):
         print '%s ==> %s'%(dep,self.dir)
@@ -369,9 +374,9 @@ class Installer(DependentTarget):
       self.built=True
 
 
-class EasyInstall(Target):
-  '''Run easy_install to install the package to the given directory, but
-  only if it's not already installed.'''
+class PipInstall(Target):
+  '''Run "pip install" to install the package to the given directory,
+  but only if it's not already installed.'''
 
   def __init__(self,package,dir,minver=None,maxver=None):
     filename=os.path.join(dir,package)
@@ -429,10 +434,10 @@ class EasyInstall(Target):
     except ImportError:
       # OK. So we need to install it.
       print '\n%s:'%self.package
-      cmd=build_command('easy_install','--install-dir',self.dir,self.package)
+      cmd=build_command('pip','install','--target',self.dir,self.package)
       if not opt.dryrun:
         os.system(cmd)
-    if self.__class__.__name__=='EasyInstall':
+    if self.__class__.__name__=='PipInstall':
       # Mark this target as "built," but only if not called from a subclass.
       # This logic is needed in order to make calling super(...).build() safe.
       self.built=True
@@ -520,6 +525,45 @@ def make(target_name):
 
   for target in getTargetsByName(target_name):
     target.build()
+
+def link_exists(link):
+  "Works just like os.path.lexists(), but this work on pre-2.4 Python."
+
+  try:
+    os.readlink(link)
+    return True
+  except Exception:
+    return False
+
+def symlink(target,link):
+  """Create a symlink from link to target. If link already exists and is a
+  symlink to link, no action is taken. Otherwise, target (whether it is a
+  symlink or a regular file) is replaced with a symlink to target."""
+
+  target=expand_all(target)
+  link=expand_all(link)
+  if link_exists(link):
+    if os.path.islink(link):
+      ltarget=os.path.abspath(os.readlink(link))
+      if ltarget==os.path.abspath(target):
+        # The symlink already points to where it should go.
+        return
+      # Remove this miscreant symlink.
+      print 'Removing %s --> %s'%(link,os.readlink(link))
+      if not opt.dryrun:
+        os.remove(link)
+    elif os.path.isdir(link):
+      raise Error('%s exists but is a directory.'%link)
+    else:
+      os.remove(link)
+  print 'Creating %s --> %s'%(link,target)
+  if not opt.dryrun:
+    try:
+      os.symlink(target,link)
+    except OSError,e:
+      raise OSError(str(e)+' on os.symlink(%r,%r)'%(target,link))
+    except:
+      raise
 
 # I'd like to be able to call make.path() rather than os.path.join() ...
 # so here you go.

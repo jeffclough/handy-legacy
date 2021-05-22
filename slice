@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 import optparse,os,re,stat,sys
 from glob import glob
 import OptionParserFormatters
@@ -13,7 +13,7 @@ if vi<req:
   while v>=req[1]:
     cmd='python2.%d'%v
     rc=os.spawnv(os.P_WAIT,cmd,sys.argv)
-    print 'os.spawnv(os.P_WAIT,%r,%r) returns %d'%(cmd,sys.argv,rc)
+    #print 'os.spawnv(os.P_WAIT,%r,%r) returns %d'%(cmd,sys.argv,rc)
     if rc!=127:
       sys.exit(rc)
     v-=1

@@ -1,31 +1,99 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 import optparse,os,re,sys
 from datetime import *
 import time as _time
 
-now=datetime.today()
-sametime=timedelta(0)
+# Import our debug module while this code is under development.
+from debug import DebugChannel
+debug=DebugChannel()
+debug.setFormat('\x1b[1;36m{indent}{message}\x1b[0m\n')
+
+class TimeError(Exception):
+  def __init__(self,msg):
+    super(TimeError,self).__init__(msg)
+
+def ir(val,low,high):
+  "Return True iff val>=low and val<=high."
+
+  return val>=low and val<=high
+
+def delta_seconds(td):
+  "Because datetime.timedelta.total_seconds() is a little too recent."
+
+  return td.seconds+td.days*86400
+
+# Some timedelta constants.
+SAMETIME=timedelta(0)
+ONEDAY=timedelta(1)
+ONEWEEK=timedelta(7)
 
 class TimeZone(tzinfo):
+  """
+  >>> TimeZone.localtz
+  TimeZone('EST',-300,'EDT',60)
+  >>> dt=datetime(2018,6,15,12,0,0,0,TimeZone.localtz)
+  >>> dt
+  datetime.datetime(2018, 6, 15, 12, 0, tzinfo=TimeZone('EST',-300,'EDT',60))
+  """
+
   # Keep a dictionary of every TimeZone object that's created.
   zones={} # key=time zone name, value=TimeZone instance
+
+  # Remember our local time zone when we see it.
+  localtz=None
   
+  @classmethod
+  def byName(cls,tzname):
+    """Find and return a class of the given name, ignoring case. If
+    none is found, return None."""
+
+    if not tzname:
+      return TimeZone.localtz
+    return cls.zones.get(tzname.lower(),cls.localtz)
+
   def __init__(self,std_name,std_minutes,dst_name,dst_minutes):
-    "Initialize and remember this TimeZone object."
+    "Initialize this TimeZone object and register its names."
 
     self.std_name=std_name
     self.std_offset=timedelta(minutes=std_minutes)
     self.dst_name=dst_name
     self.dst_offset=timedelta(minutes=std_minutes+dst_minutes)
+
+    # Register the names of TimeZone instance.
     TimeZone.zones[self.std_name.lower()]=self
     TimeZone.zones[self.dst_name.lower()]=self
+
+    # If we haven't seen our local time zone yet, see if this is it.
+    if TimeZone.localtz==None:
+      tsnow=_time.time()
+      now=datetime.fromtimestamp(tsnow)
+      localtz_offset=int(
+        _time.mktime(now.timetuple())-_time.mktime(datetime.utcfromtimestamp(tsnow).timetuple())
+      )
+      if localtz_offset==delta_seconds(self.utcoffset(datetime.now())):
+        TimeZone.localtz=self
 
   def __del__(self):
     "Remove this dying object from TimeZone.zones."
 
     del TimeZone.zones[self.std_name.lower()]
     del TimeZone.zones[self.dst_name.lower()]
+
+  def __repr__(self):
+    "Return a string that could reconstruct this object."
+
+    return 'TimeZone(%r,%r,%r,%r)'%(
+      self.std_name,
+      delta_seconds(self.std_offset)/60,
+      self.dst_name,
+      delta_seconds(self.dst_offset-self.std_offset)/60
+    )
+
+  def __str__(self):
+    "Return a humanly readable representation of this object's value."
+
+    return self.tzname()
 
   def utcoffset(self,dt):
     """Return a timedelta object holding the difference from UTC to this
@@ -64,21 +132,38 @@ class TimeZone(tzinfo):
     if self._is_dst(dt):
       return self.dst_offset-self.std_offset
     else:
-      return sametime
+      return SAMETIME
 
   def _is_dst(self,dt=None):
     if dt==None:
       dt=datetime.today()
-    return _time.localtime(_time.mktime(dt.timetuple())).tm_isdst==1
+    #t=dt.timetuple()
+    t=(dt.year,dt.month,dt.day,dt.hour,dt.minute,dt.second,0,0,-1)
+    t=_time.mktime(t)
+    t=_time.localtime(t)
+    return t.tm_isdst==1
 
-tz_utc=TimeZone('UTC',0,'UTC',0)
-tz_us_atlantic=TimeZone('AST',-4*60,'ADT',60)
-tz_us_eastern=TimeZone('EST',-5*60,'EDT',60)
-tz_us_central=TimeZone('CST',-6*60,'CDT',60)
-tz_us_mountain=TimeZone('MST',-7*60,'MDT',60)
-tz_us_pacific=TimeZone('PST',-8*60,'PDT',60)
+# Time Zones
 tz_us_aleutian=TimeZone('HAST',-10*60,'HADT',60)
+tz_us_pacific=TimeZone( 'PST',  -8*60,'PDT', 60)
+tz_us_mountain=TimeZone('MST',  -7*60,'MDT', 60)
+tz_us_central=TimeZone( 'CST',  -6*60,'CDT', 60)
+tz_us_eastern=TimeZone( 'EST',  -5*60,'EDT', 60)
+tz_us_atlantic=TimeZone('AST',  -4*60,'ADT', 60)
+tz_utc=TimeZone(        'UTC',      0,'UTC',  0)
+tz_gmt=TimeZone(        'GMT',      0,'GMT',  0)
+tz_eu_western=TimeZone( 'WET',      0,'WEST',60) # Western European Time
+tz_eu_central=TimeZone( 'CET',     60,'CEST',60) # Central European Time
+tz_eu_eastern=TimeZone( 'EET',   2*60,'EEST',60) # Eastern European Time
 
+if TimeZone.localtz==None:
+  # A complete kludge for unknown local time zone
+  TimeZone('LST',localtz/60,'LDT',60)
+
+# Make our global now variable offset-aware.
+now=datetime.now(TimeZone.localtz)
+
+# There should be only one, but ... we have several to choose from.
 epochs=dict(
   microsoft=datetime(1,1,1,0,0,0,0,tz_utc),
   ad=datetime(1601,1,1,0,0,0,0,tz_utc),
@@ -94,10 +179,25 @@ epoch_names=sorted(epochs.keys())
 op=optparse.OptionParser(
   usage="%prog [OPTIONS] arguments expressing date and time"
 )
-op.add_option('--age',metavar='UNITS',dest='age',choices=('seconds','minutes','hours','days','time'),help="Request the age of the given date and time, and give the desired units (days, hours, minutes, or seconds). The 'time' units value gives an output format of '[-][DAYSd ]%HH:%MM:%SS'. Only integer values are returned, and there is no rounding. Future times return a negative age.")
-op.add_option('--epoch',dest='epoch',choices=epoch_names,help="Output the number of seconds elapsed from the beginning of given epoch to the given time. Negative values are given for times that predate the epoch. Epoch choices: %s"%(', '.join(epoch_names)))
-op.add_option('-f',dest='format',action='store',default='%Y-%m-%d %H:%M:%S',help="Set the output format. See 'man strptime' for the format syntax. (default: %default)")
+op.add_option('--age',metavar='UNITS',dest='age',action='store',help="Request the age of the given date and time, and give the desired units (days, hours, minutes, or seconds). You can also give 'time' as units, which gives an output format of '[-][DAYSd ]%HH:%MM:%SS'. Only integer values are returned, and there is no rounding. Future times return a negative values. By default, units are whole integers and are truncated, so an age of 90 seconds becomes 1 minute. If fractional units are desired, place a decimal point and a number expressing the precision you want at the end of the units.")
+op.add_option('--youth',metavar='UNITS',dest='youth',action='store',help="This is exactly like --age above, but the sign of the result is inverted. So future times return a positive values.")
+op.add_option('--epoch',dest='epoch',choices=epoch_names,help="Output the number of seconds elapsed from the beginning of given epoch to the given time. Negative values are given for times that predate the epoch. (Epoch choices: %s) The --age option can be used to change the reported epoch value from seconds to something else. And the --youth option will invert the sign of the result in its usual fashion."%(', '.join(epoch_names)))
+op.add_option('-f',dest='format',action='store',default='%Y-%m-%d %H:%M:%S',help="Set the output format. See 'man strftime' for the format syntax. (default: %default)")
+op.add_option('--debug',dest='debug',action='store_true',default=False,help="Output debugging information.")
+op.add_option('--test',dest='test',action='store_true',default=False,help="Run some internal tests (like after updating this code).")
 opt,args=op.parse_args()
+
+if opt.debug:
+  debug.enable()
+
+if opt.age and opt.youth:
+  op.error("The --age and --youth cannot both be used.")
+
+if opt.youth!=None:
+  opt.age=opt.youth
+  opt.invert=True # Invert --age's result.
+else:
+  opt.invert=False
 
 if opt.epoch!=None:
   opt.epoch=epochs[opt.epoch]
@@ -105,67 +205,251 @@ if opt.epoch!=None:
     # Because the --age logic is going to do most of --epoch's work.
     opt.age='seconds'
 
-def die(msg,rc=1):
-  sys.stderr.write(os.path.basename(sys.argv[0])+': '+msg+'\n')
-  sys.exit(rc)
-
-months=(
-  'january',
-  'february',
-  'march',
-  'april',
-  'may',
-  'june',
-  'july',
-  'august',
-  'september'
-  'october',
-  'november',
-  'december'
+months=tuple(
+  'january february march april may june july '
+  'august september october november december'.split()
 )
 
 def get_month_by_name(month_name):
   """Return a number from 1 to 12 corresponding to the given month name,
   or return None for an unrecognized month name. To make the caller's
   life easier, any string containing a number from 1 to 12 is also
-  returned as the corresponding integer."""
+  returned as the corresponding integer.
+
+  >>> [get_month_by_name(m) for m in months]
+  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  >>> [get_month_by_name(m[:3]) for m in months]
+  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  """
 
   try:
     n=int(month_name)
     if n>=1 and n<=12:
       return n
     else:
-      return none
+      return None
   except:
     pass
+
   n=len(month_name)
   if n<3:
     return None
   m=month_name.lower()
-
   for i in range(len(months)):
     if m==months[i][:n]:
       return i+1
   return None
 
+def beginning_of_day(dt):
+  """Return dt with the time components set to midnight."""
+
+  if dt==None:
+    return None
+  return datetime(dt.year,dt.month,dt.day,0,0,0,0,dt.tzinfo)
+
+def end_of_day(dt):
+  """Return dt with the time components set to the last "instant" of
+  that day."""
+
+  if dt==None:
+    return None
+  return datetime(dt.year,dt.month,dt.day,23,59,59,999999,dt.tzinfo)
+
 class ParserBase(object):
-  """This is the base class of all other time parsers. Treat it as an
-  abstract base class."""
+  """This is the base class of all other time parsers. This is an abstract
+  base class. Do not attempt to instantiate it directly."""
 
   # This is the name of the format this parser parses.
   name=''
 
   # This is a sequence of compiled REs. This parser can parse only strings
   # that match one of these REs in their entirety.
-  patterns=(
-  )
+  #patterns=(
+  #)
+
+  def __init__(self):
+    assert self.__class__.__name__!='ParserBase', "ParserBase is an abstract base class and must not be instantiated directly."
 
   # Parse the given string and return an object representing that time. If
   # the string cannot be parsed, return None.
-  def parse(time_string):
+  def parse(self,time_string):
+    """Parse the given string and return an object representing that time
+    as a datetime.datetime object. If the string cannot be parsed, return
+    None."""
+
     return None
 
-class DateTimeParser(ParserBase):
+class EnglishTimeParser(ParserBase):
+  """Recognizes some simple english phrases that designate times.
+
+      [(this time | end of)] (now | today | tomorrow | yesterday)
+  """
+
+  name="English Time Reference"
+
+  def parse(self,time_string):
+    # Regualarize whitespace characters in our time string.
+    ts=' '.join([s.strip() for s in time_string.split()])
+
+    # We don't care about case.
+    ts=ts.lower()
+
+    # Remember whether the called applied a "this time" or "end of" operator.
+    this_time=end_of=False
+    if ts.startswith('this time '):
+      this_time=True
+      ts=ts[len('this time '):]
+    elif ts.startswith('end of '):
+      end_of=True
+      ts=ts[len('end of '):]
+    dt=datetime.now(TimeZone.localtz)
+
+    # See what relative day this phrase expresses.
+    if ts in ('this time','now'):
+      # A naked "this time" operator also means "now".
+      this_time=True # Yes. Even if "this time " is missing.
+    elif ts=='today':
+      pass # Same as now, but rely on "this time " phrase to keep time of day.
+    elif ts=='yesterday':
+      dt-=ONEDAY
+    elif ts=='tomorrow':
+      dt+=ONEDAY
+    else:
+      dt=None
+
+    # Adjust for "end of" or don't adjust for "this time" operators.
+    if end_of:
+      dt=end_of_day(dt)
+    elif not this_time:
+      dt=beginning_of_day(dt)
+    return dt
+
+def undict(d,unstr=None):
+  """Return an object with attributes of the given dict items. If unstr
+  is not None, it must be a sequence of types that the dictionary string
+  values can be converted into. For instance, unstr=(int,float) will try
+  int(x) conversion and then float(x) conversion of string values of x.
+
+  >>> d=dict(a='1',b='2.5',c='foo',d=True)
+  >>> print tuple([(x,d[x]) for x in 'abcd'])
+  (('a', '1'), ('b', '2.5'), ('c', 'foo'), ('d', True))
+  >>> o=undict(d)
+  >>> print tuple([(x,getattr(o,x)) for x in 'abcd'])
+  (('a', '1'), ('b', '2.5'), ('c', 'foo'), ('d', True))
+  >>> o=undict(d,unstr=(int,float))
+  >>> print tuple([(x,getattr(o,x)) for x in 'abcd'])
+  (('a', 1), ('b', 2.5), ('c', 'foo'), ('d', True))
+  """
+
+  # If we're supposed to try to convert string values to something else,
+  # this is where we do that.
+  if hasattr(unstr,'__iter__'):
+    d=dict(d) # DON'T modify the caller's dictionary. Work on a copy.
+    for var in d:
+      val=d[var]
+      if isinstance(val,basestring):
+        for t in unstr:
+          try:
+            d[var]=t(val)
+            break
+          except:
+            pass
+  return type('',(),d)
+
+class DateParser(ParserBase):
+  """Recognizes the following date formats. The first match wins.
+
+      YYYY-mm-dd
+      mm-dd-YYYY
+      dd-mm-YYYY
+
+  """
+
+  name="Date"
+  patterns=(
+    # YYYY[-/ ]mmm[-/ ]dd
+    # dd[-/ ]mmm[-/ ]YYYY
+    # mmm[-/ ]dd[-/ ]YYYY
+    re.compile(
+      r'(?P<d1>\d+([-/]|\s+))'
+      r'(?P<month>[A-Za-z]+([-/]|\s+))'
+      r'(?P<d2>\d+)'
+    ),
+    # YYYY[-/]mm[-/]dd
+    # dd[-/]mm[-/]YYYY
+    # mm[-/]dd[-/]YYYY
+    re.compile(
+      r'(?P<d1>\d+)[-/]'
+      r'(?P<d2>\d+)[-/]'
+      r'(?P<d3>\d+)$'
+    ),
+  )
+
+  def parse(self,time_string):
+    """If we recognize the given time_string, return a datetime.datetime
+    object containing the corresponding value. Raise TimeError if there
+    is an error during parsing.
+
+    If we fail to even recognize time_string as a plausable time, simply
+    return None."""
+
+    debug('class=%s, time_string=%r'%(self.__class__.__name__,time_string,)).indent(1)
+    dt=None
+    for p in self.patterns:
+      debug("matching against '%s'"%(p.pattern,))
+      m=p.match(time_string)
+      if m:
+        # Load our time components into an untyped object as attributes,
+        # converting from string values where possible.
+        debug("matched: %r"%(m.groupdict(),))
+        d=undict(m.groupdict(),unstr=(int,get_month_by_name))
+        debug(', '.join([
+          '%s=%r'%(var,getattr(d,var)) for var in m.groupdict()
+        ]))
+        if hasattr(d,'month'):
+          if d.month==None:
+            continue
+          if d.d1>31 and ir(d.d2,1,31):
+            dt=datetime(d.d1,d.month,d.d2)
+          elif d.d2>31 and ir(d.d1,1,31):
+            dt=datetime(d.d2,d.month,d.d1)
+        elif hasattr(d,'d3'):
+          if d.d1>31 and ir(d.d2,1,12) and ir(d.d3,1,31):
+            dt=datetime(d.d1,d.d2,d.d3,0,0,0)
+          elif d.d3>31 and ir(d.d1,1,12) and ir(d.d2,1,31):
+            dt=datetime(d.d3,d.d1,d.d2,0,0,0)
+          elif d.d3>31 and ir(d.d2,1,12) and ir(d.d3,1,31):
+            dt=datetime(d.d3,d.d2,d.d1,0,0,0)
+    debug.indent(-1)('returning %r'%(dt,))
+    return dt
+
+class TimeStampParser(ParserBase):
+  """Recognizes the following date/time formats. The first match wins.
+
+      YYYY-mm-dd HH:MM:SS
+      [dow] mmm dd hh:mm:ss yyyy [tz]
+      [dow] mmm dd hh:mm:ss [tz] yyyy
+      mmm dd hh:mm:ss
+
+  >>> p=TimeStampParser()
+  >>> p.parse('2018-09-07  23:24:25')
+  datetime.datetime(2018, 9, 7, 23, 24, 25, tzinfo=TimeZone('EST',-300,'EDT',60))
+  >>> p.parse('Fri  Sep  7 23:24:25  2018  GMT')
+  datetime.datetime(2018, 9, 7, 23, 24, 25, tzinfo=TimeZone('GMT',0,'GMT',0))
+  >>> p.parse('Sep  7 23:24:25  2018  GMT')
+  datetime.datetime(2018, 9, 7, 23, 24, 25, tzinfo=TimeZone('GMT',0,'GMT',0))
+  >>> p.parse('Fri  Sep  7 23:24:25  2018')
+  datetime.datetime(2018, 9, 7, 23, 24, 25, tzinfo=TimeZone('EST',-300,'EDT',60))
+  >>> p.parse('Sep  7 23:24:25  2018')
+  datetime.datetime(2018, 9, 7, 23, 24, 25, tzinfo=TimeZone('EST',-300,'EDT',60))
+  >>> p.parse('Fri  Sep  7  23:24:25  GMT  2018')
+  datetime.datetime(2018, 9, 7, 23, 24, 25, tzinfo=TimeZone('GMT',0,'GMT',0))
+  >>> p.parse('Sep  7  23:24:25  GMT  2018')
+  datetime.datetime(2018, 9, 7, 23, 24, 25, tzinfo=TimeZone('GMT',0,'GMT',0))
+  >>> p.parse('Sep  7  23:24:25')
+  datetime.datetime(2018, 9, 7, 23, 24, 25, tzinfo=TimeZone('EST',-300,'EDT',60))
+  """
+
   name="Full Date and Time"
   patterns=(
     # YYYY-mm-dd HH:MM:SS
@@ -177,10 +461,21 @@ class DateTimeParser(ParserBase):
       r'(?P<minute>\d+):'
       r'(?P<second>\d+)'
     ),
+    # [dow] mmm dd hh:mm:ss yyyy [tz]
+    re.compile(
+      r'((?P<dow>\w+)\s+)?'
+      r'(?P<month>\w+)\s+'
+      r'(?P<day>\d+)\s+'
+      r'(?P<hour>\d+):'
+      r'(?P<minute>\d+):'
+      r'(?P<second>\d+)\s+'
+      r'((?P<year>\d+)\s+)'
+      r'(?P<tz>\w+)?'
+    ),
     # [dow] mmm dd hh:mm:ss [tz] yyyy
     re.compile(
       r'((?P<dow>\w+)\s+)?'
-      r'(?P<month>\w+)\s'
+      r'(?P<month>\w+)\s+'
       r'(?P<day>\d+)\s+'
       r'(?P<hour>\d+):'
       r'(?P<minute>\d+):'
@@ -188,10 +483,29 @@ class DateTimeParser(ParserBase):
       r'((?P<tz>\w+)\s+)?'
       r'(?P<year>\d+)'
     ),
+    # mmm dd hh:mm:ss
+    re.compile(
+      r'(?P<month>\w+)\s+'
+      r'(?P<day>\d+)\s+'
+      r'(?P<hour>\d+):'
+      r'(?P<minute>\d+):'
+      r'(?P<second>\d+)'
+    ),
   )
 
   def parse(self,time_string):
+    """If we recognize the given time_string, return a datetime.datetime
+    object containing the corresponding value. Raise TimeError if there
+    is an error during parsing.
+
+    If we fail to even recognize time_string as a plausable time, simply
+    return None."""
+
+    debug('class=%s, time_string=%r'%(self.__class__.__name__,time_string,)).indent(1)
+    #debug('time_string=%r'%(time_string,)).indent(1)
+    dt=None
     for p in self.patterns:
+      debug("matching against '%s'"%(p.pattern,))
       m=p.match(time_string)
       if m:
         # Load our time components into an untyped object as attributes.
@@ -203,69 +517,112 @@ class DateTimeParser(ParserBase):
         d.hour=int(d.hour)
         d.minute=int(d.minute)
         d.second=int(d.second)
-        d.year=int(d.year)
+        if hasattr(d,'year') and d.year!=None:
+          d.year=int(d.year)
+        else:
+          d.year=datetime.now().year
+        d.tz=TimeZone.byName(getattr(d,'tz',''))
         try:
-          dt=datetime(d.year,d.month,d.day,d.hour,d.minute,d.second)
-          return dt
+          dt=datetime(d.year,d.month,d.day,d.hour,d.minute,d.second,0,d.tz)
+          break
         except ValueError,e:
-          die("""Error in "%s", parsed by "%s": %s"""%(time_string,p.pattern,str(e)))
-    return None
+          raise TimeError("""Error in "%s", parsed by "%s": %s"""%(time_string,p.pattern,str(e)))
+    debug.indent(-1)('returning %r'%(dt,))
+    return dt
 
 parsers=(
-  DateTimeParser(),
+  TimeStampParser(),
+  DateParser(),
+  EnglishTimeParser(),
 )
 
-if args:
-  if (' '.join(args)).strip()=='test':
-    print 'Time Zones:'
-    for tz in sorted(TimeZone.zones.keys()):
-      print TimeZone.zones[tz].tzname()
-    sys.exit(0)
-  time_string=' '.join(args)
-else:
-  # Use the current time if none is given.
-  time_string=str(datetime.today().strftime('%Y-%m-%d %H:%M:%S'))
-for p in parsers:
-  dt=p.parse(time_string)
-  if dt!=None:
-    if opt.epoch==None:
-      delta=None
+def parse_time(*args):
+  """Return the datetime.datetime value of the phrase in *args."""
+
+  # Join the pieces of our phrase into one string.
+  time_string=' '.join([x.strip() for x in ' '.join(args).split()])
+  for p in parsers:
+    dt=p.parse(time_string)
+    if dt!=None:
+      return dt
+  else:    
+    raise TimeError('unrecognized date/time: %r'%time_string)
+    
+if __name__=='__main__':
+  rc=0
+  if opt.test:
+    # Run this modules unit tests.
+    import doctest
+    if False:
+      print 'Time Zones:'
+      for tz in sorted(TimeZone.zones.keys()):
+        print TimeZone.zones[tz].tzname()
+    doctest.testmod()
+    sys.exit(rc)
+
+  try:
+    # We might need to know what time time it is.
+    now=datetime.now(TimeZone.localtz)
+
+    # Parse the time from the caller's time phrase or use the current time.
+    if args:
+      dt=parse_time(*args)
     else:
-      ##
-      ## Handle --epoch, which is really just some pre-processing for --age.
-      ##
-      delta=int((dt-opt.epoch).total_seconds())
-    if opt.age!=None:
-      ##
-      ## Handle --age.
-      ##
+      dt=now
+
+    if opt.age==None:
+      # Output the reformated time that we've parsed.
+      output=dt.strftime(opt.format)
+    else:
+      if opt.epoch==None:
+        delta=None
+      else:
+        # Handle --epoch, which is really just some pre-processing for --age.
+        delta=delta_seconds(dt-opt.epoch)
+
+      # Handle --age and --youth (which is now coded into opt.invert.
       if delta==None:
-        delta=int((now-dt).total_seconds())
+        delta=delta_seconds(now-dt)
+      if opt.invert:
+        delta=-delta
       if delta<0:
         output='-'
         delta=-delta
       else:
         output=''
-      if opt.age=='seconds':
-        output+=str(delta)
-      elif opt.age=='minutes':
-        output+=str(delta/60)
-      elif opt.age=='hours':
-        output+=str(delta/360)
-      elif opt.age=='days':
-        output+=str(delta/86400)
+      delta+=1 # Because we're timing from the beginning of the second.
+      if '.' in opt.age:
+        units,prec=opt.age.split('.',1)
+        if not prec:
+          prec=3
+        elif prec.isdigit():
+          prec=int(prec)
+        else:
+          raise TimeError('Bad precision in age units: %r'%(opt.age,))
       else:
+        units=opt.age
+        prec=0
+      if units=='seconds':
+        divisor=1
+      elif units=='minutes':
+        divisor=60
+      elif units=='hours':
+        divisor=3600
+      elif units=='days':
+        divisor=86400
+      elif units=='time':
         if delta>=86400:
           output+='%dd '%(delta/86400)
           delta%=86400
         output+='%02d:%02d:%02d'%(delta/3600,(delta%3600)/60,delta%60)
-        break
-    else:
-      ##
-      ## Output the reformated time that we've parsed.
-      ##
-      output=dt.strftime(opt.format)
-    break
-else:    
-  output='UNRECOGNIZED DATE/TIME: %r'%time_string
-print output
+      else:
+        raise TimeError('Bad age units spec: %r'%(opt.age,))
+      if prec:
+        divisor=float(divisor)
+      output='%.*f'%(prec,delta/divisor,)
+  except TimeError,e:
+    sys.stderr.write(os.path.basename(sys.argv[0])+': '+str(e)+'\n')
+    rc=1
+  else:
+    print output
+  sys.exit(rc)

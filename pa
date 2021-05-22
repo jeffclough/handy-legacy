@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 '''
 This program spells words in a phonetic alphabet. For instance, in the
 NATO dialect, 'a' becomes 'Alpha', b becomes 'Bravo', and so on. The

@@ -1,0 +1,83 @@
+#!/bin/bash
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+# This script reads aloud whatever it finds on standard input. The voice used
+# is the name of the script (alex, alice, fred, whatever). Use symlinks to add
+# or remove a voice. If you try to use a voice that the "say" command can't
+# handle, the script will show you the full list of choices.
+#
+# If you provice a filename on the command line, this script will "speak"
+# standard input into that mp3 file. A .mp3 file extension will be provided if
+# you leave that off.
+#
+
+# To install new voices on your Mac:
+#   1. Open System Preferences.
+#   2. Open the Accessibility preferences.
+#   3. Select "Speech" in the list on the left.
+#   4. Select "Customize ..." from the bottom of the "System Voice" list.
+#   5. Put a check by each voice you wish to install.
+#   6. Click [OK].
+#
+# These are not small files. It might take a while to download them.
+
+# To install lame (required for creating MP3 files):
+#   1. Install Home Brew from https://brew.sh/
+#   2. Run "brew install lame" from the command line.
+
+# Use this command to create all possible symlinks to the alex script:
+# say -v '?'|sed -E 's/ +[a-z]{2}[_-].*//'|tr 'A-Z' 'a-z'|grep -v alex|while read v; do ln -s alex "$v"; done
+
+# Use this command to sample all voices the say command will accept:
+# say -v '?' | sed -E 's/ +[a-z]{2}[_-].*//' | while read v; do echo $v; say -v "$v" "Hello. My name is $v."; done
+
+# "-r 200" sets the speach rate at 200 words per minute.
+# Not all voices respect the -r option.
+
+# Try this input with the "Good News" voice. :-)
+#     we're very proud of you and know you'll do well
+#       in all of your persuits while chasing your dream
+OPTIONS="-r 200"
+
+lc() {
+  tr '[:upper:]' '[:lower:]'
+}
+
+# Return zero value iff "$1" is a supported voice.
+supportedVoice() {
+  [[ "$(
+    say -v '?' | sed -E 's/ +[a-z]{2}[_-].*//' | lc | while read v; do
+      if [[ "$v" == "$1" ]]; then
+        echo "$v"
+        break
+      fi
+    done
+  )" == "$1" ]]
+}
+
+voice=$(basename "$0")
+vlist=($(say -v '?' | sed 's/ .*//' | lc))
+if ! supportedVoice "$voice"; then
+  echo "'$voice' is not one of the permitted voices."
+  echo "Choose from:"
+  say -v '?'|sed -E 's/ +[a-z]{2}[_-].*//'|lc|while read v; do echo "  $v"; done
+  exit 1
+fi
+
+if [ $# -gt 0 ]; then
+  # Get our output filename, and make sure it ends with ".mp3".
+  outfile="$1"
+  [[ "$(echo "$outfile"|lc)" =~ '.mp3' ]] || outfile="$outfile.mp3"
+
+  # Set up to create and destroy an intermediate AIFF sound file.
+  T="/tmp/$voice.$$.aiff"
+  trap 'test -f "$T" && rm "$T"' INT TERM EXIT
+
+  # Create an MP3 file that "says" whatever text is on standard input.
+  say -o "$T" -v "$voice" && lame --quiet -m m "$T" "$outfile"
+else
+  # "Say" whatever text is on standard input.
+  say -v "$voice" $OPTIONS
+fi

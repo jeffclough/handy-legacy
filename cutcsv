@@ -1,12 +1,16 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
-import csv,optparse,os,re,sys
+import csv,errno,optparse,os,re,sys
 import OptionParserFormatters
 try:
   import xlrd
   XLRD=True
 except:
   XLRD=False
+
+#def debug(msg):
+#  if msg:
+#    sys.stderr.write('DEBUG: '+msg+'\n')
 
 def die(msg,rc=1):
   if msg:
@@ -26,6 +30,7 @@ re_dialect=re.compile(
   '(?P<doublequote>[ft])'
   '(?P<escapechar>.)'
   '(?P<skipinitialspace>[ft])'
+  '(?P<commentchar>.)?'
   '$'
 )
 
@@ -54,6 +59,16 @@ class LocalDialect(csv.Dialect):
     self.skipinitialspace=kwargs.get('skipinitialspace',False)
     self.lineterminator=kwargs.get('lineterminator',os.linesep)
     self.quoting=kwargs.get('quoting',csv.QUOTE_MINIMAL)
+    self.commentchar=kwargs.get('commentchar','#')
+
+  def __str__(self):
+    return ''.join(['%s'%(getattr(self,v),'') for v in ('delimiter','quotechar','quoting','doublequote','escapechar','skipinitialspace','commentchar')])
+
+  def __repr__(self):
+    return 'LocalDialect(%s)'%','.join([
+      '%s=%r'%(v,getattr(self,v))
+        for v in ('delimiter','quotechar','quoting','doublequote','escapechar','skipinitialspace','commentchar')
+    ])
 
 def parse_dialect(dialect_spec):
   """Parse a dialect string, and return a LocalDialect instance that is
@@ -84,7 +99,7 @@ def parse_dialect(dialect_spec):
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Handle the command line.
 
-default_dialect_spec=',"mt\\f'
+default_dialect_spec=',"mt\\f#'
  
 op=optparse.OptionParser(
   formatter=OptionParserFormatters.IndentedHelpFormatterWithNL(2,8),
@@ -98,7 +113,7 @@ op.add_option('-f',dest='fields',action='store',default=None,
 help='Output only these fields. FIELDS is made up of one range, or many ranges separated by commas. Each range is one of "N" (the Nth field), "N-" (from the Nth to the last field), "N-M" (from the Nth to the Mth field), or "-M" from the first to the Mth field). Fields are counted beginning with 1, and all ranges are inclusive. By default, all fields are available for output.')
 
 op.add_option('-j',dest='joinfields',action='store',default=None,
-help='Join the a givn field range into a single field separated by a single character.')
+help="""Join the a given field range into a single field separated by a single character. The first character of the JOINFIELDS is the field separator. The remainder of JOINFIELDS is the same field range syntax described for the -f option. Also note that -j renumbers fields as they are joined. If "-j ' 1-2'" is given, then fields 1 and 2 are joined as field 1, and any subsequent fields are renumbered beginning with 2. This is important to remember if you're also using the -f option because -f is evaluated after -j, so -f must refer to fields by their renumbered values.""")
 
 op.add_option('--no-heading',dest='skip',action='store_const',const=1,default=0,
 help="Assume the first line of input contains column headings, and skip over it.")
@@ -118,13 +133,21 @@ help="""Specify the CSV reader's dialect as SEP[Q[QSTYLE[DQUOTE[ESC[SKIPWS]]]]].
     QSTYLE: Quoting style. One of 'a' (all), 'm' (minimal, the default), 'N' (non-numeric), or 'n' (none).
     DQUOTE: Represent a literal quote as two consecutive quotes. Either 't' (the default) or 'f'.
     ESC: The escape charater, which makes the next character a literal. (default: \\)
-    SKIPWS: Skip whitespace immediately following a field separator. Either 't' or 'f' (the default).""")
+    SKIPWS: Skip whitespace immediately following a field separator. Either 't' or 'f' (the default).
+    COMMENT: The character, if any, that makes a CSV line a comment IF it is the first character on that line. (default: '#')
+(default: %default)""")
 
 op.add_option('--writer',dest='writer',action='store',default=default_dialect_spec,
 help="Specify the CSV writer's dialect, using the same syntax as for --reader. (default: %default)")
 
 op.add_option('--worksheet',dest='worksheet',action='store',default=0,
 help="""Set the number or name of the worksheet to read from the Excel spreadsheet, assuming we're reading and XLS file.""")
+
+op.add_option('--icond',dest='icond',action='store',default=None,
+help="""A Python expression evaluated just after each input record is read. That record will be processed only of the expression evaluates to a value Python regards as True.""") 
+
+op.add_option('--ocond',dest='ocond',action='store',default=None,
+help="""A Python expression evaluated just before each output record is written. That record will be written only of the expression evaluates to a value Python regards as True.""") 
 
 #op.add_option('--debug',dest='debug',action='store_true',default=False,
 #help="You don't need this.")
@@ -135,8 +158,15 @@ except Exception,e:
   print >>sys.stderr,str(e)
   sys.exit(2)
 
+#if opt.debug:
+#  debug('Option values:')
+#  for o,v in (('-f','fields'),('-j','joinfields'),('--no-heading','skip'),('-o','fmt'),('--vars','vars'),('--reader','reader'),('--writer','writer'),('--worksheet','worksheet'),('--icond','icond'),('--ocond','ocond')):
+#    debug('    %s %s'%(o,getattr(opt,v)))
+
 try:
   opt.reader=parse_dialect(opt.reader)
+#  if opt.debug:
+#    debug('opt.reader=%r'%(opt.reader,))
 except CsvDialectError,e:
   die("Bad CSV reader dialect: %r"%e.dialect_spec)
 except:
@@ -144,10 +174,15 @@ except:
 
 try:
   opt.writer=parse_dialect(opt.writer)
+#  if opt.debug:
+#    debug('opt.reader=%r'%(opt.reader,))
 except CsvDialectError,e:
   die("Bad CSV writer dialect: %r"%e.dialect_spec)
 except:
   raise
+
+if opt.icond:
+  opt.icond=compile(opt.icond,'icond','eval')
 
 # Validate our field stripping specification.
 for ch in opt.strip:
@@ -172,13 +207,13 @@ def parseRangeList(s):
     else:
       n,m=r
       if n=='':
-	n=0
+        n=0
       else:
-	n=int(n)-1
+        n=int(n)-1
       if m=='':
-	m=None
+        m=None
       else:
-	m=int(m)
+        m=int(m)
     f.append((n,m))
   return f
 
@@ -233,14 +268,15 @@ def stripfield(s,sides):
   '''Return s stripped of left and/or right white space depending on
   whether sides includes l and/or r.'''
 
-  l='l' in sides
-  r='r' in sides
-  if l and r:
-    s=s.strip()
-  elif l:
-    s=s.lstrip()
-  elif r:
-    s=s.rstrip()
+  if isinstance(s,basestring):
+    l='l' in sides
+    r='r' in sides
+    if l and r:
+      s=s.strip()
+    elif l:
+      s=s.lstrip()
+    elif r:
+      s=s.rstrip()
   return s
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -259,59 +295,93 @@ re_excel_filename=re.compile(r'\.xls[^.]*$')
 # Prepare for CSV output.
 writer=csv.writer(open('/dev/stdout','wb'),dialect=opt.writer)
 
-for filename in args:
-  if filename=='-':
-    filename='/dev/stdin'
-  else:
-    filename=os.path.expanduser(filename) # Expands '~' to $HOME.
-  if re_excel_filename.search(filename):
-    if XLRD:
-      reader=xlsreader(filename,opt.worksheet)
+ORN=0 # Output line number
+IRN=0 # Input line number
+OREC=[]
+IREC=[]
+try:
+  for filename in args:
+    if filename=='-':
+      filename='/dev/stdin'
     else:
-      print >>sys.stderr,'%s: Cannot process Excel files without the xlrd module.'%progname
-      sys.exit(1)
-      
-  else:
-    reader=csv.reader(open(filename,'rb'),dialect=opt.reader)
+      filename=os.path.expanduser(filename) # Expands '~' to $HOME.
+    if re_excel_filename.search(filename):
+      if XLRD:
+        reader=xlsreader(filename,opt.worksheet)
+      else:
+        print >>sys.stderr,'%s: Cannot process Excel files without the xlrd module.'%progname
+        sys.exit(1)
+        
+    else:
+      reader=csv.reader(open(filename,'rb'),dialect=opt.reader)
 
-  #print 'opt.fields=%r'%opt.fields
-  #print 'opt.joinfields=%r'%opt.joinfields
-  #if opt.joinfields:
-  #  print 'opt.joinchar=%r'%opt.joinchar
-  #sys.exit(0)
+    #print 'opt.fields=%r'%opt.fields
+    #print 'opt.joinfields=%r'%opt.joinfields
+    #if opt.joinfields:
+    #  print 'opt.joinchar=%r'%opt.joinchar
+    #sys.exit(0)
 
-  input_line=0
-  for row in reader:
-    # Skip initial lines according to opt.skip.
-    input_line+=1
-    if input_line<=opt.skip:
-      continue
+    IRN=0
+    for IREC in reader:
+      # if opt.debug: debug('IREC=%r'%(IREC,))
+      # Skip initial lines according to opt.skip.
+      IRN+=1
+      if IRN<=opt.skip:
+        continue
 
-    # Join any field ranges we've been told to.
-    for n,m in opt.joinfields:
-      row[n:m]=[opt.joinchar.join([x for x in row[n:m] if x])]
+      # If we know how to identify a comment line, ingore comment lines.
+      #if opt.debug: debug('opt.reader.commentchar=%r, IREC[0]=%r'%(opt.reader.commentchar,IREC[0]))
+      if opt.reader.commentchar and IREC[0].startswith(opt.reader.commentchar):
+        continue
 
-    # Make list of only the fields we want to keep.
-    fields=[]
-    for n,m in opt.fields:
-      fields.extend(row[n:m])
+      # Enforce the input condition if available.
+      if opt.icond and not eval(opt.icond):
+        continue
 
-    # Apply any stripping options the user specified.
-    if opt.strip:
-      fields=[stripfield(x,opt.strip) for x in fields]
+      # Join any field ranges we've been told to.
+      for n,m in opt.joinfields:
+        IREC[n:m]=[opt.joinchar.join([x for x in IREC[n:m] if x])]
 
-    # Output the data as the user requested.
-    if opt.fmt: # Output formatted field values.
-      s=opt.fmt
-      field_indices=range(len(fields))
-      field_indices.reverse()
-      for i in field_indices:
-	s=s.replace('%'+str(i+1),fields[i])
-      print s
-    elif (opt.vars): # Output shell-executable variable assignments.
-      fields=[re_escape.sub(r'\\\1',f) for f in fields]
-      if (opt.vars)>len(fields): # Protect against initialization issues.
-        fields.extend(['']*(len(opt.vars)-len(fields)))
-      print ';'.join(['%s="%s"'%(v,f) for v,f in zip(opt.vars,fields)])
-    else: # Output CSV.
-      writer.writerows([fields])
+      # Make list of only the fields we want to keep.
+      OREC=[]
+      for n,m in opt.fields:
+        OREC.extend(IREC[n:m])
+
+      # Apply any stripping options the user specified.
+      if opt.strip:
+        OREC=[stripfield(x,opt.strip) for x in OREC]
+
+      # Output the data as the user requested, depending on the output
+      # condition if available.
+      ORN+=1
+      if opt.ocond and not eval(opt.ocond):
+        continue
+      # Encode as utf-8 our resulting list of string field values.
+      for i in range(len(OREC)):
+        if isinstance(OREC[i],basestring):
+          OREC[i]=OREC[i].encode('utf-8')
+        elif isinstance(OREC[i],float) and OREC[i]==int(OREC[i]):
+          OREC[i]=int(OREC[i])
+      #OREC=[val.encode('utf-8') for val in OREC if isinstance(val,basestring)]
+      # Figure out how we're supposed to output this record.
+      if opt.fmt: # Output formatted field values.
+        s=opt.fmt
+        field_indices=range(len(OREC))
+        field_indices.reverse()
+        for i in field_indices:
+          s=s.replace('%'+str(i+1),OREC[i])
+        print s
+      elif (opt.vars): # Output shell-executable variable assignments.
+        OREC=[re_escape.sub(r'\\\1',f) for f in OREC]
+        if (opt.vars)>len(OREC): # Protect against initialization issues.
+          OREC.extend(['']*(len(opt.vars)-len(OREC)))
+        print ';'.join(['%s="%s"'%(v,f) for v,f in zip(opt.vars,OREC)])
+      else: # Output CSV.
+          writer.writerows([OREC])
+except IOError,e:
+  print >>sys.stderr,'%s: %s'%(sys.argv[0],e)
+  sys.exit(2)
+except:
+  print >>sys.stderr,'\n%s %d: %r'%(filename,IRN,IREC)
+  print >>sys.stderr,'OREC: %r'%(OREC)
+  raise

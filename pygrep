@@ -1,6 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
-import datetime,optparse,os,pipes,re,sys
+import datetime,fnmatch,optparse,os,re,sys
+from handy import shellify,file_walker
 
 # Use this expression to recognize and parse log file data.
 log_parser=re.compile(r'(?P<month>\w+)\s+(?P<day>\d+)\s+(?P<time>\d+:\d+:\d+)\s+(?P<host>.*?)\s+(?P<proc>.*?)\[(?P<pid>\d+)\]:\s+(?P<msg>.*)')
@@ -102,7 +103,7 @@ class FakeMatchObject(object):
     ])
 
     # The following methods and attributes are not implemented because
-    # I don't need them is this code. And not all of them would have any
+    # I don't need them in this code. And not all of them would have any
     # meaning (or be uncomputable) for a FakeMatchObject object anyway.
     #   def expand(template)
     #   def start(group=0)
@@ -197,9 +198,11 @@ def grepfile(filename,r,also=None):
         groupdict=dict(l)
 
       # Handle any of our special (or general) formatting options.
-      if opt.shell:
-        d=groupdict
-        line= '; '.join(['%s=%s'%(x,shell_value(d[x])) for x in d])
+      if opt.groups=='shell':
+        line='; '.join([
+          '%s=%s'%(x.replace(' ','_'),shellify(groupdict[x]))
+            for x in sorted(groupdict.keys())
+        ])
       elif opt.dictionary:
         keys=groupdict.keys()
         keys.sort()
@@ -237,13 +240,13 @@ def grepfile(filename,r,also=None):
 
       # These are the regular formats for when we're not numbering lines.
       print prefix+line
-      if m:
+      if m and opt.groups:
         if opt.groups=='tuple' and groups:
           print '('+')('.join(['%s'%repr(x) for x in groups])+')'
         if opt.groups=='dict' and groupdict:
           d=groupdict
-          print ' '.join(['%s=%s'%(x,repr(d[x])) for x in d])
-        if opt.groups:
+          print ' '.join(['%s=%s'%(x,repr(d[x])) for x in sorted(d.keys())])
+        if opt.groups!='shell':
           print ''
   if opt.list and matches>0:
     if opt.number:
@@ -251,13 +254,6 @@ def grepfile(filename,r,also=None):
     else:
       print filename
   return matches
-
-def shell_value(v):
-  """Return the given value in a string that a Unix shell will parse
-  correctly."""
-
-  if v==None: v=''
-  return pipes.quote(v)
 
 # Handle our command line.
 import OptionParserFormatters
@@ -304,11 +300,12 @@ Combine these flags as you'd like, e.g. --flags=ims.""")
 op.add_option('--flags',dest='flags',action='store',default=None,help="Same as --flag.")
 
 op.add_option('-g',dest='groups',action='store_const',const='tuple',default=None,help="Show the tuple of matching groups for each matching line.")
-op.add_option('-G',dest='groups',action='store_const',const='dict',default=None,help="Show the dictionary of matching named groups for each matching line.")
+op.add_option('-G',dest='groups',action='store_const',const='dict',default=None,help="Useful only if named groups (e.g. '(?P<user>\w+)\s+(?P<dbname>\w+)') are used. Show the dictionary of matching named groups for each matching line.")
+op.add_option('--shell',dest='groups',action='store_const',const='shell',default=None,help="Like -G, but this option outputs shell-executable code to assign matched values to the given names (e.g. 'user=rsmith337; dbname=employees'). All required escape characters are applied to make this safe and reliable to use with the shell's eval command.")
 
 op.add_option('-i',dest='ignore_case',action='store_true',default=False,help="Ingore case. (Same as --flag=i.)")
 
-op.add_option('--log-parser',dest='log_parser',action='store_true',default=False,help='''Assume that the input file is a "typical" *nix log file. Parse the month, day, time, host name, process name, process ID and message from each line. For each matching line of input, apply the RE from the command line to the message portion of the log line. This is VERY useful with -f, -g, and -G. (And try out the --dictionary option to the fields --log-parser is finding.)''')
+op.add_option('--log-parser',dest='log_parser',action='store_true',default=False,help='''Assume that the input file is a "typical" *nix log file. Parse the month, day, time, host name, process name, process ID and message from each line. For each matching line of input, apply the RE from the command line to the message portion of the log line. This is VERY useful with -f, -g, -G, and -shell. (And try out the --dictionary option to the fields --log-parser is finding.)''')
 
 op.add_option('-l',dest='list',action='store_true',default=False,help="Suppress normal output; instead print the name of each input file from which any output would normally have been printed. The scanning will stop on the first match. If -n is used with -l, the number of matches in each file is given after the filename, with a colon separating them.")
 
@@ -316,10 +313,11 @@ op.add_option('-m',dest='match',action='store_true',default=False,help="Use the 
 
 op.add_option('-n',dest='number',action='store_true',default=False,help="Prefix each line of output with the line number within its input file. See -l for how it modifies -n's behavior.")
 
-op.add_option('--shell',dest='shell',action='store_true',default=False,help="Useful only if named groups (e.g. '(?P<user>\w+)\s+(?P<dbname>\w+)') are used, this option outputs shell-executable code to assign matched values to the given names (e.g. 'user=rsmith337; dbname=employees'). All required escape characters are applied to make this safe and reliable to use with the shell's eval command.")
-
 op.add_option('--strip',dest='strip',action='store_true',default=False,help="Remove any whitespace characters from the beginning and ending of each matched group's value.")
 
+op.add_option('--recurse','-r',dest='recurse',action='store_true',default=False,help="Recurse any directories found on the command line.")
+op.add_option('--depth',dest='depth',metavar='N',action='store',type=int,default=10**6,help="Restrict the recursive depth to N.")
+op.add_option('--prune',dest='prune',metavar='DIR',action='append',default=[],help="Do not recurse into any directory matching DIR. More than one --prune option may be given.")
 op.add_option('-v',dest='invert',action='store_true',default=False,help="Invert the sense of matching so that non-matching lines are selected.")
 
 opt,args=op.parse_args()
@@ -361,7 +359,7 @@ try:
   # Scan the given files (or stdin) for our regular expression.
   if not args:
     args=['-']
-  if not opt.onefile and len(args)==1:
+  if len(args)==1:
     opt.onefile=True
   for filename in args:
     if opt.log_parser:

@@ -1,0 +1,111 @@
+#!/usr/bin/env python2
+
+import random
+
+class Cell(list):
+  def __init__(self,left=True,bottom=True,ilk='w'):
+    self.left=True
+    self.bottom=True
+    self.ilk=ilk # w='wild', f='frontier', c='civil'
+
+  def __repr__(self):
+    return 'Cell(left=%r,bottom=%r,ilk=%r)'%(self.left,self.bottom,self.ilk)
+
+  def __str__(self):
+    return ('_','|')[self.left]+(' ','_')[self.bottom]
+
+class Grid(object):
+  """This is a grid of columns and rows. This class manages the logic of
+  initialization (with all walls up between cells) and of joining a
+  given cell with an adjacent cell."""
+
+  def __init__(self,columns,rows):
+    self.width=columns
+    self.height=rows
+    # Make a row-major nested list for this 2D array.
+    self.cells=[]
+    for r in range(self.height):
+      self.cells.append([])
+      for c in range(self.width):
+        self.cells[r].append(Cell())
+
+  def __call__(self,x,y):
+    "Return a reference to the cell at row y, column x."
+
+    return self.cells[y][x]
+
+  def __repr__(self):
+    return '\n'.join(['row %d: %r'%(r,id(self.cells[r])) for r in range(self.height)])
+
+  def __str__(self):
+    g=('__'*self.width)+'_\n'
+    for r in range(self.height):
+      g+=(''.join([str(self.cells[r][c]) for c in range(self.width)]))+'|\n'
+    return g
+
+class Maze(Grid):
+  "This class builds on Grid and implements the maze generation logic."
+
+  directions=((-1,0),(1,0),(0,-1),(0,1))
+
+  def __init__(self,columns,rows):
+    # Initialize our Grid structure.
+    super(Maze,self).__init__(columns,rows)
+    # Choose a cell at random, and make it our "civiliced" cell.
+    x=random.randint(1,self.width-2)
+    y=random.randint(1,self.height-2)
+    x=self.width/2 # Just for Debugging
+    y=self.height/2 # Just for Debugging
+    self(x,y).ilk='c'
+    # The cells adjacent to this are our "frontier."
+    self.frontier=self.adjacents(x,y)
+    for pos in self.frontier:
+      self(*pos).ilk='f'
+
+  def adjacents(self,x,y):
+    "Return a list of legal coordinated adjacent to x,y."
+
+    return [
+      (x+dx,y+dy) for dx,dy in Maze.directions
+        if x+dx>=0 and x+dx<self.width and y+dy>=0 and y+dy<self.width
+    ]
+
+  def popRandom(self,seq):
+    """Remove a randomly chosen item from the given sequence,
+    and return that item. The seq argument must implmeent pop()."""
+
+    return seq.pop(random.randint(0,len(seq)-1))
+
+  def generate(self):
+    random.seed()
+    # Explore until there's no frontier left.
+    while self.frontier:
+      # Pick a random frontier cell and civilize it.
+      fx,fy=self.popRandom(self.frontier)
+      self(fx,fy).ilk='c'
+      # Join this cell to a randomly chosen adjacent civilized cell.
+      prospects=self.adjacents(fx,fy)
+      while prospects:
+        px,py=self.popRandom(prospects)
+        if self(px,py).ilk=='c':
+          if px<fx:
+            self(fx,fy).left=False
+          elif px>fx:
+            self(px,py).left=False
+          elif py<fy:
+            self(px,py).bottom=False
+          else:
+            self(fx,fy).bottom=False
+          break
+        else:
+          assert prospects
+      # Add any wild cells adjacent to the newly civilized cell to the frontier.
+      for wx,wy in self.adjacents(fx,fy):
+        if self(wx,wy).ilk=='w':
+          self(wx,wy).ilk='f'
+          self.frontier.append((wx,wy))
+
+if __name__=='__main__':
+  m=Maze(50,50)
+  m.generate()
+  print m

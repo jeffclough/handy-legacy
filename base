@@ -1,0 +1,124 @@
+#!/usr/bin/env python2
+
+import os,sys
+# Put a little extra effort into finding our non-standard modules if needed.
+try:
+  from handy import die,prog
+except:
+  sys.path.insert(1,os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])),'pylib'))
+  sys.path.insert(1,os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])),'lib','python'))
+  from handy import die,prog
+
+try:
+  import argparse
+except:
+  import argparse27 as argparse
+import base64,math,os,re,sys
+
+class BaseError(Exception):
+  def __init__(self,msg):
+    super(self.__class__,self).__init__(msg)
+
+def read_chunks(f,size):
+  """This fake iterator yields size bytes from the input file f on every
+  iteration."""
+
+  buf=f.read(size)
+  while buf:
+    yield buf
+    buf=f.read(size)
+
+def decode(function,bpl,inf,outf):
+  "Decode the input file to the output file using the given function."
+
+  for s in inf:
+    if bpl!=-1:
+      s=s.rstrip()
+    #print >>sys.stderr,'D: s=%r'%s
+    outf.write(function(s))
+
+def encode(function,bpl,inf,outf):
+  "Encode the input file to the output file using the given function."
+
+  for buf in read_chunks(inf,bpl):
+    outf.write(function(buf))
+    if bpl!=-1:
+      outf.write('\n')
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+# Wrangle the command line, including setting default options according to the
+# name of the command this code was run as. If the command doesn't indicate
+# what the default base should be, require that the -b (--base) option be
+# given. 
+#
+
+valid_bases=(16,32,64)
+cmd_parser=re.compile(r'^(base|decode|encode)(%s)?$'%('|'.join([str(b) for b in valid_bases])))
+m=cmd_parser.match(prog.name)
+if not m:
+  sys.stderr.write('Improper command name (%s) not recognized by "base" command.'%(prog.name,))
+  sys.exit(1)
+
+default_action=('encode','decode')[m.groups()[0]=='decode']
+default_base=m.groups()[1]
+base_required=default_base==None
+
+ap=argparse.ArgumentParser(
+  usage="%(prog)s [OPTIONS] [infile [outfile]]",
+  description="Base 16 encodes 1 byte into two characters. Base 32 encodes 5 bytes into 8 characters. Base 64 encodes 3 bytes into 4 characters. We like base 64."
+)
+ap.add_argument('-b','--base',type=int,choices=valid_bases,default=default_base,required=base_required,help="Use this base for encoding or decoding. (default: %(default)s)")
+ap.add_argument('-e','--encode',dest='action',action='store_const',const='encode',default=default_action,help="Encode binary data to output.")
+ap.add_argument('-d','--decode',dest='action',action='store_const',const='decode',help="Decode previously encoded data to output.")
+ap.add_argument('-w','--wrap',metavar='N',type=int,nargs='?',help="Wrap encoded output lines to fit within N characters (plus a new-line character). This is currently only implemented for base 64.")
+ap.add_argument('--alt',default=None,help="Give two characters to use in the base 64 alphabet rather than / and +.")
+ap.add_argument('infile',nargs='?',default=None,help="If given, input is read from this file. Otherwise, input is read from standard input.")
+ap.add_argument('outfile',nargs='?',default=None,help="If given, output is written to this file. Otherwise, output is written to standard output.")
+opt=ap.parse_args()
+
+if opt.infile==None and os.isatty(sys.stdin.fileno()):
+  ap.print_help()
+  sys.exit(0)
+
+# Set up encoding or decoding and what base64 module function to use.
+if opt.action==None:
+  opt.action='encode'
+func=eval('base64.b%d%s'%(opt.base,opt.action))
+if opt.action=='decode':
+  opt.action=decode
+else:
+  opt.action=encode
+
+# Figure the buffer size that will give us the requested wrapping limit.
+# The buffer size should be the largest multible to b that yields no more
+# than opt.wrap characters of output per line.
+try:
+  if opt.wrap:
+    if opt.base==16:
+      raise BaseError('--wrap option cannot be used with base %d.'%opt.base)
+      b,c=1,2
+    elif opt.base==32:
+      raise BaseError('--wrap option cannot be used with base %d.'%opt.base)
+      b,c=5,8
+    elif opt.base==64:
+      b,c=3,4
+    buffer_size=int(float(opt.wrap)/c*b)/b*b
+  else:
+    buffer_size=-1 # Read the whole file.
+except BaseError,e:
+  die(e.message)
+
+# Open our input and output files.
+if opt.infile:
+  inf=open(opt.infile,'rb')
+else:
+  inf=os.fdopen(sys.stdin.fileno(),'rb')
+if opt.outfile:
+  outf=open(opt.outfile,'wb')
+else:
+  outf=os.fdopen(sys.stdout.fileno(),'wb')
+
+# Do whatever it is that we've set ourselves up to do.
+opt.action(func,buffer_size,inf,outf)

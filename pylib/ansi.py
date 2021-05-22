@@ -1,6 +1,4 @@
-#!/usr/bin/env python
-
-import colorsys,math,sys
+#!/usr/bin/env python2
 
 """
 This module is all about sending colored text to an ANSI-compatibe
@@ -16,6 +14,27 @@ back off.
 
     import ansi
     print ansi.Color('bold','red','yellow')('Error message')
+
+You can also assign Color instances to handy variables.
+
+    import ansi
+    error_text=Color('bold red on yellow')
+    .
+    .
+    .
+    print error_text(some_message)
+
+You can turn off the effect of ALL Color objects by disabling the whole
+ansi module.
+
+    print error_text("This text will be colored.")
+    ansi.enabled=False
+    print error_text("This text will NOT be colored.")
+    ansi.enabled=True
+    print error_text("This text will AGAIN be colored.")
+
+This makes it easy to manage whether your script's output is colored or
+not without having to have a bunch of messy if statements.
 
 You can also call ansi.paint(), which takes any number of arguments
 
@@ -37,7 +56,7 @@ elements or its append() method to add to it.
 
 A Palette class is can be created using, among other things, an
 extension of Color's spec string. Just use the single-string version of
-hte constructor, and separate the color spec strings with commas. Here's
+the constructor, and separate the color spec strings with commas. Here's
 an example:
 
     import ansi
@@ -49,12 +68,12 @@ an example:
     ansi.paint(ERROR,"This is an error message. No soup for you!")
 
 Notice that when specifying a palette all at once, attribute and
-background are persistent from the previous entry. We start by giving
-everything about the NORM text (normal attribute, green foreground, and
-black background). The next entry, WARN, specifies a bold yellow
-foreground and keeps the black background from the first entry. The last
-entry, ERROR, keeps "bold" from the WARN entry and then specifies a
-white foreground on a red background.
+background are persistent from the previous entry. We start the palette
+string by giving everything about the NORM text (normal attribute, green
+foreground, and black background). The next entry, WARN, specifies a
+bold yellow foreground and keeps the black background from the first
+entry. The last entry, ERROR, keeps "bold" from the WARN entry and then
+specifies a white foreground on a red background.
 
 Another option for Palette's constructor's argument is to give either
 "dark" or "light".  The author is very lazy, usually uses terminals with
@@ -71,12 +90,21 @@ rather than doing what it's told. The particulars vary from terminal to
 terminal. Run this module directly to find out how YOUR terminal
 behaves:
 
-    python ansi.py
+    python -m ansi
 
-(You'll need a terminal window that's at least 88 columns wide and 34
-lines tall to see the output all at once.)
+You'll need a terminal window that's at least 88 columns wide and 34
+lines tall to see the output all at once.
+
+To test a specific color combination, you can pass it directly on the
+command line:
+
+    python -m ansi blue on yellow
+or
+    python -m ansi bold red on blue
 
 """
+
+import colorsys,math,sys
 
 # Traditional 8-color ANSI color escape sequence values:
 attr=dict(
@@ -154,6 +182,10 @@ luminosity=dict(
 dark='norm red on black,green,yellow,bold blue,norm magenta,cyan,white'
 light='norm red on white,green,blue,magenta,black'
 
+# This is the master switch for this module. ANSI Colors have no effect unless
+# enabled is True.
+enabled=True
+
 class AnsiException(Exception):
   "Exceptions raised from this module are of this type."
 
@@ -173,9 +205,9 @@ def complete(word,wordlist):
 
   l=[x for x in wordlist if x.startswith(word)] # Find anything that might fit.
   if len(l)<1:
-    raise AnsiException("I don't understand %r. Choices are %s"%(word,englishList(wordlist)))
+    raise AnsiException("I don't understand %r. Choices are %s."%(word,englishList(wordlist,'or')))
   if len(l)>1:
-    raise AnsiException("%r is ambiguous. Choose from %s"%(word,englishList(l)))
+    raise AnsiException("%r is ambiguous. Choose from %s."%(word,englishList(l,'or')))
   return l[0]
 
 class Color(object):
@@ -183,8 +215,11 @@ class Color(object):
   background of the color such an object represents.'''
 
   attribute_list=attr.keys()
+  attribute_list.sort()
   foreground_list=foreground.keys()
+  foreground_list.sort()
   background_list=background.keys()
+  background_list.sort()
 
   def  __init__(self,*args):
     """Construct a Color object.
@@ -196,7 +231,7 @@ class Color(object):
     Create this Color object with the given attribute, foreground, and
     background. (See the parse() method below.)
 
-    Form 3: Color('[ATTR ] FG [on BG]')
+    Form 3: Color('[ATTR] FG [on BG]')
     Create this Color object with the given attribute, foreground, and
     background, but parse them all from the given string argument.
 
@@ -243,6 +278,12 @@ class Color(object):
     True
     >>> Color('white on black')('test')=='\x1b[37mtest\x1b[0m'
     True
+    >>> Color('black on white')('test')=='\x1b[30;47mtest\x1b[0m'
+    True
+    >>> Color('black on yellow')('test')=='\x1b[30;43mtest\x1b[0m'
+    True
+    >>> Color('black on green')('test')=='\x1b[30;42mtest\x1b[0m'
+    True
     >>> Color('bold',None,'black')('test')=='\x1b[1mtest\x1b[0m'
     True
     >>> Color('bold','white',None)('test')=='\x1b[1;37mtest\x1b[0m'
@@ -257,7 +298,9 @@ class Color(object):
     True
     """
 
-    return str(self)+str(text)+str(norm)
+    if enabled:
+      return str(self)+str(text)+str(norm)
+    return str(text)
 
   def __repr__(self):
     """Return a Python expression string that can be evaluated to re-
@@ -268,6 +311,8 @@ class Color(object):
   def __str__(self):
     """Return the ANSI escape sequence for this object's attribute,
     foreground, and background"""
+
+    global current_background
 
     s='\x1b['
     if current_background in background and self.background==current_background:
@@ -450,15 +495,20 @@ class Palette(list):
           [[pal(i),words[i],' '] for i in range(len(words))]
         ))
 
-    But this would will create an "index out of range" error:
+    Notice that even though we have 6 words and only 3 colors in our
+    palette, we don't get an "index out of range" error. That's because
+    this __call__(i) method performs modulo indexing on i.
 
+    To see the difference, try out this WRONG example:
+
+        pal=ansi.Palette('norm red on black,green,bold blue')
+        words='this is a list of words'.split()
         ansi.paint(*ansi.flattenList(
           [[pal[i],words[i],' '] for i in range(len(words))]
         ))
 
-    The only difference is how we index the pal variable.
-    
-    '''
+    The only (very subtle) difference is how we index the pal variable.
+    The first example uses pal(i), while the second uses pal[i].'''
 
     return self[index%len(self)]
 
@@ -467,7 +517,8 @@ norm=Color('normal',None,None) #'\033['+attr['normal']+'m'
 def flattenList(l,result=None):
   '''Recursively flatten the given list [of lists [of lists]]. This
   comes in handy when buiding arguments for ansi.paint() from list
-  comprehensions. (See example under Palette.__call__().)
+  comprehensions. (See example under Palette.__call__().) But it's
+  more broadly useful from time to time.
   
   The l argument is the list [of lists [of lists]] to be flattened. The
   second argument, if supplied, is the flattened list that's being built
@@ -527,7 +578,7 @@ def paint(*args):
   '''Kind of like print, but supports coloring its output.
 
   An argument of class Color is used to paint all subsequent arguments
-  until another such argument is found. All other arguments are rendered
+  until another Color object is found. All other arguments are rendered
   the same as print would render them.
 
   Painting is always turned off before this function returns, and this
@@ -547,40 +598,48 @@ def paint(*args):
 if __name__=='__main__': # TEST CODE TEST CODE TEST CODE TEST CODE TEST CODE
   import doctest,sys
   failed,total=doctest.testmod()
-  if failed==0:
 
-    colors='Black Red Green Yellow Blue Magenta Cyan White'.split()
-    # Print the column headings.
-    print '        '+(' '.join([Color('under','black',c)('%-9s'%c) for c in colors]))
-    # Foreground colors and attributes change from one line to the next.
-    for fg in colors:
-      # The first line of a given foreground color is labeled. Note that the
-      # color name in the row label is given as flattenLists()'s result
-      # initializer.
-      paint(*flattenList(
-        [[Color('norm',fg,bg),'Normal   ',norm,' '] for bg in colors],
-        [Color('bold %s'%fg),'%7s '%fg]
-      ))
-      # The second line shows contrast values for the above foreground and
-      # background combinations.
-      paint(*flattenList(
-        ['%-10.5f'%Color('norm',fg,bg).contrast() for bg in colors],
-        [' '*8]
-      ))
-      paint(*flattenList(
-        [[Color('Bold',fg,bg),'Bold     ',norm,' '] for bg in colors],
-        [' '*8]
-      ))
-      # The fourth line shows contrast values for the above foreground and
-      # background combinations.
-      paint(*flattenList(
-        ['%-10.5f'%Color('bold',fg,bg).contrast() for bg in colors],
-        [' '*8]
-      ))
-      # Show the contrast figures for normal text.
-      # Remaining lines of a given foreground just begin with spaces.
-      for a in ('Italics','Underline'):
+  if failed==0:
+    if len(sys.argv)>1:
+      # Interpret the command line as a color specification string, and output
+      # that string using the attribute and colors it gives.
+      spec=' '.join(sys.argv[1:])
+      c=Color(spec)
+      print c(spec)
+    else:
+      # Show a table of all color and attribute combinations.
+      colors='Black Red Green Yellow Blue Magenta Cyan White'.split()
+      # Print the column headings.
+      print '        '+(' '.join([Color('under','black',c)('%-9s'%c) for c in colors]))
+      # Foreground colors and attributes change from one line to the next.
+      for fg in colors:
+        # The first line of a given foreground color is labeled. Note that the
+        # color name in the row label is given as flattenList()'s result
+        # initializer.
         paint(*flattenList(
-          [[Color(a,fg,bg),'%-9s'%a,norm,' '] for bg in colors],
+          [[Color('norm',fg,bg),'Normal   ',norm,' '] for bg in colors],
+          [Color('bold %s'%fg),'%7s '%fg]
+        ))
+        # The second line shows contrast values for the above foreground and
+        # background combinations.
+        paint(*flattenList(
+          ['%-10.5f'%Color('norm',fg,bg).contrast() for bg in colors],
           [' '*8]
         ))
+        paint(*flattenList(
+          [[Color('Bold',fg,bg),'Bold     ',norm,' '] for bg in colors],
+          [' '*8]
+        ))
+        # The fourth line shows contrast values for the above foreground and
+        # background combinations.
+        paint(*flattenList(
+          ['%-10.5f'%Color('bold',fg,bg).contrast() for bg in colors],
+          [' '*8]
+        ))
+        # Show the contrast figures for normal text.
+        # Remaining lines of a given foreground just begin with spaces.
+        for a in ('Italics','Underline'):
+          paint(*flattenList(
+            [[Color(a,fg,bg),'%-9s'%a,norm,' '] for bg in colors],
+            [' '*8]
+          ))

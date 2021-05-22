@@ -1,11 +1,7 @@
 *.o
 *.pyc
 datecycle
-dump
-freq
-mix
 numlines
-ph
 portname
 randword
 secdel

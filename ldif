@@ -1,0 +1,564 @@
+#!/usr/bin/env python2
+try:
+  import argparse
+except:
+  import argparse27 as argparse
+import os,sys
+import loggy
+from handy import CaselessDict,CaselessString,die,prog
+
+# Set up some logging we'll use for diagnostics.
+log=loggy.get_logger(facility='~/ldif.log',level='debug')
+log.debug('---- Starting ---')
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+###
+### Set up some general code to handle LDAP/LDIF data.
+###
+
+import re
+
+class LdapError(Exception):
+  pass
+
+class LdapFilter(object):
+  "Parse and store an LDAP filter."
+
+  def __init__(self,condition):
+    self.condition=LdapFilter.Condition(condition)
+
+  def test(self,rec):
+    return self.condition(rec)
+
+  class Condition(object):
+    "Base class for all LDAP conditions."
+
+    _condition_classes=None
+
+    def __init__(self,condition,matched=None):
+      """Find the first LDAPFilter.Condition subclass suitable for the
+      given LDAP conditional expression. If found, become an instance of
+      that class. Otherwise, raise ValueError."""
+
+      if self._condition_classes==None:
+        # Initialize the list of our subclasses if this is the first call.
+        LdapFilter.Condition._condition_classes=(
+          LdapFilter.PresenceCondition,
+          LdapFilter.EqualityCondition,
+          LdapFilter.ComparisonCondition,
+          LdapFilter.SubstringCondition,
+          LdapFilter.ApproximateCondition,
+          LdapFilter.ExtensibleCondition
+        )
+
+      # Make sure considition starts and ends with parentheses. Then find the
+      # right Condition subclass for this condition string.
+      m=None
+      if condition:
+        if not condition[0].startswith('('):
+          condition='('+condition+')'
+        for cls in self._condition_classes:
+          m=cls.parser.match(condition)
+          if m:
+            #print 'D: cls=%s'%(cls.__name__,)
+            cond=cls(condition,m)
+            self=cls # Become the object we've just created.
+            break
+      if m==None:
+        raise ValueError('LdapFilter.Condition(%r)'%(condition,))
+
+    def __repr__(self):
+      return '%s(%r,%r)'%(self.condition,self.matched)
+
+  class PresenceCondition(Condition):
+    "(cn=*)"
+
+    parser=re.compile(r'\((?P<attr>[A-Za-z0-9]+)(?P<op>=)(?P<val>\*)\)')
+
+    def __init__(self,condition,matched):
+      self.condition=condition
+      self.matched=matched
+      for k,v in self.matched.groupdict().items():
+        setattr(self,k,v)
+
+    def test(rec):
+      "Return True iff this record has the sought attribute."
+
+      log.debug('Testing %r'%self)
+      result=self.attr=='dn' or self.attr in rec.entry
+      log.debug('%r ==> %r'%(self,result))
+      return result
+
+  class EqualityCondition(Condition):
+    "(cn=something specific)"
+
+    parser=re.compile(r'\((?P<attr>[A-Za-z0-9]+)(?P<op>=)(?P<val>.*)\)')
+
+    def __init__(self,condition,matched):
+      self.condition=condition
+      self.matched=matched
+      for k,v in self.matched.groupdict().items():
+        setattr(self,k,v)
+
+    def test(rec):
+      if self.dn=='dn':
+        return self.val==rec.dn
+      return self.attr in rec.entry and self.val in rec.entry[self.attr]
+
+  class ComparisonCondition(Condition):
+    """Compare the attribute value(s) with the given value.
+    
+      (cn<something specific)
+      (cn<=something specific)
+      (cn>=something specific)
+      (cn>something specific)
+    """
+
+    parser=re.compile(r'\((?P<attr>[A-Za-z0-9]+)(?P<op>[<>]?=)(?P<val>.*)\)')
+
+    def __init__(self,condition,matched):
+      self.condition=condition
+      self.matched=matched
+      for k,v in self.matched.groupdict().items():
+        setattr(self,k,v)
+
+    def test(rec):
+      if self.attr=='dn':
+        result=eval('self.dn%sself.val'%self.op)
+      else:
+        result=eval('any([v%sself.val for v in rec.entry[self.attr]])'%self.op)
+      return result
+
+  class SubstringCondition(Condition):
+    """Look for substrings.
+
+      (cn=starts with*)
+      (cn=*ends with)
+      (cn=*contains*)
+      (cn=*this*and*that*in*order*)
+      (cn=starts with*this*and*that*in*order*)
+      (cn=*this*and*that*in*order*ends with)
+    """
+
+    parser=re.compile(r'\((?P<attr>[A-Za-z0-9]+)(?P<op>=)(?P<val>\*?(.+\*?))\)')
+
+    def __init__(self,condition,matched):
+      self.condition=condition
+      self.matched=matched
+      for k,v in self.matched.groupdict().items():
+        setattr(self,k,v)
+
+    def test(rec):
+      raise NotImplementedError('%s.test()'%(__class__.__name__,))
+
+  class ApproximateCondition(Condition):
+    "(cn~=something vague)"
+
+    parser=re.compile(r'\((?P<attr>[A-Za-z0-9]+)(?P<op>~=)(?P<val>.*)\)')
+
+    def __init__(self,condition,matched):
+      self.condition=condition
+      self.matched=matched
+      for k,v in self.matched.groupdict().items():
+        setattr(self,k,v)
+
+    def test(rec):
+      raise NotImplementedError('%s.test()'%(__class__.__name__,))
+
+  class ExtensibleCondition(Condition):
+    "(cn~=something vague)"
+
+    parser=re.compile(r'\((?P<attr>(:?[A-Za-z0-9])+)(?P<op>:=)(?P<val>.*)\)')
+
+    def __init__(self,condition,matched):
+      self.condition=condition
+      self.matched=matched
+      for k,v in self.matched.groupdict().items():
+        setattr(self,k,v)
+
+    def test(rec):
+      raise NotImplementedError('%s.test()'%(__class__.__name__,))
+
+  class OperatorCondition(Condition):
+    """Apply an AND, OR, or NOT operation to 1 or more interior
+    conditions. This is where things get recursive. 
+
+    (&(condition1)(condition2)...)
+    (|(condition1)(condition2)...)
+    (!(condition))
+    """
+
+    parser=re.compile(r'\((?P<op>[&|!])(?P<interior>.*)\)')
+
+    def __init__(self,condition,matched):
+      self.condition=condition
+      self.matched=matched
+      for k,v in self.matched.groupdict().items():
+        setattr(self,k,v)
+
+      # Parse and store our interior conditions.
+      self.conditions=[]
+      i=0
+      while i<len(self.interior):
+        c=LdapFilter.Condition(self.interior[i:])
+        self.conditions.append(c)
+        i+=c.matched.end()
+
+      if self.op=='!' and len(self.conditions)!=1:
+        raise LdapError("\"!\" operation takes exactly one operand: %r"%(self.condition,))
+
+    def test(rec):
+      "Return True iff this condition matches the given LdapRecord."
+
+      if self.op=='!':
+        result=not self.conditions[0].test(rec)
+      elif self.op=='|':
+        for c in self.conditions:
+          if c.test(rec):
+            result=True
+            break
+        else:
+          result=False
+      elif self.op=='&':
+        for c in self.conditions:
+          if not c.test(rec):
+            result=False
+            break
+        else:
+          result=True
+      else:
+        raise LdapError("Programming error. Unrecognized operator: %r"%(self.op,))
+      return result
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class LdapRecord(object):
+  "This is a ... say it with me ... LDAP record."
+
+  def __init__(self,data):
+    self.dn=self.entry=None
+    if isinstance(data,tuple):
+      dn,entry=data
+    elif isinstance(data,basestring):
+      self._from_string(data)
+    elif isinstance(data,list):
+      self._from_list(data)
+    else:
+      # data had better be readable like a file.
+      self._from_file(data)
+
+  def __nonzero__(self):
+    "Return True if this LdapRecord contains data."
+
+    return bool(self.dn and self.entry)
+
+  def _from_seq(self,stanza):
+    "Populate this entry from a sequence of strings."
+
+    if len(stanza)==0:
+      raise LdapError("Empty stanza cannot create LdapRecord.")
+    #print 'D: stansa=%r'%(stanza,)
+    if isinstance(stanza[0],basestring):
+      # Parse this list of strings.
+      self.entry={}
+      for line in stanza:
+        i=line.find(': ')
+        attr=line[:i]
+        val=line[i+2:]
+        if attr=='dn':
+          self.dn=val
+        else:
+          if attr in self.entry:
+            self.entry[attr].append(val)
+          else:
+            self.entry[attr]=[val]
+    elif isinstance(stanza[0],tuple):
+      # Parse this list of 2-tuples.
+      for attr,val in stanza:
+        if attr=='dn':
+          self.dn=val
+        else:
+          if attr in self.entry:
+            self.entry[attr].append(val)
+          else:
+            self.entry[attr]=[val]
+
+  def _from_string(self,s):
+    "Populate this entry from the given multi-linie string."
+
+    self._from_list(s.splitlines())
+
+  def _from_file(self,f):
+    "Populate this entry from the given open file object."
+
+    stanza=[]
+    for line in f:
+      # Remove whatever line endings there might be.
+      if line and line[-1] in '\r\n': line=line[:-1]
+      if line and line[-1] in '\r\n': line=line[:-1]
+      if len(line)>0:
+        if line[0]==' ':
+          if stanza:
+            stanza[-1]+=line.lstrip()
+          else:
+            raise LdapError("LDIF continuation line can't be the fist line.")
+        else:
+          stanza.append(line)
+        #print 'D: line=%r'%(line,)
+      else:
+        break
+    if stanza:
+      self._from_seq(stanza)
+
+  def __str__(self):
+    "Return a string containing the LDIF representation of this object."
+
+    if self.dn:
+      s='dn: '+self.dn+os.linesep
+      attrs=self.entry.keys()
+      attrs.sort()
+      for attr in attrs:
+        s+=''.join(['%s: %s%s'%(attr,val,os.linesep) for val in self.entry[attr]])
+      s+=os.linesep
+    else:
+      s=''
+    return s
+
+  def __repr__(self):
+    "Return a string that can be eval()'d to recreate this object."
+
+    return '%s((%r,%r))'%(self.__class__.__name__,self.dn,self.entry)
+
+  def flatten(self,attrs,gather=[],gather_sep=' ',keep_filter=[]):
+    """Return a list of rows from this LDIF suitable for representing
+    it in tabular form. This means multi-value attributes will generate
+    as many rows as there are output, and this is multiplied by as many
+    attributes as have multiple values. For example if we're outputting
+    3 attributes where 2 of those attributes have a single value and the
+    third as 4 values, 4 rows will be returns. If, of those three
+    attributes, 1 has a single value, another has 4 value, and a third
+    as 2 values, then 8 values (1*4*2) will be returned. This is what we
+    call "flattening" LDAP data, but also read about gather and
+    gather_sep below.
+
+    attrs       - The list of attributes to include inthe returned data.
+
+    gather      - If given, this is a list of attributes whose values
+    gather_sep  - are to be gathered into a single string value,
+                  separated by gather_sep (which defaults to a space
+                  charcter. This effectively short-circuits the
+                  flattening process for the "gathered" attributes,
+                  representing all that attributes values as a single
+                  value.
+
+    keep_filter - This is a list of Python expressions to be applied to
+                  each new output row that's generated. If ALL the
+                  filters are true, the row is added to the output.
+                  Otherwise, that row is quietly thown away. These
+                  filter expressions should reference the "row" list.
+                  For example, "'202002' in row[1]" will be true only if
+                  the second value in row contains "202002".
+    """
+
+    rows=[]
+    d=dict(self.entry)
+    d['dn']=[self.dn] # An LDAP dictionary that includes dn.
+    for c in attrs: # And make sure no attirutes are missing.
+      if c not in d:
+        d[c]=['']
+    if gather: # Gather muti-values into one value if called for.
+      for col in gather:
+        if len(d[col])>1:
+          d[col]=[gather_sep.join(d[col])]
+    i=dict([(k,0) for k in attrs]) # Dictionary of current value indices.
+    while i[attrs[0]]<len(d[attrs[0]]):
+      row=[d[c][i[c]] for c in attrs]
+      if keep_filter:
+        try:
+          success=all([eval(f) for f in keep_filter])
+        except Exception as e:
+          die("Error while evaluating CSV filters: %s"%(str(e),))
+        if success:
+          rows.append(row)
+      else:
+        rows.append(row)
+      # Now incriment i's values in normal counting order ... in the morning.
+      for j in range(len(attrs)-1,-1,-1):
+        k=attrs[j]
+        i[k]+=1
+        if j>0 and i[k]>=len(d[k]):
+          # Wrap index back around to zero for all but the left-most column.
+          i[k]=0
+        else:
+          break
+    return rows
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+###
+### Start processing input.
+###
+
+def fit_formatting(formatter):
+  "Return a formatter that uses the whole width of our terminal."
+
+  width,_=prog.getTerminalSize()
+  kwargs=dict(width=width)
+  formatter(None,**kwargs)
+  return lambda prog:formatter(prog,**kwargs)
+
+# Parse command-line arguments
+ap=argparse.ArgumentParser(
+  formatter_class=fit_formatting(argparse.ArgumentDefaultsHelpFormatter),
+  description="Read LDIF data and perform some action on it. See the subcommands below."
+)
+ap.add_argument('--filter',metavar='EXPR',dest='ldap_filter',action='store',help="This is your chance to accept or reject each LDAP entry read from input according to a Python expression before it is processed by any of %(prog)s's subcommands. EXPR can be any Python expression and can access the variables dn (the string value of the LDAP record's DN) and ent (a dictionary of the record's entry, keyed by attribute name and containing a list of 0 or more values for each attribute. As many of this option can be given as needed, but they must all be true for a given LDAP record to be processed by one of %(prog)s's subcommands.")
+sp=ap.add_subparsers()
+
+csv_help="Output the LDIF input data as CSV, restructuring multi-valued attributes so that each value is written to its own CSV row. The LDIF attrubute names may be used as CSV column headings."
+ap_csv=sp.add_parser('csv',description=csv_help,help=csv_help+"\nRun \"%(prog)s csv --help\" for more information.")
+ap_csv.set_defaults(cmd='csv')
+ap_csv.add_argument('-c','--columns',help="Comma- and/or space-separated list of case-sensitive attributes to include in CSV output. If this option is not used, all attributes found in the LDIF data will become columns and will arranged alphabetically from left to right in the CSV output. Use --headings begin output with a row of attribute names.")
+ap_csv.add_argument('--filter',metavar='EXPR',action='append',help="Supply a Python expression that must be true for every CSV row to be written. As many of this option can be given as needed, but they must all be true for a given CSV row to be written. The row to be evaluated is in the 'row' list.")
+ap_csv.add_argument('--gather',metavar='ATTR(S)',action='store',help="Ordinarily, multi-valued attributes result in as many output rows, but you can use this option to provide a comma- and/or space-separated list of case-sensitive attributes whose values are to be grouped into a single row rather than flattened out into multiple output rows.")
+ap_csv.add_argument('--gather-sep',metavar='SEP',action='store',default=' ',help="\"Gathered\" values need to be separated by something, and %(default)r is used by default, but you can change that with this option.")
+ap_csv.add_argument('--no-dn',action='store_true',help="Exclude DN from the output columns. This is handy if you're not using -c (--columns) to select the columns to output and you don't want DN to be included.")
+ap_csv.add_argument('--headings',dest='with_headings',action='store_true',help='Start the output with a headings row. This is strongly encouraged if -c (--columns) is not used, since these unnamed columns will be output in alphabetical order in that case.')
+ap_csv.add_argument('infile',metavar='INPUT.LDIF',action='store',nargs='?',help="This is the input file. If no input file is given, %(prog)s will try to read data from standard input.")
+
+diff_help="Compare the entries in two LDIF files, outputting any differences as LDIF suitable for processing with ldapmodify."
+ap_diff=sp.add_parser('diff',description=diff_help,help=diff_help+"\nRun \"%(prog)s diff --help\" for more information.")
+ap_diff.set_defaults(cmd='diff')
+ap_diff.add_argument('--color',action='store_true',help="Color the LDIF output to make add, delete, and replace operations easier to distinguish. (Of course, you would NEVER send such output directly to ldapmodify.)")
+ap_diff.add_argument('infile',nargs=2,help="These are the files to be compared. The output will show any changes that occur from the first LDIF file to the second.")
+
+json_help="Output the LDIF ihnput data as JSON on standard output."
+ap_json=sp.add_parser('json',description=json_help,help=json_help+"\nRun \"%(prog)s json --help\" for more information.")
+ap_json.set_defaults(cmd='json')
+ap_json.add_argument('--pretty',action='store_true',help="Format the JSON output to be more humanly readable than the default raw formatting. This includes ending the output with a newline character.")
+ap_json.add_argument('infile',metavar='INPUT.LDIF',action='store',nargs='?',help="This is the input file. If no input file is given, \"%(prog)s\" will try to read data from standard input.")
+
+opt=ap.parse_args()
+if opt.ldap_filter:
+  opt.ldap_filter=LdapFilter(opt.ldap_filter)
+
+log.debug('opt.ldap_filter=%r'%(opt.ldap_filter,))
+log.debug('opt.columns=%r'%(opt.columns,))
+log.debug('opt.filter=%r'%(opt.filter,))
+log.debug('opt.gather=%r'%(opt.gather,))
+log.debug('opt.gather_sep=%r'%(opt.gather_sep,))
+log.debug('opt.no_dn=%r'%(opt.no_dn,))
+log.debug('opt.with_headings=%r'%(opt.with_headings,))
+log.debug('opt.infile=%r'%(opt.infile,))
+
+def string_to_tuple(s):
+  "Convert a comma- and/or space-separated string into a proper tuple."
+
+  return tuple(
+    [c for c in [col.strip() for col in re.split(r'[\s,]+',s)] if c]
+  )
+
+def ldap_records(infile):
+  "Return one LdapRecord object at a time from the given open file."
+
+  log.debug('Reading LDIF input from %s ...'%(infile.name))
+  if opt.ldap_filter:
+    log.debug('LDAP Filter: %r'%(opt.ldap_filter.condition,))
+  while True:
+    rec=LdapRecord(opt.infile)
+    if rec:
+      log.debug('Input record ...\n'+str(rec))
+    if rec:
+      if opt.ldap_filter and not opt.filter.test(rec):
+        log.debug('Failed to match filter.')
+        continue
+      if opt.ldap_filter:
+        log.debug('Matched filter.')
+      yield rec
+    else:
+      break
+
+def get_single_input():
+  "Return our opened input file."
+
+  infile=sys.stdin
+  if opt.infile and opt.infile!='-':
+    opt.infile=file(opt.infile)
+  else:
+    if sys.stdin.isatty():
+      die('No input found on standard input or as a filename argument.\n\n'+ap.format_help())
+  return infile
+
+if opt.cmd=='csv':    # # # # # # # # # # # #  CSV  # # # # # # # # # # # # # #
+  log.debug("---- subcommand: csv ----")
+  import csv
+
+  if opt.columns:
+    opt.columns=string_to_tuple(opt.columns)
+  if opt.gather:
+    opt.gather=string_to_tuple(opt.gather)
+
+  # Read in our LDIF data.
+  infile=get_single_input()
+  records=[]
+  for rec in ldap_records(infile):
+    records.append(rec)
+
+  # Get or figure out what columns to output.
+  cols=opt.columns
+  if not cols:
+    # If the user gave no list of columns to use, list all attributes in
+    # alphabetical order, but put dn first.
+    s=set([])
+    for r in records:
+      for a in r.entry:
+        if a not in s:
+          s.add(a)
+    cols=list(s)
+    cols.sort()
+    if not opt.no_dn:
+      cols.insert(0,'dn')
+  #print 'D: cols=%r\n'%(cols,)
+
+  # Now flatten our LDAP objects so we can write them out as CSV data.
+  out=[]
+  if opt.with_headings:
+    # Start with our column headings if we're doing that.
+    out.append(cols)
+  for r in records:
+    out.extend(r.flatten(
+      cols,gather=opt.gather,gather_sep=opt.gather_sep,keep_filter=opt.filter
+    ))
+
+  # Output our flattened data as CSV.
+  writer=csv.writer(sys.stdout)
+  writer.writerows(out)
+
+elif opt.cmd=='json':    # # # # # # # # # # #  JSON  # # # # # # # # # # # # #
+  log.debug("---- subcommand: json ----")
+  import json
+
+  # Read in our LDIF data.
+  infile=get_single_input()
+  records=[]
+  for rec in ldap_records(infile):
+    records.append(rec)
+
+  # Move our LdapRecord objects from their list into our out dictionary.
+  out={}
+  while records:
+    r=records.pop(0)
+    out[r.dn]=r.entry
+
+  # Write out the JSON.
+  if opt.pretty:
+    json.dump(out,sys.stdout,indent=2,sort_keys=True)
+    sys.stdout.write(os.linesep)
+  else:
+    json.dump(out,sys.stdout,sort_keys=True)
+
+elif opt.cmd=='diff':    # # # # # # # # # # #  diff  # # # # # # # # # # # # #
+  log.debug("---- subcommand: diff ----")
+
+log.debug('---- Ending ---')

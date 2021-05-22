@@ -1,7 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 import optparse,os,re,sys,time
-import adhoc
+import adhoc,stardate
 
 # Components of the current date and time are needed in lots of places
 # in this code, so I'm just making them globally available. So there.
@@ -57,20 +57,27 @@ Formatting (from Python's docs for its time module):
 
 ''')
 op.add_option('-c','--epoch',dest='epoch',default=False,action='store_true',help="Output the number of C Epoch seconds. Overrides --output-format.")
+op.add_option('-s','--stardate',dest='stardate',default=False,action='store_true',help="Output the stardate. Overrides --output-format.")
 op.add_option('-h','--help',dest='help_me',default=False,action='store_true',help="Display this help text and exit.")
 op.add_option('-t','--time',dest='time',action='store',default=None,help="Use the given time rather than the current time.")
 op.add_option('--input-format',dest='ifmt',action='store',default='%x %X',help="Use the given format to read -t's argument. (default: %default)")
-op.add_option('--output-format',dest='ofmt',action='store',default=IN_FMT,help="Use the given format to write the given or default time. (default: %default) Overridden by -c (--epoch).")
+op.add_option('--output-format',dest='ofmt',action='store',default=IN_FMT,help="Use the given format to write the given or default time. (default: %default) Overridden by -c (--epoch) or -s (--stardate).")
 
 opt,args=op.parse_args()
 if opt.help_me:
   op.print_help()
   sys.exit(0)
 
+
 def timeFromSingleValue(td):
   'Given a time expressed as a single value, return a time.struct_time for it.'
 
   pass
+
+def ir(val,low,high):
+  "Return True iff val>=low and val<=high."
+
+  return val>=low and val<=high
 
 # Various time formats we might have to read, along with their corresponding
 # vetting functions and strptime() formats.
@@ -100,6 +107,18 @@ tf=(
       '^(?P<d1>\d+)(?P<dsep>[-/.])(?P<d2>\d+)(?P=dsep)(?P<d3>\d+)\s+'
       '(?P<hour>\d+)(?P<tsep>[.:])(?P<min>\d+)(?P=tsep)(?P<sec>\d+)$'
     ),
+    ( # yyyy[-/]mm[-/]dd hh[:.]mm[:.]ss
+      (lambda td: td.d1>31 and ir(td.d2,1,12) and ir(td.d3,1,31) and ir(td.hour,0,23) and ir(td.min,1,59) and ir(td.sec,1,59)),
+      (lambda td: time.strptime('%d-%d-%d %d:%d:%d %s'%(td.d1,td.d2,td.d3,td.hour,td.min,td.sec,tz),IN_FMT))
+    ),
+    ( # mm[-/]dd[-/]yyyy hh[:.]mm[:.]ss
+      (lambda td: td.d3>31 and ir(td.d1,1,12) and ir(td.d2,1,31) and ir(td.hour,0,23) and ir(td.min,1,59) and ir(td.sec,1,59)),
+      (lambda td: time.strptime('%d-%d-%d %d:%d:%d %s'%(td.d3,td.d1,td.d2,td.hour,td.min,td.sec,tz),IN_FMT))
+    ),
+    ( # dd[-/]mm[-/]yyyy hh[:.]mm[:.]ss
+      (lambda td: td.d3>31 and ir(td.d2,1,12) and ir(td.d1,1,31) and ir(td.hour,0,23) and ir(td.min,1,59) and ir(td.sec,1,59)),
+      (lambda td: time.strptime('%d-%d-%d %d:%d:%d %s'%(td.d3,td.d2,td.d1,td.hour,td.min,td.sec,tz),IN_FMT))
+    ),
   )
 )
 
@@ -107,7 +126,9 @@ if args:
   ts=args[0]  # Get the time string from the argument list.
 
   # Match one of our timestamp input formats.
-  for pat,functions in tf:
+  tstruct=None
+  for matcher in tf:
+    pat=tf[0]
     m=pat.search(ts)
     if m:
       td=adhoc.AdHoc(**(m.groupdict('')))
@@ -119,10 +140,11 @@ if args:
         except:
           print >>sys.stderr,'%r is not an integer value.'%td[p]
           sys.exit(1)
-      for validate,parse in functions:
-        if vet(td):
-          tstruct=parse(td)
-  if not m:
+      for validator,parser in tf[1:]:
+        if validator(td):
+          tstruct=parser(td)
+          break
+  if not tstruct:
     print >>sys.stderr,'Unrecognized time format in argument: %r'%ts
     sys.exit(1)
 
@@ -162,5 +184,7 @@ else:
 # Output time t in the requested or default format.
 if opt.epoch:
   print t
+elif opt.stardate:
+  print '%0.2f'%(stardate.Stardate(t).t,)
 else:
   print time.strftime(opt.ofmt,time.gmtime(t))

@@ -1,0 +1,41 @@
+#!/usr/bin/env python2
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+# This is just a very quick and dirty command to title-case each line of stdin
+# and write it to stdout.
+#
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+try:
+  import argparse
+except:
+  import argparse27 as argparse
+import os,sys
+from english import TitleCase
+
+#
+# Handle the command line.
+#
+ap=argparse.ArgumentParser(
+  usage="%(prog)s [words ...]",
+  description="Read lines from standard input, and write the title-cased version of each line to standard output."
+)
+ap.add_argument('words',nargs='*',help="If any words appear on the command line, they are treated as if they composed the first line of input and are processed and output first.")
+opt=ap.parse_args()
+
+#
+# Start title-casing everything we can find.
+#
+if opt.words:
+  # Title-case our command line.
+  print TitleCase(' '.join(opt.words))
+elif sys.stdin.isatty():
+  ap.print_help()
+  sys.exit(1)
+if not sys.stdin.isatty():
+  # Title-case standard input.
+  for line in sys.stdin:
+    print TitleCase(line)

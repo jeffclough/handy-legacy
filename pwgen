@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 import base64,optparse,random,re,string,sys
 try:
@@ -188,7 +188,7 @@ if opt.dictionary:
     x for x in [w.strip() for w in f]
       if 5<=len(x)<=8 and x.islower() and x.isalpha()
   ]
-  # Clean up our housekeeping variables.
+  # Don't leave working variables cluttering up the global space.
   del f,fn,dfiles
 
 # Supply an all(seq) function if we don't have one.
@@ -279,8 +279,7 @@ def random_ireplacer(s,mdict,n=1):
   ls=s.lower()
   if n==-1:
     return ''.join([mdict.get(ls[i],s[i]) for i in range(len(s))])
-  klist=mdict.keys()
-  indices=[i for i in range(len(s)) if ls[i] in klist]
+  indices=[i for i in range(len(s)) if ls[i] in mdict]
   while indices and n>0:
     i=random.choice(indices)
     s=s[:i]+mdict[ls[i]]+s[i+1:]
@@ -302,7 +301,7 @@ consonents='b bl br c cl cr d dl dr f fr fl g gl gr h j k kl kr l m n p ph pl pr
 vowels='a e i o u y'.split()
 endings='b b c ck ct d f fk ft g j k kle kt l lk lt m mb mc md mk mp mt mv mz n nb nc nd nk np nt nv nz p ph ple r rk rkle rt s sh sl tle v ve vle x z'.split()
 digit_mapper=dict(a='4',e='3',i='1',o='0',s='5',t='7',z='2')
-punct_mapper=dict(a='@',c='<',d=']',g='&',h='#',k='<',l='!',s='$',t='?',v='>')
+punct_mapper=dict(a='@',c='<',d=']',e='{',g='&',h='#',k='<',l='!',s='$',t='?',v='>')
 
 # Cook up some character class data based on the user's options.
 class RandomString(object):
@@ -320,9 +319,9 @@ class RandomString(object):
 
   class CharacterClass(object):
     """Provide a simple interface to a single character class. Such an
-    object knows its members and minimum and maximum occurrances withing
+    object knows its members and minimum and maximum occurrances within
     a password. It can be queried for a random member character, and it
-    keep track how many times this has happened. Requesting more than
+    keeps track how many times this has happened. Requesting more than
     the maximum number of characters from a given class will return a
     value of None."""
 
@@ -348,7 +347,7 @@ class RandomString(object):
 
     @classmethod
     def resetAll(cls):
-      "Reset the count of EVERY character classes."
+      "Reset the count of EVERY character class."
 
       debug("CharacterClass.resetAll() ...")
       debug(None,indent=1)
@@ -495,7 +494,9 @@ class RandomString(object):
     self.use_punct='?' in RandomString.CharacterClass.classes
     self.use_space=' ' in RandomString.CharacterClass.classes
 
-    # Adjust our character classes if --capitalized is in effect.
+    # Adjust our character classes if --capitalize is in effect. The logic here
+    # might seem very backward, but the technique we're using is to use all
+    # lower-case and then capitalize the first character of the result.
     if opt.capitalize:
       if self.use_upper:
         cc_upper=RandomString.CharacterClass.classes['A']
@@ -504,7 +505,7 @@ class RandomString(object):
           RandomString.CharacterClass('a',cc_upper.min_count,cc_upper.max_count)
         del RandomString.CharacterClass.classes['A']
         self.use_upper=False
-        # Adjust out "first" character class if it was upper-case.
+        # Adjust our "first" character class if it was upper-case.
         debug("RandomString.CharacterClass.first.getTag=%r"%(RandomString.CharacterClass.first.getTag(),))
         if RandomString.CharacterClass.first.getTag()=='A':
           RandomString.CharacterClass.first=RandomString.CharacterClass.classes['a']
@@ -538,7 +539,7 @@ class RandomString(object):
       debug('plen=%r'%(plen))
       inner_patience=5
       while not self.isValid(pw) and inner_patience>0:
-        debug('  inner_patience=%r'%(inner_patience))
+        debug('  inner_patience=%r'%(inner_patience,))
         # Put together some syllables.
         while len(pw)<plen:
           pw+=random.choice(consonents)+random.choice(vowels)
@@ -551,7 +552,7 @@ class RandomString(object):
           
         # Add other character classes as needed.
         if len(pw)<=self.max_length:
-          for cc in RandomString.CharacterClass.classes:
+          for cc in RandomString.CharacterClass.classes.values():
             if any([ch in pw for ch in cc.members]):
               continue
             if 'a' in cc.members:
@@ -647,7 +648,6 @@ class RandomString(object):
             # Otherwise, start over.
             pw=''
             nac=0
-          #print 'w=%r pw=%r'%(w,pw)
         if opt.capitalize:
           pw=pw.capitalize()
       elif mode=='pronounceable':
@@ -681,7 +681,6 @@ class RandomString(object):
       if self.isValid(rs):
         break
       debug('Rejecting %r'%(rs,))
-      self.rese
     debug(None,indent=-1)
     debug('RandomString.__str__() returns %r'%(rs,))
     return rs
