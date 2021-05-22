@@ -132,7 +132,7 @@ __all__=[
   "sub",
   "subn",
   "template",
-  "Error",
+#  "Error",
   "I","IGNORECASE", #   2
   "L","LOCALE",     #   4
   "M","MULTILINE",  #   8
@@ -143,8 +143,8 @@ __all__=[
   "_extensions",
 ]
 
-class Error(Exception):
-  pass
+#class Error(Exception):
+#  pass
 
 # This dictionary holds all extension, keyed by name.
 _extensions={}
@@ -255,7 +255,7 @@ def read_extensions(filename='~/.RE.rc'):
           continue;
         m=_extdef.match(line)
         if not m:
-          raise Error('%s: Bad extension in line %d: "%s"'%(filename,count,line.rstrip()))
+          raise error('%s: Bad extension in line %d: "%s"'%(filename,count,line.rstrip()))
         name,op,pat=m.groups()
         extend(name,pat,expand=op=='<')
 
