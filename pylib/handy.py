@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 import fcntl,fnmatch,os,pipes,re,struct,sys,termios
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -6,13 +6,13 @@ import fcntl,fnmatch,os,pipes,re,struct,sys,termios
 #
 #   Some lawyerly classes. They tell strings they have no case. :-)
 
-class CaselessString(unicode):
-  """This is just like unicode, but hashing and comparison ignore case.
+class CaselessString(str):
+  """This is just like str, but hashing and comparison ignore case.
 
   >>> alpha=CaselessString('alpha')
   >>> bravo=CaselessString('Bravo')
   >>> charlie=CaselessString('charlie')
-  >>> isinstance(alpha,basestring)
+  >>> isinstance(alpha,str)
   True
   >>> print(alpha)
   alpha
@@ -22,44 +22,44 @@ class CaselessString(unicode):
   True
   >>> bravo<charlie
   True
-  >>> l=[alpha,bravo,charlie]
+  >>> l=[bravo,alpha,charlie]
   >>> l
-  [CaselessString("u'alpha'"), CaselessString("u'Bravo'"), CaselessString("u'charlie'")]
+  [CaselessString("'Bravo'"), CaselessString("'alpha'"), CaselessString("'charlie'")]
   >>> l.sort()
   >>> l
-  [CaselessString("u'alpha'"), CaselessString("u'Bravo'"), CaselessString("u'charlie'")]
+  [CaselessString("'alpha'"), CaselessString("'Bravo'"), CaselessString("'charlie'")]
   """
 
   def __hash__(self):
     return hash(self.lower())
 
   def __lt__(self,other):
-    if isinstance(other,basestring):
+    if isinstance(other,str):
       return self.lower()<other.lower()
     return NotImplemented
 
   def __le__(self,other):
-    if isinstance(other,basestring):
+    if isinstance(other,str):
       return self.lower()<=other.lower()
     return NotImplemented
 
   def __eq__(self,other):
-    if isinstance(other,basestring):
+    if isinstance(other,str):
       return self.lower()==other.lower()
     return NotImplemented
 
   def __ne__(self,other):
-    if isinstance(other,basestring):
+    if isinstance(other,str):
       return self.lower()!=other.lower()
     return NotImplemented
 
   def __ge__(self,other):
-    if isinstance(other,basestring):
+    if isinstance(other,str):
       return self.lower()>=other.lower()
     return NotImplemented
 
   def __gt__(self,other):
-    if isinstance(other,basestring):
+    if isinstance(other,str):
       return self.lower()>other.lower()
     return NotImplemented
 
@@ -67,16 +67,16 @@ class CaselessString(unicode):
     return '%s(%r)'%(self.__class__.__name__,super(self.__class__,self).__repr__())
 
 class CaselessDict(dict):
-  """Just like dict, but string keys are coerced to  CaselessString
+  """Just like dict, but string keys are coerced to CaselessString
   values.
 
   >>> x=CaselessDict(alpha=1,Bravo=2,charlie=3)
-  >>> k=x.keys()
+  >>> k=list(x.keys())
   >>> type(k[0])
   <class '__main__.CaselessString'>
   >>> k.sort()
   >>> k
-  [CaselessString("u'alpha'"), CaselessString("u'Bravo'"), CaselessString("u'charlie'")]
+  [CaselessString("'alpha'"), CaselessString("'Bravo'"), CaselessString("'charlie'")]
   >>> 'alpha' in x
   True
   >>> 'Alpha' in x
@@ -86,19 +86,19 @@ class CaselessDict(dict):
   >>> 'Bravo' in x
   True
   >>> y=CaselessDict([('Delta',4),('echo',5),('FoxTrot',6)])
-  >>> k=y.keys()
+  >>> k=list(y.keys())
   >>> type(k[0])
   <class '__main__.CaselessString'>
   >>> k.sort()
   >>> k
-  [CaselessString("u'Delta'"), CaselessString("u'echo'"), CaselessString("u'FoxTrot'")]
+  [CaselessString("'Delta'"), CaselessString("'echo'"), CaselessString("'FoxTrot'")]
   >>> z=CaselessDict(dict(x))
-  >>> k=z.keys()
+  >>> k=list(z.keys())
   >>> type(k[0])
   <class '__main__.CaselessString'>
   >>> k.sort()
   >>> k
-  [CaselessString("u'alpha'"), CaselessString("u'Bravo'"), CaselessString("u'charlie'")]
+  [CaselessString("'alpha'"), CaselessString("'Bravo'"), CaselessString("'charlie'")]
   >>> z.update(dict(y))
   >>> 'ALPHA' in z
   True
@@ -120,10 +120,10 @@ class CaselessDict(dict):
   1
   >>> x.setdefault('Bravo',2)
   2
-  >>> k=x.keys()
+  >>> k=list(x.keys())
   >>> k.sort()
   >>> k
-  [CaselessString("u'alpha'"), CaselessString("u'Bravo'"), CaselessString("u'charlie'")]
+  [CaselessString("'alpha'"), CaselessString("'Bravo'"), CaselessString("'charlie'")]
   >>> 'ALPHA' in x
   True
   >>> 'bravo' in x
@@ -148,19 +148,19 @@ class CaselessDict(dict):
   def __contains__(self,k):
     "Make sure hash comparisons are done on CaselessString values."
 
-    if type(k)!=CaselessString and isinstance(k,basestring):
+    if type(k)!=CaselessString and isinstance(k,str):
       k=CaselessString(k)
     return super(CaselessDict,self).__contains__(k)
 
   def __getitem__(self,k):
-    if type(k)!=CaselessString and isinstance(k,basestring):
+    if type(k)!=CaselessString and isinstance(k,str):
       k=CaselessString(k)
     return super(CaselessDict,self).__getitem__(k)
 
   def __setitem__(self,k,val):
     "Make sure all stringish keys are put in as CaselessStrings."
 
-    if type(k)!=CaselessString and isinstance(k,basestring):
+    if type(k)!=CaselessString and isinstance(k,str):
       k=CaselessString(k)
     super(CaselessDict,self).__setitem__(k,val)
 
@@ -187,22 +187,22 @@ def first_match(s,patterns):
   'abc1980.dat'
   >>> p,m=first_match('X-ray.txt',pats)
   >>> p.pattern
-  'X.*\\\\.txt\\\\Z(?ms)'
+  '(?s:X.*\\\\.txt)\\\\Z'
   >>> m.group()
   'X-ray.txt'
   >>> p,m=first_match('Y-ray.txt',pats)
   >>> p.pattern
-  '.*\\\\.txt\\\\Z(?ms)'
+  '(?s:.*\\\\.txt)\\\\Z'
   >>> m.group()
   'Y-ray.txt'
   >>> p,m=first_match('2019-10-26.dat',pats)
   >>> p.pattern
-  '2019\\\\-.*\\\\Z(?ms)'
+  '(?s:2019\\\\-.*)\\\\Z'
   >>> m.group()
   '2019-10-26.dat'
   >>> p,m=first_match('somefile.txt',pats)
   >>> p.pattern
-  '.*\\\\.txt\\\\Z(?ms)'
+  '(?s:.*\\\\.txt)\\\\Z'
   >>> m.group()
   'somefile.txt'
   >>> p,m=first_match('somefile.doc',pats)
@@ -254,20 +254,20 @@ def compile_filename_patterns(pattern_list):
   >>> pats=['2019-*','re:^abc[0-9]{4}.dat$','X*.txt','*.txt',r're:\A.*\.doc\Z']
   >>> pats=compile_filename_patterns(pats)
   >>> pats[0].pattern
-  '2019\\\\-.*\\\\Z(?ms)'
+  '(?s:2019\\\\-.*)\\\\Z'
   >>> pats[1].pattern
   '^abc[0-9]{4}.dat$'
   >>> pats[2].pattern
-  'X.*\\\\.txt\\\\Z(?ms)'
+  '(?s:X.*\\\\.txt)\\\\Z'
   >>> pats[3].pattern
-  '.*\\\\.txt\\\\Z(?ms)'
+  '(?s:.*\\\\.txt)\\\\Z'
   >>> pats[4].pattern
   '\\\\A.*\\\\.doc\\\\Z'
   """
 
   pats=list(pattern_list)
   for i in range(len(pats)):
-    if isinstance(pats[i],basestring):
+    if isinstance(pats[i],str):
       if pats[i].startswith('re:'):
         pats[i]=pats[i][3:]
       else:
@@ -387,15 +387,15 @@ def shellify(val):
   """Return the given value quotted and escaped as necessary for a Unix
   shell to interpret it as a single value.
 
-  >>> print shellify(None)
+  >>> print(shellify(None))
   ''
-  >>> print shellify(123)
+  >>> print(shellify(123))
   123
-  >>> print shellify(123.456)
+  >>> print(shellify(123.456))
   123.456
-  >>> print shellify("This 'is' a test of a (messy) string.")
+  >>> print(shellify("This 'is' a test of a (messy) string."))
   'This '"'"'is'"'"' a test of a (messy) string.'
-  >>> print shellify('This "is" another messy test.')
+  >>> print(shellify('This "is" another messy test.'))
   'This "is" another messy test.'
   """
 
@@ -403,7 +403,7 @@ def shellify(val):
     return "''"
   if isinstance(val,int) or isinstance(val,float):
     return val
-  if not isinstance(val,basestring):
+  if not isinstance(val,str):
     val=str(val)
   return pipes.quote(val)
 
@@ -456,7 +456,7 @@ class ProgInfo(object):
 
   def __repr__(self):
     d=self.__dict__
-    alist=self.__dict__.keys()
+    alist=list(self.__dict__.keys())
     alist.sort()
     return '%s(%s)'%(
       self.__class__.__name__,
@@ -502,7 +502,7 @@ class ProgInfo(object):
       if perms==None:
         m=os.umask(0)
         os.umask(m)
-        perms=m^0777
+        perms=m^0o777
       # Set the 'x' bit of each non-zero permission tripplet
       # (e.g. 0640 ==> 0750).
       perms=[p|(p!=0) for p in [((mode>>n)&7) for n in (6,3,0)]]
@@ -511,7 +511,7 @@ class ProgInfo(object):
     # If all went well, return the full path of this possibly new directory.
     return d
 
-  def makeTempFile(self,perms=0600,keep=False):
+  def makeTempFile(self,perms=0o600,keep=False):
     """Open (and likely create, but at least truncate) a temp file for
     this program, and return the open (for reading and writing) file
     object. See the our "temp" attribute for the name of the file.
@@ -524,7 +524,7 @@ class ProgInfo(object):
       atexit.register(os.remove,self.temp)
     return f
 
-  def makeTempDir(self,perms=0700,keep=False):
+  def makeTempDir(self,perms=0o700,keep=False):
     """Create a directory for this program's temp files, and register a
     function with the atexit module that will automatically removed that
     whole directory if when this program exits (unless keep=True is
@@ -557,11 +557,11 @@ def gripe(msg,output=sys.stderr,progname=prog.name):
 
   die(msg,output,progname,rc=None)
 
-def decline(root,n,suffixes=None,fmt=None):
+def decline_deprecated(root,n,suffixes=None,fmt=None):
   """
   ---------------------------------------------------------------------
   |
-  | DEPRICATION WARNING:
+  | DEPRECATION WARNING:
   |
   | THIS FUNCTION IS GOING AWAY AT SOME POINT. CONVERT YOUR CODE TO USE
   | THE MUCH BETTER english.py MODULE'S nouner() and nounf() FUNCTIONS
@@ -569,9 +569,9 @@ def decline(root,n,suffixes=None,fmt=None):
   |
   | It's an easy transition:
   |
-  |   decline('rabbit',1) ==> 'rabbit'
-  |   decline('rabbit',5) ==> 'rabbits'
-  |   decline('rabbit',5,fmt='%(count)d %(word)s') ==> '5 rabbits'
+  |   decline_deprecated('rabbit',1) ==> 'rabbit'
+  |   decline_deprecated('rabbit',5) ==> 'rabbits'
+  |   decline_deprecated('rabbit',5,fmt='%(count)d %(word)s') ==> '5 rabbits'
   |
   |   nouner('rabbit',1) ==> 'rabbit'
   |   nouner('rabbit',5) ==> 'rabbits'
@@ -594,7 +594,7 @@ def decline(root,n,suffixes=None,fmt=None):
 
   This is all about performing numeric declension in English, though
   it's versatile enough to exceed that charter just a bit. For example,
-  decline('box',2) returns 'boxes'.
+  decline_deprecated('box',2) returns 'boxes'.
 
   Arguments:
     root     - The root of the word whose proper declension is to be
@@ -611,49 +611,49 @@ def decline(root,n,suffixes=None,fmt=None):
                return value. The default format is simply "%(word)s",
                but a "count" value is also available. For example:
 
-                   decline('rabbit',5)
+                   decline_deprecated('rabbit',5)
 
                simply returns 'rabbits', but
 
-                   decline('rabbit',5,fmt='%(count)d %(word)s')
+                   decline_deprecated('rabbit',5,fmt='%(count)d %(word)s')
 
                returns '5 rabbits'.
   
-  >>> decline('gram',5)
+  >>> decline_deprecated('gram',5)
   'grams'
-  >>> decline('gram',1)
+  >>> decline_deprecated('gram',1)
   'gram'
-  >>> decline('gram',0)
+  >>> decline_deprecated('gram',0)
   'grams'
-  >>> decline('tree',2)
+  >>> decline_deprecated('tree',2)
   'trees'
-  >>> decline('bush',2)
+  >>> decline_deprecated('bush',2)
   'bushes'
-  >>> decline('bench',2)
+  >>> decline_deprecated('bench',2)
   'benches'
-  >>> decline('bunny',1,fmt='%(count)d %(word)s')
+  >>> decline_deprecated('bunny',1,fmt='%(count)d %(word)s')
   '1 bunny'
-  >>> decline('bunny',2,fmt='%(count)d %(word)s')
+  >>> decline_deprecated('bunny',2,fmt='%(count)d %(word)s')
   '2 bunnies'
-  >>> decline('',5,suffixes=('person','people'))
+  >>> decline_deprecated('',5,suffixes=('person','people'))
   'people'
-  >>> decline('',1,suffixes=('person','people'))
+  >>> decline_deprecated('',1,suffixes=('person','people'))
   'person'
-  >>> decline('',0,suffixes=('person','people'))
+  >>> decline_deprecated('',0,suffixes=('person','people'))
   'people'
-  >>> decline('gram',5,fmt='%(count)d %(word)s')
+  >>> decline_deprecated('gram',5,fmt='%(count)d %(word)s')
   '5 grams'
-  >>> decline('gram',1,fmt='%(count)d %(word)s')
+  >>> decline_deprecated('gram',1,fmt='%(count)d %(word)s')
   '1 gram'
-  >>> decline('gram',0,fmt='%(count)d %(word)s')
+  >>> decline_deprecated('gram',0,fmt='%(count)d %(word)s')
   '0 grams'
-  >>> decline('pe',5,suffixes=('rson','ople'),fmt='%(count)d %(word)s')
+  >>> decline_deprecated('pe',5,suffixes=('rson','ople'),fmt='%(count)d %(word)s')
   '5 people'
-  >>> decline('pe',1,suffixes=('rson','ople'),fmt='%(count)d %(word)s')
+  >>> decline_deprecated('pe',1,suffixes=('rson','ople'),fmt='%(count)d %(word)s')
   '1 person'
-  >>> decline('pe',0,suffixes=('rson','ople'),fmt='%(count)d %(word)s')
+  >>> decline_deprecated('pe',0,suffixes=('rson','ople'),fmt='%(count)d %(word)s')
   '0 people'
-  >>> decline('pe',5,suffixes=('rson','ople'),fmt='%(word)s (%(count)d)')
+  >>> decline_deprecated('pe',5,suffixes=('rson','ople'),fmt='%(word)s (%(count)d)')
   'people (5)'
   """
 
@@ -661,7 +661,7 @@ def decline(root,n,suffixes=None,fmt=None):
   if not root and not suffixes:
     return ''
   # If this isn't a string value, make it one or raise an exception.
-  if not isinstance(root,basestring):
+  if not isinstance(root,str):
     try:
       root=str(root)
     except:
@@ -805,34 +805,37 @@ if __name__=='__main__':
   import doctest,sys
   from pprint import pprint
 
-  try:
-    import argparse
-  except:
-    import argparse27 as argparse
+  import argparse
 
   ap=argparse.ArgumentParser()
   sp=ap.add_subparsers()
 
-  sp_test=sp.add_parser('test',help="Run all doctests for this module.")
-  sp_test.set_defaults(cmd='test')
-
   sp_find=sp.add_parser('find',help="Call file_walker() with the given path and options.")
   sp_find.set_defaults(cmd='find')
   sp_find.add_argument('path',action='store',default='.',help="The path to be searched.")
-  sp_find.add_argument('--depth',action='store',type=non_negative_int,default=sys.maxint,help="The number of directories to decend below the given path when traversing the directory structure.")
+  sp_find.add_argument('--depth',action='store',type=non_negative_int,default=sys.maxsize,help="The number of directories to decend below the given path when traversing the directory structure.")
   sp_find.add_argument('--follow',action='store_true',help="Follow symlinks to directories during recursion. This is done in a way that's safe from symlink loops.")
   sp_find.add_argument('--ignore',metavar='FILE',action='store',nargs='+',default=[],help="A list of filespecs and/or regular expressions (prefixed with 're:') that itentify files NOT to be reported.")
   sp_find.add_argument('--prune',metavar='DIR',action='store',nargs='+',default=[],help="A list of filespecs and/or regular expressions (prefixed with 're:') that itentify directories NOT to be recursed into.")
   sp_find.add_argument('--dirs',dest='dirs',action='store',default='False',choices=('true','false','first','last'),help="If 'true' or 'first', output the path (with a %s suffix) immediately before listing the files in that directory. If 'last', output the path immediately after all files and other directories under that path have been output. Directory names are suppressed by default."%os.sep)
 
+  sp_test=sp.add_parser('test',help="Run all doctests for this module.")
+  sp_test.set_defaults(cmd='test')
+
   opt=ap.parse_args()
   if opt.cmd=='test': # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-    print 'Terminal dimensions: %d columns, %d lines'%prog.getTerminalSize()
-    print 'Running doctests...'
-    t,f=doctest.testmod()
-    if f>0:
-      sys.exit(1)
-    sys.exit(0)
+    print(f"prog.getTerminalSize(): {prog.getTerminalSize()}")
+    print(f"prog.name: {prog.name}")
+    print(f"prog.pid: {prog.pid}")
+    print(f"prog.dir: {prog.dir}")
+    print(f"prog.real_name: {prog.real_name}")
+    print(f"prog.real_dir: {prog.real_dir}")
+    print(f"prog.tempdir: {prog.tempdir}")
+    print(f"prog.temp: {prog.temp}")
+    print("Running doctests...")
+    f,t=doctest.testmod()
+    print(f"Passed {t-f} of {t} tests.")
+    sys.exit(f>0)
   elif opt.cmd=='find': # # # # # # # # # # # # # # # # # # # # # # # # # # # #
     # Whip opt.dirs into shape with a quick lookup.
     opt.dirs=opt.dirs.lower()
@@ -841,4 +844,4 @@ if __name__=='__main__':
     opt.path=os.path.expandvars(os.path.expanduser(opt.path))
     # Put file_walker through its paces.
     for fn in file_walker(opt.path,depth=opt.depth,follow_links=opt.follow,prune=opt.prune,ignore=opt.ignore,report_dirs=opt.dirs):
-      print fn
+      print(fn)

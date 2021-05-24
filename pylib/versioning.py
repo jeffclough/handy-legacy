@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 This module is designed to work with any Python version >= 2.7
 (including 3.*). We can go a little lower if it's never called as the
@@ -13,7 +13,7 @@ import re,sys
 # We need this code to run under any version of Python.
 if sys.version_info[0]<3:
   # Python 2 code ...
-  stringtype=(str,unicode)
+  stringtype=(str,str)
 else:
   # Python 3 code ...
   stringtype=str
@@ -201,12 +201,8 @@ class Version(object):
     a_meta=self._parsed_version[3:]
     b_meta=other._parsed_version[3:]
     diff=cmp(a_meta,b_meta)
-    #a_empty=not all([x==None for x in a_meta])
-    #b_empty=not all([x==None for x in b_meta])
-    #if a_empty!=b_empty:
-    #  diff=-diff
     return diff
-    
+
   # These overrides are required for Python 3.
   def __eq__(self,other): return self.__cmp__(other)==0
   def __ne__(self,other): return self.__cmp__(other)!=0
@@ -451,7 +447,7 @@ class RankedVersion(Version):
         test
         prod
 
-    If you'd like other, you can set them up by calling this class
+    If you'd like others, you can set them up by calling this class
     method. For example:
 
         RankedVersion.setRanks('dev','test','canditate','final')
@@ -459,9 +455,8 @@ class RankedVersion(Version):
     Use whatever ranking terminology you prefer, but be sure call this
     method BEFORE instantiating any RankedVersion objects."""
 
-    n=len(ranks)
-    cls._ranks=dict(zip([str(r) for r in ranks],range(n)))
-    cls.unranked=n
+    cls._ranks={str(v):i for i,v in enumerate(ranks)}
+    cls.unranked=len(ranks)
 
   @classmethod
   def metaParser(cls,val):
@@ -497,10 +492,7 @@ RankedVersion.setRanks('dev','test','prod')
 
 if __name__=='__main__':
 
-  try:
-    import argparse
-  except:
-    import argparse27 as argparse
+  import argparse
 
   ap=argparse.ArgumentParser()
   ap.add_argument('--test',action='store_true',default=False,help="Run all internal tests, and terminate.")
@@ -508,7 +500,13 @@ if __name__=='__main__':
 
   if opt.test:
     import doctest
-    failed,_=doctest.testmod()
-    if failed==0:
-      sys.exit(0)
-    sys.exit(1)
+    #import pprint
+    #print("Ranks:")
+    #pprint.pprint(RankedVersion._ranks)
+    #print(f"RankedVersion.unranked={RankedVersion.unranked}")
+    f,t=doctest.testmod()
+    print(f"Passed {t-f} of {t} tests.")
+    if not f:
+      print(f"python_version: {python_version}")
+      print(f"python_version: {repr(python_version)}")
+    sys.exit(f>0)
