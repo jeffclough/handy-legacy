@@ -1,7 +1,8 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import optparse,os,re,sys,time
-import adhoc,stardate
+from types import SimpleNamespace
+import stardate
 
 # Components of the current date and time are needed in lots of places
 # in this code, so I'm just making them globally available. So there.
@@ -131,21 +132,21 @@ if args:
     pat=tf[0]
     m=pat.search(ts)
     if m:
-      td=adhoc.AdHoc(**(m.groupdict('')))
+      td=SimpleNamespace(**(m.groupdict('')))
       #print ' '.join(['%s=%r'%(p,td.get(p)) for p in 'd1 d2 d3 dsep hour min sec tsep units'.split()])
       for p in 'd1 d2 d3 hour min sec'.split(): # Integerize each part of our time string.
         try:
           if p in td:
             td[p]=int(td[p])
         except:
-          print >>sys.stderr,'%r is not an integer value.'%td[p]
+          print('%r is not an integer value.'%td[p],file=sys.stderr)
           sys.exit(1)
       for validator,parser in tf[1:]:
         if validator(td):
           tstruct=parser(td)
           break
   if not tstruct:
-    print >>sys.stderr,'Unrecognized time format in argument: %r'%ts
+    print('Unrecognized time format in argument: %r'%ts,file=sys.stderr)
     sys.exit(1)
 
   # Create an epoch time from the user's time argument.
@@ -162,7 +163,7 @@ if args:
     elif td.units=='w':
       t*=86400*7
     else:
-      print >>sys.stderr,'Unrecognized units in %r'%ts
+      print('Unrecognized units in %r'%ts,file=sys.stderr)
       sys.exit(1)
   else:
     t=0
@@ -183,8 +184,8 @@ else:
 
 # Output time t in the requested or default format.
 if opt.epoch:
-  print t
+  print(t)
 elif opt.stardate:
-  print '%0.2f'%(stardate.Stardate(t).t,)
+  print('%0.2f'%(stardate.Stardate(t).t,))
 else:
-  print time.strftime(opt.ofmt,time.gmtime(t))
+  print(time.strftime(opt.ofmt,time.gmtime(t)))

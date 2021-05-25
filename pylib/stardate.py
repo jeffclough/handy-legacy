@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import argparse,os,sys,time
 from datetime import date as D
@@ -16,8 +16,6 @@ class Error(Exception):
   pass
 
 class Stardate(object):
-
-  __slots__=('t',)
 
   def __init__(self,t=None):
     "See Stardate.set()."
@@ -71,7 +69,7 @@ class Stardate(object):
 
   def __hash__(self): return self.t
 
-  def __nonzero__(self): return True
+  def __bool__(self): return True
 
   def __int__(self): return int(self.t)
   def __float__(self): return self.t
