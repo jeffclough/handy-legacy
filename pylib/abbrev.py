@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import re,time
 import datetime as dt
@@ -12,11 +12,11 @@ class IndexedNames(object):
   values on an instance of this class.
 
   >>> foo=IndexedNames('Abcd Abef Ghij Klmn Opqr Opqs Opqt'.split(),4,2)
-  >>> print repr(foo)
+  >>> print(repr(foo)
   IndexedNames(('Abcd', 'Abef', 'Ghij', 'Klmn', 'Opqr', 'Opqs', 'Opqt'), start=4, step=2)
-  >>> print foo['abc']
+  >>> print(foo['abc']
   4
-  >>> print foo['abe']
+  >>> print(foo['abe']
   6
   >>> foo['totally bogus']
   Traceback (most recent call last):
@@ -24,20 +24,20 @@ class IndexedNames(object):
   >>> foo['a']
   Traceback (most recent call last):
   KeyError: 'a'
-  >>> print 'ghij' in foo
+  >>> print('ghij' in foo)
   True
-  >>> print 'ghi' in foo
+  >>> print('ghi' in foo)
   True
-  >>> print 'gh' in foo
+  >>> print('gh' in foo)
   True
-  >>> print 'g' in foo
+  >>> print('g' in foo)
   True
-  >>> print foo[0]
+  >>> print(foo[0])
   Traceback (most recent call last):
   KeyError: '0'
-  >>> print foo[4]
+  >>> print(foo[4])
   Abcd
-  >>> print foo[8]
+  >>> print(foo[8])
   Ghij
   >>> foo[99]
   Traceback (most recent call last):
@@ -55,27 +55,27 @@ class IndexedNames(object):
   Traceback (most recent call last):
   KeyError: "'abc' is an abbreviation of 'abcd'"
   >>> dow=IndexedNames('Monday Tuesday Wednesday Thursday Friday Saturday Sunday'.split())
-  >>> print dow.get('M')
+  >>> print(dow.get('M'))
   0
-  >>> print dow.get('Tu')
+  >>> print(dow.get('Tu'))
   1
-  >>> print dow.get('W')
+  >>> print(dow.get('W'))
   2
-  >>> print dow.get('Th')
+  >>> print(dow.get('Th'))
   3
-  >>> print dow.get('F')
+  >>> print(dow.get('F'))
   4
-  >>> print dow.get('Sa')
+  >>> print(dow.get('Sa'))
   5
-  >>> print dow.get('Su')
+  >>> print(dow.get('Su'))
   6
-  >>> print dow.get('T')
+  >>> print(dow.get('T'))
   None
-  >>> print dow.get('x')
+  >>> print(dow.get('x'))
   None
-  >>> print dow.get('monday')
+  >>> print(dow.get('monday'))
   0
-  >>> print dow.get('mondayx')
+  >>> print(dow.get('mondayx'))
   None
   
   """
@@ -105,7 +105,7 @@ class IndexedNames(object):
 
     # Verify that no two names match and that no name is an abbreviation for any
     # other name.
-    klist=self.num_dict.keys()
+    klist=list(self.num_dict.keys())
     for i in range(len(self.name_list)):
       for j in range(len(self.name_list)):
         if i!=j:
@@ -139,7 +139,7 @@ class IndexedNames(object):
     """Return true if key is either the name or index of an item stored
     in this object."""
 
-    if isinstance(key,basestring):
+    if isinstance(key,str):
       return key.lower() in self.num_dict
     try:
       key=int(key)
@@ -152,7 +152,7 @@ class IndexedNames(object):
     Otherwise, assume key is an index and return the corresponding
     name."""
 
-    if isinstance(key,basestring):
+    if isinstance(key,str):
       return self.num_dict[key.lower()][1]
     try:
       key=int(key)
@@ -181,7 +181,7 @@ class IndexedNames(object):
     they were originally presented to this object. The list returned is
     suitable for constructing a dict."""
 
-    #print >>sys.stderr,'DEBUG: num_dict=%r'%(self.num_dict,)
+    #print('DEBUG: num_dict=%r'%(self.num_dict,),file=sys.stderr)
 
     return [(n,self.num_dict[n.lower()][1]) for n in self.name_list]
 
