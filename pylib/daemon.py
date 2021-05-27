@@ -70,15 +70,15 @@ class DaemonContext(object):
         SIGTSTP=None,
         SIGTERM='terminate'
       )
-    for sig,handler in default_sigmap.items():
+    for sig,handler in list(default_sigmap.items()):
       if not(sig in self.signal_map or getattr(signal,sig) in self.signal_map):
         self.signal_map[sig]=handler
     # Listify our signal_map so we can cook keys as well as values.
-    sigmap=self.signal_map.items()
+    sigmap=list(self.signal_map.items())
     for i in range(len(sigmap)):
       sig,handler=sigmap[i]
       # Convert sig to a number if it's a string.
-      if isinstance(sig,basestring):
+      if isinstance(sig,str):
         orig_sig=sig
         sig=sit.upper()
         if not sig.startwith('SIG'):
@@ -92,7 +92,7 @@ class DaemonContext(object):
       # Find an actual handler function for our handler.
       if handler==None:
         handler=signal.SIG_IGN
-      elif isinstance(handler,basestring):
+      elif isinstance(handler,str):
         if hasattr(handler):
           handler=getattr(handler)
         else:
@@ -147,7 +147,7 @@ class DaemonContext(object):
       # We now have a new Unix session ID and no terminat attached to this child.
 
     # Set up our signal handlers.
-    for sig,handler in self.signal_map.items():
+    for sig,handler in list(self.signal_map.items()):
       signal.signal(sig,handler)
 
     # Handle our stdin, stdout, and stderr arguments, directing them to
