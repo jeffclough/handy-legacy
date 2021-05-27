@@ -1,6 +1,11 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
-import ConfigParser,os,sys
+"""
+This is a wrapper around the standard ConfigParser module.
+"""
+
+import os,sys
+from configparser import ConfigParser
 
 class Conf(object):
   "Make using and updating a config file simple and natural."
@@ -38,9 +43,9 @@ class Conf(object):
       self.extension='.conf'
 
     # Read our conf file.
-    self.conf=ConfigParser.SafeConfigParser(self.defaults)
+    self.conf=ConfigParser(self.defaults)
     if self.read_from:
-      self.conf.readfp(self.read_from)
+      self.conf.read_file(self.read_from)
     else:
       if not self.filename:
         self.filename=self._find_conf_file()
@@ -114,9 +119,9 @@ class Conf(object):
     return cfn
 
 if __name__=='__main__':
-  import doctest,StringIO
+  import doctest,io
 
-  conf_file=StringIO.StringIO("""
+  conf_file=io.StringIO("""
 [main]
 var1=5
 var2=2.5
@@ -134,6 +139,6 @@ a=testing
     sys.exit(1)
 
   conf=Conf(read_from=conf_file)
-  print conf.get('main/var1')
-  print conf['main/var5']
-  print conf['foo/a']
+  print(conf.get('main/var1'))
+  print(conf['main/var5'])
+  print(conf['foo/a'])
