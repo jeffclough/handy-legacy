@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 """
 This module is all about sending colored text to an ANSI-compatibe
@@ -105,6 +105,7 @@ or
 """
 
 import colorsys,math,sys
+from functools import reduce
 
 # Traditional 8-color ANSI color escape sequence values:
 attr=dict(
@@ -214,12 +215,9 @@ class Color(object):
   '''Objects of this class contain the attribute, foreground, and
   background of the color such an object represents.'''
 
-  attribute_list=attr.keys()
-  attribute_list.sort()
-  foreground_list=foreground.keys()
-  foreground_list.sort()
-  background_list=background.keys()
-  background_list.sort()
+  attribute_list=sorted(attr.keys())
+  foreground_list=sorted(foreground.keys())
+  background_list=sorted(background.keys())
 
   def  __init__(self,*args):
     """Construct a Color object.
@@ -256,11 +254,11 @@ class Color(object):
         self.parse(args[0])
     elif len(args)==3:
       self.attribute,self.foreground,self.background=args
-      if isinstance(self.attribute,basestring):
+      if isinstance(self.attribute,str):
         self.attribute=complete(self.attribute.lower(),self.attribute_list)
-      if isinstance(self.foreground,basestring):
+      if isinstance(self.foreground,str):
         self.foreground=complete(self.foreground.lower(),self.foreground_list)
-      if isinstance(self.background,basestring):
+      if isinstance(self.background,str):
         self.background=complete(self.background.lower(),self.background_list)
     else:
       raise AnsiException('bad initializer for class Color: %r'%(args))
@@ -596,21 +594,33 @@ def paint(*args):
 
 
 if __name__=='__main__': # TEST CODE TEST CODE TEST CODE TEST CODE TEST CODE
-  import doctest,sys
+  import argparse,doctest,sys
+
+  ap=argparse.ArgumentParser()
+  ap.add_argument('colorspec',action='store',nargs='*',help="Print this colorspec using the indicated attributes.")
+
+  opt=ap.parse_args()
+
   failed,total=doctest.testmod()
 
   if failed==0:
-    if len(sys.argv)>1:
+    spec=(' '.join(opt.colorspec)).strip()
+    if len(spec):
       # Interpret the command line as a color specification string, and output
       # that string using the attribute and colors it gives.
-      spec=' '.join(sys.argv[1:])
-      c=Color(spec)
-      print c(spec)
+      try:
+        c=Color(spec)
+        print(c(spec))
+      except AnsiException as e:
+        print(e,file=sys.stderr)
+        sys.exit(1)
+      except:
+        raise
     else:
       # Show a table of all color and attribute combinations.
       colors='Black Red Green Yellow Blue Magenta Cyan White'.split()
       # Print the column headings.
-      print '        '+(' '.join([Color('under','black',c)('%-9s'%c) for c in colors]))
+      print('        '+(' '.join([Color('under','black',c)('%-9s'%c) for c in colors])))
       # Foreground colors and attributes change from one line to the next.
       for fg in colors:
         # The first line of a given foreground color is labeled. Note that the
