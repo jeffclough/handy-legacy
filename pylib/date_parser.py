@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 """
 The DateParser class is for parsing relative times. For example:
@@ -129,7 +129,7 @@ class DateParser(object):
     # BTW, all hail the power of Python's modulo operator!
     y,m,d=self.now.timetuple()[:3]
     m1=(m+count-1)%12+1
-    y1=y+(m+count-1)/12
+    y1=y+(m+count-1)//12
     try:
       new_date=dt.date(y1,m1,d)
     except ValueError:
@@ -392,4 +392,4 @@ if __name__=="__main__":
   if failed==0:
     for sample in opt.args:
       p=parse(sample)
-      print '%s parsed from %r (%d - %d)'%(p.date,sample,p.begin,p.end)
+      print('%s parsed from %r (%r - %r)'%(p.date,sample,p.begin,p.end))
