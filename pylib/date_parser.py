@@ -1,5 +1,34 @@
 #!/usr/bin/env python2
 
+"""
+The DateParser class is for parsing relative times. For example:
+
+    sunday
+    thursday
+    yesterday
+    tomorrow
+    day before yesterday
+    day before tomorrow
+    day after yesterday
+    2 days before yesterday
+    now
+    today
+    day after tomorrow
+    1 day ago
+    3 days ago
+    1 week ago
+    -1 week from now
+    2 weeks ago
+    1 week from fri
+    2 weeks before monday
+    1 fortnight hence
+    1 month ago
+    1 year hence
+
+
+
+"""
+
 import re,time
 import datetime as dt
 import pyparsing as pyp
@@ -66,7 +95,7 @@ class DateParser(object):
     raise NotImplemented("DateParser.convert() must be implemented in a subclass.")
 
   def relativeDay(self,daystr):
-    """Given a day name, return the corresponding datetime.date objects.
+    """Given a day name, return the corresponding datetime.date object.
     The given string can be a day of the week, yesterday, today, now, or
     tomorrow.
     
@@ -175,7 +204,7 @@ class DateParser_1(DateParser):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-sign=pyp.Literal('-')|pyp.Literal('-')
+sign=pyp.Literal('-')|pyp.Literal('+')
 integer=pyp.Word(pyp.nums)
 signed_integer=pyp.Combine(pyp.Optional(sign)+integer)
 count=pyp.Optional(signed_integer,default=1)
@@ -345,6 +374,7 @@ if __name__=="__main__":
       '-1 week ago',
       '2 weeks from today',
       '-2 weeks in the past',
+      '+2 weeks in the past',
       '1 week from monday',
       '1 week from tue',
       '1 week from w',
