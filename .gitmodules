@@ -6,4 +6,4 @@
 	url = https://github.com/mossberg/pyipinfodb.git
 [submodule "externals/pyparsing"]
 	path = externals/pyparsing
-	url = https://github.com/greghaskins/pyparsing.git
+	url = git@github.com:pyparsing/pyparsing.git
