@@ -1,5 +1,12 @@
 import sys
 
+"""
+This is a very basic N-Tree implementation that, while it could
+certainly use some work, is useful for basic tree work. Eh. It's a
+decent starting point for a tree module that might be more generally
+useful.
+"""
+
 class Node(object):
   def __init__(self,val):
     """This most basic of Node types stores only a value."""
@@ -39,6 +46,10 @@ class NTreeNode(Node):
     return '%s(%r%s)'%(self.__class__.__name__,self.val,c)
 
   def __getitem__(self,key):
+    """Perform a depth-first search, beginning with this node, for the
+    given key value, which should be expressed as a string. Return the
+    found node or raise KeyError."""
+
     if str(self)==key:
       return self
     for node in self.children:
@@ -82,9 +93,9 @@ class TreeWriter(object):
       self.write(c,indent_str+new_indent_str)
 
 if __name__=='__main__':
-  print """
+  print("""
 Building a tree by specifying each node's children:
-"""
+""")
   root=NTreeNode('A',children=[
     NTreeNode('B'),
     NTreeNode('C',children=[
@@ -102,10 +113,10 @@ Building a tree by specifying each node's children:
   ])
   TreeWriter(indent_width=2).write(root)
 
-  print """
+  print("""
 Rebuiding that same tree by specifying each node's parent and outputting
 each node with its full path:
-"""
+""")
   root=NTreeNode('A') # Root has no parent and (for now) no children.
   for name in 'BCD': NTreeNode(name,parent=root)
   for name in 'EFG': NTreeNode(name,parent=root['C'])
@@ -113,37 +124,37 @@ each node with its full path:
   for name in 'IJK': NTreeNode(name,parent=root['F'])
   TreeWriter(formatter=lambda node: node.path()).write(root)
 
-  print """
+  print("""
 We can also write only a branch of the tree and output each node's
 full definition with repr() ... which can get messy.
-"""
+""")
   TreeWriter(formatter=repr).write(root['F'])
 
-  print """
+  print("""
 Writing only a branch of a tree with path values still shows the full
 path back to root of the whole tree by default, not just to the branch
 origin.
-"""
+""")
   branch=root['C']
   TreeWriter(formatter=lambda node: node.path()).write(branch)
 
-  print """
+  print("""
 Or we can tell NTreeNode.path() to limit itself to a gvien branch.
-"""
+""")
   TreeWriter(formatter=lambda node: node.path(root=branch)).write(branch)
 
-  print """
+  print("""
 Getting the full definition of a tree is as easy as calling repr(root):
-"""
-  print repr(root)
+""")
+  print(repr(root))
 
-  print """
+  print("""
 In fact, we can use eval(repr(any_node)) to make a copy of all or part
 of a tree structure, though copy.deepcopy(any_node) would be MUCH more
 efficient.
-"""
+""")
   branch=root['C']
-  print repr(branch)
-  print
+  print(repr(branch))
+  print()
   new_tree=eval(repr(branch))
   TreeWriter().write(new_tree)
