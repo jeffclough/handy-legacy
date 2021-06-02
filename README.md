@@ -1,3 +1,6 @@
+# Warning!
+This code is currently in a transitional state between Python 2 and Python 3. I'm porting it to 3 as I have time. YOU HAVE BEEN WARNED!
+
 # handy
 These are home-grown commands and Python modules that make me more efficient (or at least happier).
 
