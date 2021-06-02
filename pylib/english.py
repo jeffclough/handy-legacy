@@ -1,30 +1,30 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """
 This module makes outputting sensible, correct english sentences much
 more practical. For instance, as programmers, it's way too easy to write
 code of this form:
 
-  print "Found %d new customers this week"%new_cust
+  print("Found %d new customers this week"%new_cust)
 
 The problem is when new_cust is 1, right? And we're often apathetic
 enough to take a "that's good enough" attitude about this kind of thing
 because we don't want to write code like this:
 
   if dcount==1:
-    print "We snipped 1 dog's tail this week."
+    print("We snipped 1 dog's tail this week.")
   else:
-    print "We snipped %d dogs' tails this week."
+    print("We snipped %d dogs' tails this week.")
 
 But what if we could do it this way instead:
 
-  print "We snipped %s this week."%nounf('dog',dcount,'tail')
+  print("We snipped %s this week."%nounf('dog',dcount,'tail'))
 
 or
 
-  print "Found %s this week"%nounf(
+  print("Found %s this week"%nounf(
     'customer',new_cust,fmt="%(count)d new %(noun)s"
-  )
+  ))
 
 That's simple enough to do that even crusty old coders (like me) might
 find themselves inclined to write code that outputs more standard
@@ -96,7 +96,7 @@ class Suffixer(object):
       if r.test(root):
         word=r(root,count)
         break
-    print word
+    print(word)
 
   The result is to print the word, "cows" because the first matching
   rule was rule[2], and there were 5 cows. But if you change the noun
@@ -148,7 +148,7 @@ class Suffixer(object):
     if not root:
       return ''
     # Make sure our root is a string.
-    if not isinstance(root,basestring):
+    if not isinstance(root,str):
       try:
         root=str(root)
       except:
@@ -439,7 +439,7 @@ def join(seq,con='and',sep=None):
   a case. We are not barbarians."""
 
   if not isinstance(seq,(dict,list,tuple)):
-    if isinstance(seq,basestring):
+    if isinstance(seq,str):
       raise TypeError("%s.join() operates on a sequence. It's not intended for a single string."%__name__)
     try:
       seq=tuple(seq)
@@ -478,7 +478,7 @@ def pnum(val,sep=',3',digits=3):
           be on either side of the decimal. (default: 3)
   """
 
-  assert isinstance(val,(int,long,float)),"pnum()'s val must have a numeric type."
+  assert isinstance(val,(int,float)),"pnum()'s val must have a numeric type."
   assert isinstance(digits,int) and digits>=0,"pnum()'s digits must be a non-negative integer."
   #debug("pnum(%r,%r,%r)"%(val,sep,digits)).indent()
 
@@ -1022,15 +1022,15 @@ if __name__=='__main__':
   #debug=DebugChannel(True,LogStream(facility='local0',level='debug'))
   #debug.setFormat('{line}: {indent}{message}')
 
-  #print noun_rule_summary()
+  #print(noun_rule_summary())
   #print('')
 
   #debug('-------- Starting --------')
 
   f,t=doctest.testmod(report=False)
   if f>0:
-    print '*********************************************************************\n'
-  print "Failed %d of %s."%(f,nounf('test',t))
+    print('*********************************************************************\n')
+  print("Passed %d of %s."%(t-f,nounf('test',t)))
 
   #debug('-------- Stopping --------')
 

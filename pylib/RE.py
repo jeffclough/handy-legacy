@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 """
 This module extends Python's re module just a touch, so re will be doing
 almost all the work. I love the stock re module, but I'd also like it to
@@ -169,14 +169,14 @@ def _apply_extensions(pattern,allow_named=True):
       break;
     for ref in extensions:
       ext=ref[4:-1]
-      #print 'D: ext=%r'%(ext,)
+      #print('D: ext=%r'%(ext,))
       if not ext:
         raise error('RE extension name is empty')
       if '=' in ext:
         label,ext=ext.split('=')
       else:
         label=None
-      #print 'D: label=%r, ext=%r'%(label,ext)
+      #print('D: label=%r, ext=%r'%(label,ext))
       if ext not in _extensions:
         raise error('Unregistered RE extension %r'%(ext,))
       if label and outer and allow_named:
@@ -247,7 +247,7 @@ def read_extensions(filename='~/.RE.rc'):
 
   filename=os.path.expanduser(filename)
   if os.path.isfile(filename):
-    with file(filename) as f:
+    with open(filename) as f:
       count=0
       for line in f:
         count+=1
@@ -446,13 +446,13 @@ if __name__=='__main__':
         if opt.tuple or opt.dict:
           print('')
         if opt.tuple:
-          print(repr(m.groups()))
+          print((repr(m.groups())))
         if opt.dict:
-          print('{%s}'%', '.join([
+          print(('{%s}'%', '.join([
             '"%s": "%s"'%(k,v) for k,v in sorted(dgroups.items())
-          ]))
+          ])))
         if show_filename:
-          print('%s: %s'%(fn,line))
+          print(('%s: %s'%(fn,line)))
         else:
           print(line)
 
@@ -503,9 +503,9 @@ if __name__=='__main__':
       if matches:
         if opt.count:
           if show_filename:
-            print('%s: %d'%(fn,matches))
+            print(('%s: %d'%(fn,matches)))
           else:
-            print('%d'%matches)
+            print(('%d'%matches))
         elif opt.list:
           print(fn)
       all_matches+=matches
@@ -517,7 +517,7 @@ if __name__=='__main__':
   def test(opt):
     """
     >>> # Just to make testing dict result values predictable ...
-    >>> def sdict(d):print '{%s}'%(', '.join(['%r: %r'%(k,v) for k,v in sorted(d.items())]))
+    >>> def sdict(d):print('{%s}'%(', '.join(['%r: %r'%(k,v) for k,v in sorted(d.items())])))
     >>> # Basic expansion of a registered extension.
     >>> _apply_extensions(r'user=(?E:user=id)')
     'user=(?P<user>[-_0-9A-Za-z]+)'
@@ -619,7 +619,7 @@ if __name__=='__main__':
     >>> p='\s*file\s*[ :=]\s*(?E:file=abspath)'
     >>> search(p,'file=/dir1/dir2/file-name.EXT').groupdict()['file']
     '/dir1/dir2/file-name.EXT'
-    >>> print search(p,'file=dir1/dir2/file-name.EXT')
+    >>> print(search(p,'file=dir1/dir2/file-name.EXT'))
     None
     >>> # "email_localpart"
     >>> p='from: (?E:from=email_localpart)'
@@ -645,9 +645,9 @@ if __name__=='__main__':
     'ht-tp:'
     >>> match(p,'h.t-t+p:').groupdict()['proto']
     'h.t-t+p:'
-    >>> print match(p,'-http:')
+    >>> print(match(p,'-http:'))
     None
-    >>> print match(p,'http-:')
+    >>> print(match(p,'http-:'))
     None
     >>> match(p,'presto:http:').groupdict()['proto']
     'presto:http:'
@@ -721,7 +721,7 @@ if __name__=='__main__':
     f,t=testmod(report=False)
     if f>0:
       print("---------------------------------------------------------------------\n")
-    print("Passed %d of %s."%(t-f,nounf('test',t)))
+    print(("Passed %d of %s."%(t-f,nounf('test',t))))
     sys.exit((1,0)[f==0])
 
    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -758,7 +758,7 @@ if __name__=='__main__':
     bug('Registering RE %r as "%s"'%(name,pat))
     extend(name,pat)
   if opt.extensions:
-    print('\n'.join(['%s=%s'%(n,p) for n,p in sorted(_extensions.items())]))
+    print(('\n'.join(['%s=%s'%(n,p) for n,p in sorted(_extensions.items())])))
     sys.exit(0)
 
    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
