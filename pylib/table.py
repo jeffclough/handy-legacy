@@ -130,7 +130,7 @@ class Table(list):
       self.colcount=set_colcount
     # Ensure colnames makes sense. Initialize colcount from it if needed.
     if self.colnames!=None:
-      if type(self.colnames) not in (type(()),type([])):
+      if not isinstance(self.colnames,(tuple,list)):
         raise Table.Error('colnames argument MUST be a tuple or a list!')
       self.colnames=[str(x) for x in self.colnames]
       if not (self.colcount==None or self.colcount==len(self.colnames)):
@@ -139,7 +139,7 @@ class Table(list):
     if self.colcount!=None:
       if not isinstance(self.colcount,int):
         raise Table.Error('colcount argument must be an integer!')
-      self.colcount=int(self.colcount)
+      #self.colcount=int(self.colcount)
       if self.colnames==None or len(colnames)==0:
         self.colnames=['col%d'%(c+1) for c in range(self.colcount)]
     # Ensure we can identify our columns by name or by number.
@@ -206,7 +206,7 @@ class Table(list):
   def formatByType(self,val,width):
     if isinstance(val,int): return self.formatInt(val,width)
     if isinstance(val,float): return self.formatFloat(val,width)
-    if isinstance(val,basestring): return self.formatString(val,width)
+    if isinstance(val,str): return self.formatString(val,width)
     return self.formatOther(val,width)
 
   def output(dialect='fixed',stream=sys.stdout):
