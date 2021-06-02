@@ -1,6 +1,7 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import random
+from graphics import GraphWin,Point,Line
 
 class Cell(list):
   def __init__(self,left=True,bottom=True,ilk='w'):
@@ -43,6 +44,34 @@ class Grid(object):
       g+=(''.join([str(self.cells[r][c]) for c in range(self.width)]))+'|\n'
     return g
 
+  def draw(self,cell_width,cell_height,line_width=1,filename=None):
+    """Draw our maze as a raster image with the given cell size. If
+    filename is given, also write the raster image to the named file."""
+
+    lw=line_width//2
+    if lw<1:
+      lw=1
+    # Compute window width and height in pixels.
+    ww=cell_width*self.width+line_width
+    wh=cell_height*self.height+line_width
+
+    win=GraphWin("Maze",ww,wh)
+    Line(Point(0,0),Point(ww-1,0)).draw(win)
+    for r in range(self.height):
+      y=r*cell_width
+      for c in range(self.width):
+        x=c*cell_height
+        if self.cells[r][c].left:
+          l=Line(Point(x,y),Point(x,y+cell_height))
+          l.draw(win)
+        if self.cells[r][c].bottom:
+          l=Line(Point(x,y+cell_height),Point(x+cell_width,y+cell_height))
+          l.draw(win)
+    Line(Point(ww-1,0),Point(ww-1,wh-1)).draw(win)
+
+    win.getMouse()
+    win.close()
+
 class Maze(Grid):
   "This class builds on Grid and implements the maze generation logic."
 
@@ -54,8 +83,8 @@ class Maze(Grid):
     # Choose a cell at random, and make it our "civiliced" cell.
     x=random.randint(1,self.width-2)
     y=random.randint(1,self.height-2)
-    x=self.width/2 # Just for Debugging
-    y=self.height/2 # Just for Debugging
+    x=self.width//2 # Just for Debugging
+    y=self.height//2 # Just for Debugging
     self(x,y).ilk='c'
     # The cells adjacent to this are our "frontier."
     self.frontier=self.adjacents(x,y)
@@ -106,6 +135,7 @@ class Maze(Grid):
           self.frontier.append((wx,wy))
 
 if __name__=='__main__':
-  m=Maze(50,50)
+  m=Maze(39,39)
   m.generate()
-  print m
+  print(m)
+  m.draw(10,10)
