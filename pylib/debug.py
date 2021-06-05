@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import inspect,os,sys
 # Because I need "time" to be a local variable in DebugChannel.write() ...
 from time import gmtime,localtime,sleep,strftime,time as get_time
@@ -353,7 +355,8 @@ if __name__=='__main__':
     d('BASIC OUTPUT ...').indent()
     d('Message 1')
     d('Message 2')
-    d.undent()('INDENTED OUTPUT ...').indent().setIndentString('| ')
+    d.undent()
+    d('INDENTED OUTPUT ...').indent().setIndentString('| ')
     d('indlev=%r'%(d.indlev,)).indent(1)
     d('indlev=%r'%(d.indlev,)).indent(1)
     d('indlev=%r'%(d.indlev,)).indent(1)
@@ -364,7 +367,8 @@ if __name__=='__main__':
     d.indent(-1)('indlev=%r'%(d.indlev,))
     d.indent(-1).write('indlev=%r'%(d.indlev,))
     d.indent(-1).write('indlev=%r'%(d.indlev,)).setIndentString('  ')
-    d.undent()('DISABLING OUTPUT ...').indent()
+    d.indent() # Restore indenture to where it ought to be.
+    d('DISABLING OUTPUT ...').indent()
     prev=d.enable(False)
     d("Disabled debug output (so you shouldn't see this).")
     d('Previous DebugChannel enabled state: %r'%(prev,))
@@ -386,7 +390,7 @@ if __name__=='__main__':
     is just a simple example of what might be done with a callback
     function."""
 
-    sleep(.15)
+    sleep(.05)
     return True
 
   assert '__loader__' in globals(),"To run this module stand-along, use 'python -m debug'."
