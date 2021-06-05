@@ -1,27 +1,34 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 import logging,os,platform,sys
 import logging.handlers
 from logging import NOTSET,DEBUG,INFO,WARNING,ERROR,CRITICAL
+from io import IOBase
 
 # Get an ordered list of syslog facility names.
-syslog_facilities=logging.handlers.SysLogHandler.facility_names.items()
+syslog_facilities=list(logging.handlers.SysLogHandler.facility_names.items())
 syslog_facilities.sort(key=lambda x:x[1])
 syslog_facilities=[x[0] for x in syslog_facilities]
 
-# Get an ordered list of the logging module's log level names.
-levels=[(a,b) for a,b in logging._levelNames.items() if isinstance(b,int)]
-levels.sort(key=lambda x:x[1])
-levels=[x[0].lower() for x in levels if x[0]!='NOTSET']
+# Get a list of the logging module's level names ordered by priority.
+try:
+  # This is how it worked in Python 2.7.
+  _nameToLevel={k:v for k,v in logging._levelNames.items() if isinstahce(v,int)}
+except AttributeError:
+  # At some point, logging.py's internals changed to this.
+  _nameToLevel={k:v for k,v in logging._nameToLevel.items()}
 
-# Don't leave these global crumbs lying around from the work above.
-del a,b,x
+#levels=[(a,b) for a,b in list(logging._levelNames.items()) if isinstance(b,int)]
+#levels.sort(key=lambda x:x[1])
+#levels=[x[0].lower() for x in levels if x[0]!='NOTSET']
+levels=sorted([(k,v) for k,v in _nameToLevel.items() if k!=logging.NOTSET],key=lambda x:x[1])
+levels=[k for k,_ in levels]
 
 def get_log_level_by_name(level):
-  if isinstance(level,basestring):
+  if isinstance(level,str):
     L=level.upper()
-    if L in logging._levelNames:
-      return logging._levelNames[L]
-  raise ValueError,'bad log level value: %r'%(level,)
+    if L in logging._nameToLevel:
+      return logging._nameToLevel[L]
+  raise ValueError('bad log level value: %r'%(level,))
 
 def log_lines(log,level,data):
   """Log individual lines at the given log level. If data is a string,
@@ -44,14 +51,14 @@ def log_lines(log,level,data):
         j+=1
       i=j
 
-  if isinstance(level,basestring):
+  if isinstance(level,str):
     level=get_log_level_by_name(level)
-  if isinstance(data,basestring):
+  if isinstance(data,str):
     for l in line_iter(data):
       log.log(level,l)
   else:
     for l in data:
-      if not isinstance(l,basestring):
+      if not isinstance(l,str):
         l=str(l)
       log.log(level,l)
 
@@ -125,7 +132,7 @@ def get_logger(**kwargs):
         logfmt='%(asctime)s '+logfmt
     f=logging.Formatter(logfmt,datefmt=datefmt)
   else:
-    if isinstance(facility,basestring):
+    if isinstance(facility,str):
       if facility in syslog_facilities:
         # It looks like we're logging to syslog.
         facility=logging.handlers.SysLogHandler.facility_names[facility]
@@ -153,26 +160,26 @@ def get_logger(**kwargs):
           facility=facility
         )
       f=logging.Formatter(logfmt)
-    elif isinstance(facility,file):
+    elif isinstance(facility,IOBase):
       # This is a stream, so set up formatting accordingly.
       h=logging.StreamHandler(facility)
       f=logging.Formatter('%(asctime)s'+logfmt,datefmt=datefmt)
     else:
-      raise ValueError,'bad log facility value: %r'%(facility,)
+      raise ValueError('bad log facility value: %r'%(facility,))
 
-  if isinstance(level,basestring):
+  if isinstance(level,str):
     # If level is a string, make sure it is upper case.
     level=level.upper()
-  elif isinstance(level,int) and level in logging._levelNames:
-    level=logging._levelNames[level]
+  elif isinstance(level,int) and level in _nameToLevel:
+    level=_nameToLevel[level]
   else:
-    raise ValueError,'bad log level value: %r'%(level,)
+    raise ValueError('bad log level value: %r'%(level,))
 
   # Now create the new logger, and return it to the caller.
   h.setFormatter(f)
   log=logging.getLogger(name)
   log.addHandler(h)
-  log.setLevel(logging._levelNames[level])
+  log.setLevel(_nameToLevel[level])
   #log.name=name
   return log
 
@@ -190,7 +197,7 @@ class LogStream(object):
     self.log=get_logger(**kwargs)
 
   def write(self,s):
-    self.log.log(logging._levelNames[self.level],s)
+    self.log.log(_nameToLevel[self.level],s)
 
   def writelines(self,seq):
     for s in seq:
@@ -213,7 +220,7 @@ if __name__=='__main__':
   if False:
     # Write log data in the usual way.
     log=get_logger(facility=opt.facility,level=opt.level)
-    log.log(logging._levelNames[opt.level.upper()],' '.join(args))
+    log.log(_nameToLevel[opt.level.upper()],' '.join(args))
   else:
     # Write log data as if to a proper stream.
     f=LogStream(facility=opt.facility,level=opt.level)
