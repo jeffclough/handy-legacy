@@ -1,4 +1,14 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
+
+"""
+This is the start of some string parsing code. All it does at the moment
+is to find groups of (parenthesized), [bracketed], or {braced} text
+within a string and return an iterator of (begin,end) tuples that
+delineate such groupings.
+
+But if that's all you need, this might be much easier to use than
+something like pyparsing (which is awesome, of course).
+"""
 
 # Lengthable is to be used as a metaclass of classes that support
 # len(instance) calls.
@@ -67,7 +77,7 @@ class GroupParser(object):
     return self
 
   # Here's where the iteration happens.
-  def next(self):
+  def __next__(self):
     if self.next_index>=len(self.parens):
       raise StopIteration
     self.next_index+=1
@@ -147,16 +157,16 @@ if __name__=='__main__':
     s='Testing (grouping \([regular] express\) text) with {surrounding text}.'
 
   n=len(s)
-  print ' '+(''.join(['%10d'%(i/10) for i in range(10,n,10)]))
-  print ''.join(['%d'%(i%10) for i in range(n)])
-  print s
-  print
+  print(' '+(''.join(['%10d'%(i//10) for i in range(10,n,10)])))
+  print(''.join(['%d'%(i%10) for i in range(n)]))
+  print(s)
+  print()
 
-  print "Iterating over parsed groups:"
+  print("Iterating over parsed groups:")
   p=GroupParser(escape_char=cl.escape)
   for i,j,t in p(s):
-    print "  %d:%d ==> %r"%(i,j,t)
-  print
+    print("  %d:%d ==> '%s'"%(i,j,t))
+  print()
 
-  print 'len() ==> %r'%(len(p),)
-  print 'groups() ==> %r'%(p.groups(),)
+  print('len() ==> %r'%(len(p),))
+  print('groups() ==> %r'%(p.groups(),))
