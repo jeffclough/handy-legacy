@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 """
 This module is intended to span the gap between Makefile and setup.py,
 bringing the power and versatility of Python to the basic functionality
@@ -49,7 +49,7 @@ if not args:
 
 if opt.sysinfo:
   for var in sorted("OS_NAME HOST KERNEL PLATFORM MACHINE PROCESSOR OS_VER DISTRO_NAME DISTRO_VER SRCDIR".split()):
-    print '%s=%r'%(var,eval(var))
+    print('%s=%r'%(var,eval(var)))
   sys.exit(0)
 
 # These are our verbosity levels. The values incidate the number of -v options
@@ -90,7 +90,7 @@ def build_command(*args):
         parts[i]="'"+parts[i]+"'"
   # Return it all as a single string.
   cmd=' '.join(parts)
-  print cmd
+  print(cmd)
   return cmd
 
 def expand_all(filename):
@@ -106,7 +106,7 @@ def filetime(filename,default=0):
   except:
     pass
   if opt.verbosity>=V_TIME:
-    print '  %s:\tt=%0.6f (%s)'%(filename,default,time.strftime('%Y-%m-%d %H:%M:%S.%f',time.localtime(default)))
+    print('  %s:\tt=%0.6f (%s)'%(filename,default,time.strftime('%Y-%m-%d %H:%M:%S.%f',time.localtime(default))))
   return default
 
 def isnewer(src,dst,bias=-0.001):
@@ -142,9 +142,9 @@ def outOfDate(target,*args):
   else:
     if opt.verbosity>=V_DEPS:
       if opt.force:
-        print '  %s is treated as out of date because of --force'%target
+        print('  %s is treated as out of date because of --force'%target)
       else:
-        print '  %s is out of date because it\'s missing'%target
+        print('  %s is out of date because it\'s missing'%target)
     return True
   for d in args:
     if isinstance(d,list) or isinstance(d,tuple):
@@ -154,11 +154,11 @@ def outOfDate(target,*args):
       # Return True for non-existant dependency in order to provoke an
       # error when the dependency is not found.
       if opt.verbosity>=V_DEPS:
-        print '  %s depends on %s, which doesn\'t exist'%(target,d)
+        print('  %s depends on %s, which doesn\'t exist'%(target,d))
       return True
     elif filetime(d)>t:
       if opt.verbosity>=V_DEPS:
-        print '  %s depends on %s, which is newer'%(target,d)
+        print('  %s depends on %s, which is newer'%(target,d))
       return True
   return False
 
@@ -230,9 +230,9 @@ class DependentTarget(Target):
       return
     if opt.verbosity>=V_DEPS:
       if self.deps:
-        print '  %s depends on %s'%(self.filename,' '.join(self.deps))
+        print('  %s depends on %s'%(self.filename,' '.join(self.deps)))
       else:
-        print '  %s depends on nothing'%(self.filename)
+        print('  %s depends on nothing'%(self.filename))
     if self.deps:
       t=filetime(self.filename,0)
       for d in self.deps:
@@ -298,7 +298,7 @@ class CExecutable(DependentTargetFromSource):
 
     # Compile this target.
     if outOfDate(self.filename,self.source,self.deps):
-      print '\n%s:'%self.filename
+      print('\n%s:'%self.filename)
       cmd=build_command(
         self.cc,
         COPTS,
@@ -313,7 +313,7 @@ class CExecutable(DependentTargetFromSource):
     if self.__class__.__name__=='CExecutable':
       # Mark this target as "built," but only if not called from a subclass.
       # This logic is needed in order to make calling super(...).build() safe.
-      os.chmod(self.filename,0755)
+      os.chmod(self.filename,0o755)
       self.built=True
 
 
@@ -349,14 +349,14 @@ class Installer(DependentTarget):
 
     # Create the target directory if necessary.
     if not os.path.exists(self.dir):
-      print 'mkdir %s'%self.dir
+      print('mkdir %s'%self.dir)
       sys.stdout.flush()
       if not opt.dryrun:
         os.makedirs(self.dir)
-      print 'chmod 755 %s'%self.dir
+      print('chmod 755 %s'%self.dir)
       sys.stdout.flush()
       if not opt.dryrun:
-        os.chmod(self.dir,0755)
+        os.chmod(self.dir,0o755)
     elif not os.path.isdir(self.dir):
       raise Error('%s exists but is not a directory.'%self.dir)
 
@@ -364,7 +364,7 @@ class Installer(DependentTarget):
     for dep in self.deps:
       dest=os.path.join(self.dir,os.path.basename(dep))
       if isnewer(dep,dest) and not any([fnmatch(dep,pat) for pat in IGNORE]):
-        print '%s ==> %s'%(dep,self.dir)
+        print('%s ==> %s'%(dep,self.dir))
         sys.stdout.flush()
         if not opt.dryrun:
           copy(dep,dest,copy_metadata=True,follow_links=True)
@@ -398,7 +398,7 @@ class PipInstall(Target):
     elements of sys.version_info. If none of these types is given,
     return None."""
 
-    if isinstance(ver,str) or isinstance(ver,unicode):
+    if isinstance(ver,str):
       ver=tuple([int(x) for x in ver.split('.')])
     elif isinstance(ver,float):
       ver=tuple(int(ver),int(('%0.3f'%(ver%1)).split('.')[1].split('0',1)[0]))
@@ -412,28 +412,28 @@ class PipInstall(Target):
     if self.built:
       return
     if self.minver and PYTHON_VERSION<self.minver:
-      print 'WARNING: Python package %s requires minimum Python version of %s'%(
+      print('WARNING: Python package %s requires minimum Python version of %s'%(
         self.package,
         self.getVersionString(self.minver)
-      )
+      ))
       self.built=True
       return
     if self.maxver and PYTHON_VERSION>self.maxver:
-      print 'WARNING: Python package %s requires maximum Python version of %s'%(
+      print('WARNING: Python package %s requires maximum Python version of %s'%(
         self.package,
         self.getVersionString(self.maxver)
-      )
+      ))
       self.built=True
       return
     if opt.verbosity>=V_DEPS:
-      print '  Python package %s depends on %s*'%(self.package,self.filename)
+      print('  Python package %s depends on %s*'%(self.package,self.filename))
     try:
       # If we're already able to load the module, we don't need to install it.
       mod=__import__(self.package)
       del mod
     except ImportError:
       # OK. So we need to install it.
-      print '\n%s:'%self.package
+      print('\n%s:'%self.package)
       cmd=build_command('pip','install','--target',self.dir,self.package)
       if not opt.dryrun:
         os.system(cmd)
@@ -451,12 +451,12 @@ def clean():
   for t in Target.instances:
     if isinstance(t,DependentTargetFromSource):
       if os.path.isdir(t.filename):
-        print 'rm -r %s'%t.filename
+        print('rm -r %s'%t.filename)
         sys.stdout.flush()
         if not opt.dryrun:
           os.rmtree(t.filename)
       elif os.path.exists(t.filename):
-        print 'rm %s'%t.filename
+        print('rm %s'%t.filename)
         sys.stdout.flush()
         if not opt.dryrun:
           os.remove(t.filename)
@@ -487,7 +487,7 @@ def copy(src,dst,**kwargs):
   if follow_links:
     src=os.path.realpath(src)
   if opt.verbosity>=V_DEBUG:
-    print 'copy(%r,%r,copy_metadata=%r,follow_links=%r)'%(src,dst,copy_metadata,follow_links)
+    print('copy(%r,%r,copy_metadata=%r,follow_links=%r)'%(src,dst,copy_metadata,follow_links))
   if os.path.isfile(src) or os.path.islink(src):
     # We're just copying a single file (or symlink).
     shutil.copyfile(src,dst)
@@ -549,18 +549,18 @@ def symlink(target,link):
         # The symlink already points to where it should go.
         return
       # Remove this miscreant symlink.
-      print 'Removing %s --> %s'%(link,os.readlink(link))
+      print('Removing %s --> %s'%(link,os.readlink(link)))
       if not opt.dryrun:
         os.remove(link)
     elif os.path.isdir(link):
       raise Error('%s exists but is a directory.'%link)
     else:
       os.remove(link)
-  print 'Creating %s --> %s'%(link,target)
+  print('Creating %s --> %s'%(link,target))
   if not opt.dryrun:
     try:
       os.symlink(target,link)
-    except OSError,e:
+    except OSError as e:
       raise OSError(str(e)+' on os.symlink(%r,%r)'%(target,link))
     except:
       raise
