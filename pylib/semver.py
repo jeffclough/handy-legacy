@@ -18,7 +18,7 @@ re_metadata=re.compile(re_metadata+'$')
 class Metadata(object):
   def __init__(self,md=None):
     self.md=None
-    if isinstance(md,basestring):
+    if isinstance(md,str):
       m=re_metadata.match(md)
       if m==None:
         raise ValueError('Malformed base: %r'%(base,))
@@ -28,7 +28,7 @@ class Metadata(object):
       raise TypeError('Bad metadata parameter: %r'%(md,))
     self.md=md
 
-  def __nonzero__(self):
+  def __bool__(self):
     return self.md!=None
 
   def __str__(self):
@@ -57,7 +57,7 @@ class SemanticVersion(object):
       self.patch=version.patch
       self.release=version.release
       self.build=version.build
-    elif isinstance(version,basestring):
+    elif isinstance(version,str):
       m=re_version.match(version)
       if m==None:
         raise ValueError('Malformed version string: %r'%(version,))
