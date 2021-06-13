@@ -440,7 +440,8 @@ def join(seq,con='and',sep=None):
 
   if not isinstance(seq,(dict,list,tuple)):
     if isinstance(seq,str):
-      raise TypeError("%s.join() operates on a sequence. It's not intended for a single string."%__name__)
+      seq=seq.split()
+      #raise TypeError("%s.join() operates on a sequence. It's not intended for a single string."%__name__)
     try:
       seq=tuple(seq)
     except:
