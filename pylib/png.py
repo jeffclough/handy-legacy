@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # Downloaded from the author with ...
 # curl -LO https://raw.github.com/drj11/pypng/main/code/png.py

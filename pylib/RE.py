@@ -229,6 +229,9 @@ def extend(name,pattern,expand=False):
 
   The result of using '(?E:cred)' in a regular expression is exactly
   the same in either case.
+
+  If the pattern argument is None, and the value of the name parameter
+  is already in the registry, it is de-registered.
   """
 
   if not pattern:
