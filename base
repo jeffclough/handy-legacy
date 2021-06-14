@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import os,sys
 # Put a little extra effort into finding our non-standard modules if needed.
@@ -34,16 +34,19 @@ def decode(function,bpl,inf,outf):
   for s in inf:
     if bpl!=-1:
       s=s.rstrip()
-    #print >>sys.stderr,'D: s=%r'%s
     outf.write(function(s))
 
 def encode(function,bpl,inf,outf):
   "Encode the input file to the output file using the given function."
 
+  wrote_output=False
   for buf in read_chunks(inf,bpl):
     outf.write(function(buf))
     if bpl!=-1:
-      outf.write('\n')
+      outf.write('\n'.encode())
+  # Just to be polite, end with a newline if we're writting to a TTY.
+  if outf.isatty():
+    outf.write('\n'.encode())
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -107,7 +110,7 @@ try:
     buffer_size=int(float(opt.wrap)/c*b)/b*b
   else:
     buffer_size=-1 # Read the whole file.
-except BaseError,e:
+except BaseError as e:
   die(e.message)
 
 # Open our input and output files.
