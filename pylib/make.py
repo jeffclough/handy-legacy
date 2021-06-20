@@ -62,18 +62,18 @@ V_DEBUG=3
 # Low-level functions.
 #
 
-if PYTHON_VERSION<(2,5):
-  # Import some functions from the future.
-
-  def all(it):
-    for i in it:
-      if not i: return False
-    return True
-
-  def any(it):
-    for i in it:
-      if i: return True
-    return False
+#if PYTHON_VERSION<(2,5):
+#  # Import some functions from the future.
+#
+#  def all(it):
+#    for i in it:
+#      if not i: return False
+#    return True
+#
+#  def any(it):
+#    for i in it:
+#      if i: return True
+#    return False
 
 def build_command(*args):
   '''Return a string containing all our arguments in a form that can be
@@ -147,7 +147,7 @@ def outOfDate(target,*args):
         print('  %s is out of date because it\'s missing'%target)
     return True
   for d in args:
-    if isinstance(d,list) or isinstance(d,tuple):
+    if isinstance(d,(list,tuple)):
       if outOfDate(target,*d):
         return True
     elif not os.path.exists(d):
@@ -181,8 +181,9 @@ class Error(Exception):
 
 class Target(object):
   """This is the base class of all Target subclasses. In addition to
-  performing initialization that's common to all Target objects, it also
-  maintains a list of all extant Target instances in a class attribute."""
+  performing initialization that's common to all Target objects, it
+  maintains a list of all extant Target instances in a class
+  attribute."""
   
   instances=[] # This is a list of all Target objects.
 
@@ -206,7 +207,8 @@ class Target(object):
 
     if self.__class__.__name__=='Target':
       # Mark this target as "built," but only if not called from a subclass.
-      # This logic is needed in order to make calling super(...).build() safe.
+      # This logic is needed in order to make calling super().build() from
+      # subclasses safe.
       self.built=True
 
 class DependentTarget(Target):
@@ -246,7 +248,8 @@ class DependentTarget(Target):
               target.build()
     if self.__class__.__name__=='DependentTarget':
       # Mark this target as "built," but only if not called from a subclass.
-      # This logic is needed in order to make calling super(...).build() safe.
+      # This logic is needed in order to make calling super().build() from a
+      # subclass safe.
       self.built=True
 
 
@@ -262,10 +265,11 @@ class DependentTargetFromSource(DependentTarget):
     "Build all out-of-date dependencies."
 
     # Call our Parent's build() method.
-    super(DependentTargetFromSource,self).build()
+    super().build()
     if self.__class__.__name__=='DependentTargetFromSource':
       # Mark this target as "built," but only if not called from a subclass.
-      # This logic is needed in order to make calling super(...).build() safe.
+      # This logic is needed in order to make calling super().build() from a
+      # subclass safe.
       self.built=True
 
 
@@ -273,14 +277,15 @@ class CExecutable(DependentTargetFromSource):
   "Objects of this class compile executables from C source files."
 
   def __init__(self,filename,source,*deps,**kwargs):
-    """Specify how target should be built from source. Keyword argument
+    """Specify how target should be built from source. Keyword arguments
     may be:
 
     cc:   The name of the C compiler (default: cc).
     opts: A sequence of compiler options.
     objs: A sequence of object files to be linked with the executable."""
 
-    DependentTargetFromSource.__init__(self,filename,*deps)
+    #DependentTargetFromSource.__init__(self,filename,*deps)
+    super()(filename,*deps)
     self.deps=[source]+list(deps)
     self.source=source
     self.cc=opt.cc
@@ -294,7 +299,7 @@ class CExecutable(DependentTargetFromSource):
     if self.objs:
       self.deps.append(self.objs)
     # Call the build() method of our parent class.
-    super(CExecutable,self).build()
+    super().build()
 
     # Compile this target.
     if outOfDate(self.filename,self.source,self.deps):
@@ -312,7 +317,8 @@ class CExecutable(DependentTargetFromSource):
         os.system(cmd)
     if self.__class__.__name__=='CExecutable':
       # Mark this target as "built," but only if not called from a subclass.
-      # This logic is needed in order to make calling super(...).build() safe.
+      # This logic is needed in order to make calling super().build() from a
+      # subclass safe.
       os.chmod(self.filename,0o755)
       self.built=True
 
@@ -329,10 +335,11 @@ class CObjectFile(CExecutable):
     "Build all out-of-date dependencies."
 
     # Call our Parent's build() method.
-    super(CObjectFile,self).build()
+    super().build()
     if self.__class__.__name__=='CObjectFile':
       # Mark this target as "built," but only if not called from a subclass.
-      # This logic is needed in order to make calling super(...).build() safe.
+      # This logic is needed in order to make calling super(...).build() from
+      # a subclass safe.
       self.built=True
 
 
@@ -345,7 +352,7 @@ class Installer(DependentTarget):
 
   def build(self):
     # Build all dependencies (which are what this class installs).
-    super(Installer,self).build()
+    super().build()
 
     # Create the target directory if necessary.
     if not os.path.exists(self.dir):
@@ -439,9 +446,9 @@ class PipInstall(Target):
         os.system(cmd)
     if self.__class__.__name__=='PipInstall':
       # Mark this target as "built," but only if not called from a subclass.
-      # This logic is needed in order to make calling super(...).build() safe.
+      # This logic is needed in order to make calling super(...).build() from
+      # a subclass safe.
       self.built=True
-
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
