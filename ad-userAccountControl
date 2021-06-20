@@ -1,7 +1,40 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
+
+"""
+
+This little script outputs the Active Directory usarAccountControl bit
+values by name in the numeric values given to it on the command line. It
+can be tested with the following shell (bash or zsh are fine) script:
+
+for fmt in '0o%o' '%d' '%#x'; do \
+  ./ad-userAccountControl $(for b in {0..31};do printf "$fmt " $((2**b));done)
+done
+
+Or just do this:
+
+./ad-userAccountControl 0o37777777777 4294967295 0xffffffff
+
+"""
 
 import os,sys
 from math import log
+
+def mag(n):
+  "Return the number of bits needed to reprepresent n's value."
+
+  if n==0:
+    m=0
+  else:
+    if n<0:
+      # "Un-two's-compliment this value.
+      n=(-n)+1
+    m=int(log(n,2))+1
+  return m
+
+def pos(n):
+  "Return the position of n's most significant bit, or -1 for n=0."
+
+  return mag(n)-1
 
 # Shamelessly taken from https://support.microsoft.com/en-us/help/305144/how-to-use-the-useraccountcontrol-flags-to-manipulate-user-account-pro.
 attr=dict(
@@ -30,13 +63,21 @@ attr=dict(
 )
 
 # Now reverse the above look-up and convert 2**x values to x.
-attr=dict([(int(log(v,2)),a) for a,v in attr.items()])
+attr={pos(v):a for a,v in attr.items()}
 
-def bits_in(i):
+# Fill in any missing bit positions, allowing up to 64 bits.
+for b in range(64):
+  if b not in attr:
+    attr[b]=f"bit_{b}"
+
+def one_bits(i):
   "Iterate over 1-bit positions in i, LSB first."
 
   assert isinstance(i,int)
-  h=int(log(i,2)+1)
+  h=mag(i)
+  if h>64:
+    print(f"OVERFLOW ({i}): numeric values are limited to 64 bits (unsigned)",file=sys.stderr)
+    sys.exit(1)
   b=0
   while b<h:
     if i&(2**b)!=0:
@@ -46,19 +87,20 @@ def bits_in(i):
 # Main code.
 if len(sys.argv)<2:
   prog=os.path.basename(sys.argv[0])
-  print """usage: %s value ..."
+  print(f"""usage: {prog} value ...
 
 Interpret userAccountControl values from AD. These values may be expressed as
 octal, decimal, or hexadecimal. For example:
 
     $ ad-userAccountControl 66048 0x10200
     66048   NORMAL_ACCOUNT DONT_EXPIRE_PASSWORD
-    0x10200 NORMAL_ACCOUNT DONT_EXPIRE_PASSWORD"""%prog
+    0x10200 NORMAL_ACCOUNT DONT_EXPIRE_PASSWORD""")
 else:
   for arg in sys.argv[1:]:
     try:
       val=int(arg,0)
     except:
-      print >>sys.stderr,"Error: %r is not a valid integer value"%(arg,)
+      print(f"Error: {repr(arg)} is not a valid integer value",file=sys.stderr)
       sys.exit(1)
-    print '%s\t%s'%(arg,' '.join([attr[b] for b in bits_in(val)]))
+    #print(f"""{arg}\t{' '.join([attr.get(b,"bit_%d"%b) for b in one_bits(val)])}""")
+    print(f"""{arg}\t{' '.join([attr[b] for b in one_bits(val)])}""")
