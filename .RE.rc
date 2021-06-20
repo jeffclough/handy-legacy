@@ -1,4 +1,3 @@
- # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #
 #          Use this file to set up your own RE extension patterns.
@@ -15,7 +14,7 @@
 #
 #   "client: 74.125.136.113"
 #
-# New (or replacement) RE extensions can be define as
+# New (or replacement) RE extensions can be defined as
 #
 #   name=pattern
 #
@@ -24,13 +23,14 @@
 # you have leading or trailing whitespace characters, they are part of the RE
 # extension's pattern.
 #
-# Empty lines and lines whose first non-space character is # are ignored.
+# Empty lines and lines whose first non-space content begins with #, ;, or //
+# are ignored.
 #
 
-; Account names.
+// Account names.
 id=[-_0-9A-Za-z]+
 
-; Python (Java, C, et al.) identifiers.
+// Python (Java, C, et al.) identifiers.
 ident=[_A-Za-z][_0-9A-Za-z]+
 
 // Comments may begin with #, ;, or // and continue to the end of the line.
