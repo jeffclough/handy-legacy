@@ -417,9 +417,11 @@ def nounf(root,count,pos=False,fmt=None,formatter=None):
 # Other, english-related functions that don't fit elsewhere.
 
 def join(seq,con='and',sep=None):
-  """Return the string values in the given sequence as an english
+  """Return the string values in the given sequence as an English
   sequence-phrase, employing the given conjunction and seaparator when
-  called for by the rules of standard english.
+  called for by the rules of standard english. If seq is a single
+  string, it will be converted into a list of words and processed that
+  way.
   
   The conjunction defaults to 'and'. The separator defaults to ','
   except when a comma is found in any sequence item, in which case it
@@ -723,22 +725,33 @@ class BinHumanBytes(HumanBytes):
 
 class TitleCase(str):
   """A TitleCase value is just like a str value, but it gets title-cased
-  when it is created.
-  """
+  upon creation. (And since Python strings are immutable, forevermore
+  shall it remain.)"""
+
+  #
+  # There's interesting material on this topic at the "Title Case Converter"
+  # page at https://titlecaseconverter.com.
+  #
+  # The implementation below is comically simplistic by comparison. If you need
+  # something less riddled with caveats, feel free to use this as a starting
+  # point. :-)
+  #
+
+  coordinating_conjunctions='and but for nor or so yet'.split()
+
 
   # Articles, conjunctions, and prepositions are always lower-cased, unless
   # they are the first or last word of the title.
   lc_words=set("""
     a an the
-    and but nor or
-    is
-    about as at by circa for from in into of on onto than till to until unto via with
+    and but for nor or so yet
+    as at by for in of off on to up via
   """.split())
 
   def __new__(self,value=''):
-    """Capitalize each word in value unless it's TitleCase.lc_words,
+    """Capitalize each word in value unless it's in TitleCase.lc_words,
     unless it's the first or last word in the string. We ALWAYS
-    capitalize the first and last words."""
+    capitalize first and last words."""
 
     words=[w for w in value.lower().split() if w]
     last=len(words)-1
@@ -773,13 +786,13 @@ if __name__=='__main__':
     'Another Fine Kettle of Fish'
     >>> t=TitleCase("to remember what's yet to come")
     >>> t
-    "To Remember What's Yet to Come"
+    "To Remember What's yet to Come"
     >>> t.split()
-    ['To', 'Remember', "What's", 'Yet', 'to', 'Come']
+    ['To', 'Remember', "What's", 'yet', 'to', 'Come']
     >>> str(type(t)).endswith(".TitleCase'>")
     True
     >>> TitleCase('from in into of on onto than till to')
-    'From in into of on onto than till To'
+    'From in Into of on Onto Than Till To'
     >>> #
     >>> # Testing nouner()
     >>> #
@@ -876,10 +889,13 @@ if __name__=='__main__':
     >>> flags=tuple(['(%s)'%join(f) for f in flag_colors])
     >>> join(flags,con='or',sep=',')
     '(red, white, and blue), (green, red, and white), or (red and white)'
-    >>> join('this is a mistake')
-    Traceback (most recent call last):
-      ...
-    TypeError: __main__.join() operates on a sequence. It's not intended for a single string.
+    >>> join('apples oranges')
+    'apples and oranges'
+    >>> #Traceback (most recent call last):
+    >>> #  ...
+    >>> #TypeError: __main__.join() operates on a sequence. It's not intended for a single string.
+    >>> join('apples oranges bananas')
+    'apples, oranges, and bananas'
     >>> #
     >>> # Test Suffixer's error handling.
     >>> #
