@@ -470,15 +470,34 @@ class ProgInfo(object):
     """Return a (width,height) tuple for the caracter size of our
     terminal. Also update our term_width and term_height members."""
 
+    # Let the COLUMNS and LINES environment variables override any actual terminal
+    # dimensions.
+    self.term_width=os.environ.get('COLUMNS')
+    if self.term_width:
+      self.term_width=int(self.term_width)
+    self.term_height=os.environ.get('LINES')
+    if self.term_height:
+      self.term_height=int(self.term_height)
+
+    # Get terminal dimensions from the terminal device IFF needed.
     for f in sys.stdin,sys.stdout,sys.stderr:
       if f.isatty():
-        self.term_height,self.term_width,_,_=struct.unpack(
+        th,tw,_,_=struct.unpack(
           'HHHH',
           fcntl.ioctl(f.fileno(),termios.TIOCGWINSZ,struct.pack('HHHH',0,0,0,0))
         )
+        if not self.term_width:
+          self.term_width=tw
+        if not self.term_height:
+          self.term_height=tw
         break
     else:
-      self.term_height,self.term_width=[int(x) for x in (os.environ.get('LINES','25'),os.environ.get('COLUMNS','80'))]
+      # Lame though it is, use 80x25 for terminal dimensions if we can't figure
+      # anything else out.
+      if not self.term_width:
+        self.term_width=80
+      if not self.term_height:
+        self.term_height=25
 
     return self.term_width,self.term_height
 
