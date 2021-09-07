@@ -1,0 +1,176 @@
+#!/usr/bin/env python3
+
+import argparse,os,sys
+from handy import ProgInfo
+from hashlib import md5
+from subprocess import run,PIPE
+from textwrap import fill
+from urllib.parse import urlencode
+from urllib.request import urlopen
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Some helpers ...
+#
+
+pi=ProgInfo()
+
+def definitions(d,indentation=0,max_width=80):
+  """Given a dictionary of definitions, return a formatted paragraph
+  of those definitions."""
+
+  max_width-=indentation
+  max_term_len=max([len(str(k)) for k in d.keys()])+1
+  max_def_len=max_width-max_term_len-1
+  return os.linesep.join([
+    f"{' '*indentation}{(k+':'):{max_term_len}s} {fill(v,width=max_def_len,initial_indent='',subsequent_indent=' '*(indentation+max_term_len+1))}"
+      for k,v in d.items()
+  ])
+
+def hash(s):
+  "Given a string, return its MD5 hash as a hex string."
+
+  return md5(s.encode()).hexdigest()
+
+def display(*args):
+  arg_list=['/usr/bin/open','-a','preview']
+  arg_list.extend(args)
+  #print(f"args={args!r}")
+  #print(f"arg_list={arg_list!r}")
+  run(arg_list)
+
+#
+# End of helpers.
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Define some Gravatar parameter values.
+#
+
+# Enumberate Gravatar's default modes and their descriptions.
+defaults={
+  "404":"Do not load any image if none is associated with the email hash, instead return an HTTP 404 (File Not Found) response.",
+  "blank":"A transparent PNG image.",
+  "identicon":"A geometric pattern based on an email hash.",
+  "monsterid":"A generated 'monster' with different colors, faces, etc.",
+  "mp":"Mystery person. A simple, cartoon-style silhouetted outline of a person (does not vary by email hash).",
+  "retro":"Awesome generated, 8-bit arcade-style pixelated faces.",
+  "robohash":"A generated robot with different colors, faces, etc.",
+  "wavatar":"Generated faces with differing features and backgrounds.",
+}
+
+# Enumerate and explain Gravatar's rating values.
+ratings=dict(
+  g="Suitable for display on all websites with any audience type.",
+  pg="May contain rude gestures, provocatively dressed individuals, the lesser swear words, or mild violence.",
+  r="May contain such things as harsh profanity, intense violence, nudity, or hard drug use.",
+  x="May contain hardcore sexual imagery or extremely disturbing violence."
+)
+
+#
+# End of Gravatar definitions.
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Deal with the command line.
+#
+
+description=f"""\
+description:
+{fill("Download the Gravatar images for each email address given on the command line.",initial_indent='  ',subsequent_indent='  ')}"""
+
+epilog=f"""\
+
+  Default Image Types (--default)
+{definitions(defaults,4,pi.term_width)}
+
+  Gravatar Rating Values (--rating)
+{definitions(ratings,4,pi.term_width)}"""
+
+# Define and process command line options and arguments.
+ap=argparse.ArgumentParser(
+  description=description,
+  epilog=epilog,
+  formatter_class=argparse.RawDescriptionHelpFormatter
+)
+ap.add_argument('--size',action='store',type=int,default=None,help="The size in pixels of the image to return. Gravitar's default size is 80 (for 80x80 pixels), but you can specify any integer value from 1 to 2048.")
+ap.add_argument('--type',dest='ext',action='store',choices=('jpg','jpeg','gif','png'),default=None,help="The file type (file extension) to be retrieved.")
+ap.add_argument('--default',action='store',choices=tuple(defaults.keys()),help="""Set the type of default image to return (or action to be taken in the "404" case) if the given email has no image registered with Gravatar.""")
+ap.add_argument('--force',action='store_true',help="Force Gravatar's default image to be returned.")
+ap.add_argument('--rating',action='store',choices=('g','pg','r','x'),default=None,help="""Gravatar lets user's self-rate their images. The default is to return only G-rated images, but you can return images up to and including the given rating if you'd like.""")
+ap.add_argument('--dir',action='store',default="~/.gravitar",help="Directory where Gravitar images are stored.")
+ap.add_argument('--replace',action='store_true',help="Re-download the image, even if we already have a copy. The default behavior is to keep any copy we've already downloaded.")
+ap.add_argument('--show',action='store_true',help="Display each image after it is downloaded.")
+ap.add_argument('email',action='store',nargs='+',help="The email address of the Gravatar image to retrieve.")
+opt=ap.parse_args()
+
+#
+# Further validation of command line options.
+#
+
+# Validate --size.
+if opt.size is not None:
+  if opt.size<1 or opt.size>2048:
+    ap.print_usage()
+    print(f"{ap.prog}: error: argument --size: invalid value: {opt.size!r}")
+
+# Ensure that --dir refers to an existing directory.
+opt.dir=os.path.expandvars(os.path.expanduser(opt.dir))
+if not os.path.isdir(opt.dir):
+  try:
+    os.mkdir(opt.dir,mode=0o700)
+  except Exception as e:
+    ap.print_usage()
+    print(f"{ap.prog}: error: argument --dir: {e}")
+    sys.exit(1)
+
+# Compose our URL arguments from our options.
+d={}
+if opt.size: d['s']=opt.size
+if opt.ext: d['t']=opt.ext
+if opt.default: d['d']=opt.default
+if opt.force: d['f']='y'
+if opt.rating: d['r']=opt.rating
+opt.url_args=urlencode(d)
+#print(f"opt.url_args={opt.url_args!r}")
+
+#
+# Done with the command line.
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+def gravatar(email,opt):
+  """Download the Gravitar image for the given email address and handle
+  it according to the given options."""
+
+  # Download the image into a suitably name file in our images directory.
+  filename=email
+  filename=os.path.join(opt.dir,filename)
+  if opt.ext:
+    filename+=f".{opt.ext}"
+  if opt.replace or not os.path.isfile(filename):
+    url=f"https://gravatar.com/avatar/{hash(email)}"
+    if opt.url_args:
+      url+='?'+opt.url_args
+    #print(f"url: {url}")
+    with urlopen(url) as g:
+      with open(filename,'w+b') as f:
+        f.write(g.read())
+        #print(filename)
+
+  return filename
+
+  # Display the file if we're supposed to.
+  if opt.show:
+    display(filename)
+
+files=[]
+for email in opt.email:
+  files.append(gravatar(email,opt))
+
+if opt.show:
+  display(*files)
