@@ -35,6 +35,12 @@ be happy to write better code if it were just easier.
 
 Most of this module is linguistic "internals." See the functions at the
 bottom for the practical part of the documentation.
+
+Finally, if the English documentation for this module is confusing,
+that's because English itself is a minefield of logical "gotchas." The
+good news is that the Python code that implements each class and
+funciton may well be simpler to understand than the English text that
+documents it. Don't be afraid to look at the code. :-)
 """
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -419,41 +425,140 @@ def nounf(root,count,pos=False,fmt=None,formatter=None):
 def join(seq,con='and',sep=None):
   """Return the string values in the given sequence as an English
   sequence-phrase, employing the given conjunction and seaparator when
-  called for by the rules of standard english. If seq is a single
-  string, it will be converted into a list of words and processed that
-  way.
+  called for by the rules of standard English. If seq is not a sequence,
+  it MUST be an object with a split() method, which will be used to
+  convert it to a sequence.
   
-  The conjunction defaults to 'and'. The separator defaults to ','
-  except when a comma is found in any sequence item, in which case it
-  defaults to ';'. You can override this default logic by providing your
-  own seqarator character.
+  The conjunction defaults to 'and'. The separator defaults to a comma,
+  but see SEPERATOR DEFAULTS below.
 
-  An empty sequence returns an empty string. A one-item sequence simply
-  returns that item. A two-item sequence, returns a string of the form:
+  ITEMS
+    0   An empty sequence returns an empty string.
 
-      "1 <con> 2"
+    1   A one-item sequence simply returns that item.
 
-  A sequence with more than two items, returns a string of the form:
+    2   A two-item sequence, returns a string of the form:
+
+        "1 {con} 2"
+
+    3+  A sequence with more than two items, returns a string of the
+        form:
   
-      "1, 2, ..., <con> N"
+        "1, 2, ..., {con} N"
       
-  A separator (',' by default) *always* precedes the conjunction in such
-  a case. We are not barbarians."""
+        The separator ALWAYS precedes the conjunction in such a case. We
+        are not barbarians.
+
+  SEPARATOR DEFAULTS:
+    ,   This is the first default and is most often used.
+
+    ;   If a comma is found in any sequence item, semicolon is the next
+        default.
+
+    (   If both a comma and semicolon are found among the sequence
+    {   items, each of these separators is tried in the order shown.
+    [   These are bracketing separators and indicate a bracketing pair
+    <   to surround each sequence item. Each one is tried until it is
+    "   found that none of them, including its closing character, exists
+    '   in any sequence item.
+
+    If, weirdly, each of these potential separators is found among the
+    sequence items, then the last one is used, and this function relies
+    on the caller to have balanced all such groupings within each item.
+    In this last case, I'm a little tempted to raise a ValueError
+    containing an admonition to restructure what the caller wishes to
+    express, but this isn't Grammarly.
+
+  BRACKETING SEPARATORS
+  You can actually force the use of (parentheses), {braces}, [square] or
+  <angle> brackets, or single (') or double (") quotes around each
+  sequence item by giving the opening character as the separator. The
+  join() function will understand that each item should begin with that
+  characterr and then end with its mate.
+
+  The first thing to know about bracketing separators is that they come
+  into play when there are two or more items in the sequence, as opposed
+  to three or mor in the case of non-bracketing separators.
+
+    > english.join(('a and b',),sep='(')
+    'a and b'
+
+    > english.join(('a and b','c or d'),sep='(')
+    '(a and b) and (c or d)'
+
+    > english.join(('a and b','c or d','e but not f'),sep='(')
+    '(a and b), (c or d), and (e but not f)'
+
+  When using quotes as the separator, we do our best to make sure the
+  commas precede each closing quote.
+    
+     > print(english.join(('a and b','c or d','e but not f'),sep='"'))
+    "a and b," "c or d," and "e but not f"
+
+  But we're smart enough not to double up commas:
+
+    > print(english.join(('weird,','maybe wrong','¯\_(ツ)_/¯'),'but','"'))
+    "weird,", "maybe wrong," but "¯\_(ツ)_/¯"
+
+  All this can produce some odd-looking output, but it's as right as we
+  know how to make it:
+
+    > print(english.join(list(',;(){}[]<>')))
+    ",", ";," "(," ")," "{," "}," "[," "]," "<," and ">"
+
+  Notice that the separator defaulted to the double quote because that
+  was next in line after the '<' default separator, which one of the
+  sequence items contained."""
+
+  # Values of sep and require openning and closing characters.
+  pairs={
+    '(':')',
+    '{':'}',
+    '[':']',
+    '<':'>',
+    '"':'"',
+    "'":"'",
+  }
 
   if not isinstance(seq,(dict,list,tuple)):
-    if isinstance(seq,str):
+    if hasattr(seq,'split') and callable(seq.split):
       seq=seq.split()
-      #raise TypeError("%s.join() operates on a sequence. It's not intended for a single string."%__name__)
     try:
       seq=tuple(seq)
     except:
-      raise TypeError("%s.join() requires a sequnece or something that can be turned into one."%__name__)
+      raise TypeError(f"{__name__}.join() requires a sequnece or something with a split() method.")
   if len(seq)==0: return ''
   if len(seq)==1: return str(seq[0])
-  if len(seq)==2: return "%s %s %s"%(seq[0],con,seq[1])
   if sep==None:
-    sep=',;'[any([',' in item for item in seq])]
-  return "%s%s %s"%(''.join(['%s%s '%(x,sep) for x in seq[:-1]]),con,seq[-1])
+    if any([',' in item for item in seq]):
+      if any([';' in item for item in seq]):
+        for o,c in pairs.items():
+          if not any([o in item or c in item for item in seq]):
+            break
+        sep=o
+      else:
+        sep=';'
+    else:
+      sep=','
+  if sep in pairs:
+    o,c=sep,pairs[sep] # Set the opening and closing characters.
+  else:
+    o=c=None
+  if len(seq)==2:
+    if o: # This is the only time separators apply to a 2-item sequence.
+      # Handle bracketing separators for 2 items.
+      return f"{o}{seq[0]}{c} {con} {o}{seq[1]}{c}"
+    # Handle non-bracketing separators for 2 items.
+    return f"{seq[0]} {con} {seq[1]}"
+  # We know we're dealing with at least three items after this point.
+  if o:
+    if o in ('"',"'"):
+      # Ensure commas precede closing quotes whenever possible.
+      return f"{' '.join([o+x+((c+',') if x.endswith(',') else (','+c)) for x in seq[:-1]])} {con} {o}{seq[-1]}{c}"
+    # Hand non-quote, bracketing separators.
+    return f"{' '.join([o+x+c+',' for x in seq[:-1]])} {con} {o}{seq[-1]}{c}"
+  # Handle non-bracketing separators.
+  return f"{' '.join([x+sep for x in seq[:-1]])} {con} {seq[-1]}"
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -886,16 +991,23 @@ if __name__=='__main__':
     'red, white, and blue or green, red, and white'
     >>> join(flags,con='or')
     'red, white, and blue; green, red, and white; or red and white'
-    >>> flags=tuple(['(%s)'%join(f) for f in flag_colors])
-    >>> join(flags,con='or',sep=',')
-    '(red, white, and blue), (green, red, and white), or (red and white)'
+    >>> flags=tuple([join(f,sep=';') for f in flag_colors])
+    >>> join(flags,con='or')
+    'red; white; and blue, green; red; and white, or red and white'
+    >>> join(('the comma (,) is nice','the semi-colon (;) should be used when needed','combining them can be tricky'),'but')
+    '{the comma (,) is nice}, {the semi-colon (;) should be used when needed}, but {combining them can be tricky}'
     >>> join('apples oranges')
     'apples and oranges'
-    >>> #Traceback (most recent call last):
-    >>> #  ...
-    >>> #TypeError: __main__.join() operates on a sequence. It's not intended for a single string.
-    >>> join('apples oranges bananas')
-    'apples, oranges, and bananas'
+    >>> join('apples oranges bananas','or','<')
+    '<apples>, <oranges>, or <bananas>'
+    >>> join(('a and b',),sep='(')
+    'a and b'
+    >>> join(('a and b','c or d'),sep='(')
+    '(a and b) and (c or d)'
+    >>> join(('a and b','c or d','e but not f'),sep='(')
+    '(a and b), (c or d), and (e but not f)'
+    >>> print(join(('weird,','maybe wrong','¯\_(ツ)_/¯'),'but','"'))
+    "weird,", "maybe wrong," but "¯\_(ツ)_/¯"
     >>> #
     >>> # Test Suffixer's error handling.
     >>> #
@@ -903,7 +1015,7 @@ if __name__=='__main__':
     >>> join(x)
     Traceback (most recent call last):
       ...
-    TypeError: __main__.join() requires a sequnece or something that can be turned into one.
+    TypeError: __main__.join() requires a sequnece or something with a split() method.
     >>> #
     >>> # Test pnum().
     >>> #
