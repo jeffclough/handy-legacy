@@ -72,50 +72,42 @@ This module comes with several pre-loaded regepx extensions that I've
 come to appreciate:
 
 General:
-  id      - This matches login account names, programming language
-            identifiers (for Python, Java, C, etc., but not SQL or other
-            more special-purpose languages). Still '(?E:id)' is a nifty
-            way to match account names.
-  comment - Content following #, ;, or //, possibly preceded by
-            whitespace.
+
+|Extension|Description|
+|:----|:---|
+| id | This matches login account names, programming language identifiers (for Python, Java, C, etc., but not SQL or other more special-purpose languages). Still '(?E:id)' is a nifty way to match account names. |
+| comment | Content following #, ;, or //, possibly preceded by whitespace. |
 
 Network:
-  ipv4     - E.g. "1.2.3.4".
-  ipv6     - E.g. "1234:5678:9abc:DEF0:2:345".
-  ipaddr   - Matches either ipv4 or ipv6.
-  cidr     - E.g. "1.2.3.4/24".
-  macaddr  - Looks a lot like ipv6, but the colons may also 
-             be dashes or dots instead.
-  hostname - A DNS name.
-  host     - Matches either hostname or ipaddr.
-  service  - Matches host:port.
-  email    - Any valid email address. (Well above average, but not
-             quite perfect.) There's also an email_localpart extensior,
-             which is used inside both "email" and "url" (below), but
-             it's really just for internal use. Take a look if you're
-             curious.
-  url      - Any URL consisting of:
-               protocol - req (e.g. "http" or "presto:http:")
-               designator - req (either "email_localpart@" or "//")
-               host - req (anything matching our "host" extension)
-               port - opt (e.g. ":443")
-               path - opt (e.g. "/path/to/content.html")
-               params - opt (e.g. "q=regular%20expression&items=10")
+
+|Extension|Description|
+|:----|:---|
+|  ipv4     | E.g. "1.2.3.4". |
+|  ipv6     | E.g. "1234:5678:9abc:DEF0:2:345".
+|  ipaddr   | Matches either ipv4 or ipv6.
+|  cidr     | E.g. "1.2.3.4/24".
+|  macaddr  | Looks a lot like ipv6, but the colons may also be dashes or dots instead.
+|  hostname | A DNS name.
+|  host     | Matches either hostname or ipaddr.
+|  service  | Matches host:port.
+|  email    | Any valid email address. (Well above average, but not quite perfect.) There's also an email_localpart extensior, which is used inside both "email" and "url" (below), but it's really just for internal use. Take a look if you're curious.
+|  url      | Any URL consisting of:<br>protocol - req (e.g. "http" or "presto:http:")<br>designator - req (either "email_localpart@" or "//")<br>host - req (anything matching our "host" extension)<br>port - opt (e.g. ":443")<br>path - opt (e.g. "/path/to/content.html")<br>params - opt (e.g. "q=regular%20expression&items=10") |
 
 Time and Date:
-  day      - Day of week, Sunday through Saturday, or any unambiguous
-             prefix thereof.
-  day3     - Firt three letters of any month.
-  DAY      - Full name of month.
-  month    - January through December, or any unambiguous prefix
-             thereof.
-  month3   - First three letters of any month.
-  MONTH    - Full name of any month.
-  date_YMD - [CC]YY(-|/|.)[M]M(-|/|.)[D]D
-  date_YmD - [CC]YY(-|/|.)month(-|/|.)[D]D
-  date_mD  - "month DD"
-  time_HM  - [H]H(-|:|.)MM
-  time_HMS - [H]H(-|:|.)MM(-|:|.)SS
+
+|Extension|Description|
+|:----|:---|
+|  day      | Day of week, Sunday through Saturday, or any unambiguous prefix thereof.
+|  day3     | First three letters of any day.
+|  DAY      | Full name of month.
+|  month    | January through December, or any unambiguous prefix thereof.
+|  month3   | First three letters of any month.
+|  MONTH    | Full name of any month.
+|  date_YMD | `[CC]YY(-|/|.)[M]M(-|/|.)[D]D`
+|  date_YmD | `[CC]YY(-|/|.)month(-|/|.)[D]D`
+|  date_mD  | "month DD"
+|  time_HM  | `[H]H(-|:|.)MM`
+|  time_HMS | `[H]H(-|:|.)MM(-|:|.)SS`
 
 Some of these preloaded RE extensions are computed directly in the
 module. For instance the day, day3, DAY, month, month3, and MONTH
