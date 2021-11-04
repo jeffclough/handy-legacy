@@ -95,19 +95,20 @@ Network:
 
 Time and Date:
 
-|Extension|Description|
-|:----|:---|
-|  day      | Day of week, Sunday through Saturday, or any unambiguous prefix thereof.
-|  day3     | First three letters of any day.
-|  DAY      | Full name of month.
-|  month    | January through December, or any unambiguous prefix thereof.
-|  month3   | First three letters of any month.
-|  MONTH    | Full name of any month.
-|  date_YMD | `[CC]YY(-|/|.)[M]M(-|/|.)[D]D`
-|  date_YmD | `[CC]YY(-|/|.)month(-|/|.)[D]D`
-|  date_mD  | "month DD"
-|  time_HM  | `[H]H(-|:|.)MM`
-|  time_HMS | `[H]H(-|:|.)MM(-|:|.)SS`
+<table>
+  <tr><th>Extension</th><th>Description</th></tr>
+  <tr><td>day      </td><td> Day of week, Sunday through Saturday, or any unambiguous prefix thereof. </td></tr>
+  <tr><td>day3     </td><td> First three letters of any day. </td></tr>
+  <tr><td>DAY      </td><td> Full name of month. </td></tr>
+  <tr><td>month    </td><td> January through December, or any unambiguous prefix thereof. </td></tr>
+  <tr><td>month3   </td><td> First three letters of any month. </td></tr>
+  <tr><td>MONTH    </td><td> Full name of any month. </td></tr>
+  <tr><td>date_YMD </td><td> [CC]YY(-|/|.)[M]M(-|/|.)[D]D </td></tr>
+  <tr><td>date_YmD </td><td> [CC]YY(-|/|.)month(-|/|.)[D]D </td></tr>
+  <tr><td>date_mD  </td><td> "month DD" </td></tr>
+  <tr><td>time_HM  </td><td> [H]H(-|:|.)MM </td></tr>
+  <tr><td>time_HMS </td><td> [H]H(-|:|.)MM(-|:|.)SS </td></tr>
+</table>
 
 Some of these preloaded RE extensions are computed directly in the
 module. For instance the day, day3, DAY, month, month3, and MONTH
