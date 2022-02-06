@@ -1,16 +1,174 @@
 #!/usr/bin/env python3
 
-import os,shlex,stat,sys,time
+"""
+
+Facilitate installing building (if necessary) and installing
+executables.
+
+"""
+
+#__all__=[
+#  'Command',
+#  'Copy',
+#  'Error',
+#  'TargetHandler',
+#  'V',
+#  'opt',
+#  'dir_mode',
+#  'DEVNULL',
+#  'PIPE',
+#  'STDOUT',
+#]
+
+import os,shlex,shutil,stat,sys,time
+from abc import ABC,abstractmethod
+from enum import Enum,Flag,auto
 from functools import reduce
+from subprocess import run,DEVNULL,PIPE,STDOUT,CompletedProcess
 
-# Let me call "run('some command with arguments',stdout=PIPE,stderr=PIPE)".
-from subprocess import run,DEVNULL,PIPE,STDOUT
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Some constants and configuration variables.
 
-# We need a couple of maps between Unix file modes and Python file modes.
-unix_mode_to_python={
+# These verbosity flag values can be combined bitwise in any
+# combination.
+class V(Flag):
+  QUIET=0
+  DEPS=auto()
+  TIME=auto()
+  DEBUG=auto()
+
+opt=type('',(),dict(
+  verbosity=V.QUIET,
+  force=False,
+  dry_run=False
+))
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# This is this module's main exception type.
+
+class Error(Exception):
+  pass
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Some general utility functions.
+
+def expand_all(filename):
+  "Return the filename with ~ and environment variables expanded."
+
+  p=os.path.expandvars(os.path.expanduser(filename))
+  if opt.verbosity & V.DEBUG:
+    print(f"expand_all({filename!r}) -> {p!r}",file=stderr)
+  return p
+
+def filetime(filename,default=0):
+  """Return the modification time of the given file in floating point
+  epoch seconds. If the file does not exist, return the default value."""
+
+  try:
+    default=os.path.getmtime(filename)
+  except:
+    pass
+  if opt.verbosity & V.TIME:
+    print(f"  {filename}\tt={default:0.6f} ({time.strftime('%Y-%m-%d %H:%M:%S.%f',time.localtime(default))})",file=sys.stderr) 
+  return default
+
+def is_newer(src,dst,bias=-0.001):
+  """Return true if src names a file that is newer than the file dst
+  names (or if dst doesn't exist).
+
+  For the sake of out_of_date()'s efficiency, the dst argument may be a
+  (string,float) typle rather than a string, in which case, the string
+  is the name of the file, and the float is its timestamp value.
+
+  The bias argument is the number of seconds to add to the source time
+  in order to bias comparison with the time of the destination file. It
+  defaults to -0.001 seconds (-1 miliseconds) to avoid needless file
+  copies on some operating systems. (I'm looking at you, macOS.)"""
+
+  ts=filetime(src,1)+bias
+  if isinstance(dst,tuple):
+    dst,td=dst
+  else:
+    td=filetime(dst)
+  if opt.verbosity & V.TIME:
+    rel='newer' if ts>td else 'older'
+    print(f"  {src} is {rel} than {dst}",file=sys.stderr)
+  return opt.force or (ts>td)
+
+def out_of_date(target,*deps):
+  """Return True if any of the other filename arguments identifies a
+  file with a later modification time than target. (Otherwise, return
+  False.)"""
+
+  if not opt.force and os.path.exists(target):
+    t=filetime(target)
+  else:
+    if opt.verbosity & V.DEPS:
+      if opt.force:
+        print(f"  {target} is being forced out of date.",file=sys.stderr)
+      else:
+        print(f"  {target} is out of date because it's missing.",file=sys.stderr)
+    return True
+  for d in deps:
+    if isinstance(d,(list,tuple)):
+      if outOfDate(target,*d):
+        return True
+    elif not os.path.exists(d):
+      # Return True for non-existant dependency in order to provoke an
+      # error when the dependency is not found.
+      if opt.verbosity & V_DEPS:
+        print(f"  {target} depends on {d}, which doesn't exist.",file=sys.stderr)
+      return True
+    elif is_newer(d,(target,t)):
+      if opt.verbosity & V_DEPS:
+        print(f"  {target} depends on {d}, which is newer.",file=sys.stderr)
+      return True
+  return False
+
+def expand_wildcards(filespec):
+  """Return a list of all the files matching filespec. If there are no
+  such files, return a list with only filespec in it."""
+
+  files=glob(filespec)
+  if not files:
+    files=[filespec]
+  return files
+
+def dir_mode(file_mode):
+  """Given a file mode (of the shell variety), return a mode value
+  appropriate for creating a directry to hold such a file. For instance,
+  dir_mode(0o640) will return 0x750. The idea is to enable directory
+  searching for every group with read or write access.
+  """
+
+  # Yes, I could have used a loop, but isn't this easier to read?
+  m=file_mode
+  if m & 0o600: m|=0o100
+  if m & 0o060: m|=0o010
+  if m & 0o006: m|=0o001 
+  return m
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# File permission mode values used by Unix shell commands (rwxrwxrwx) are not
+# necessarily the same values used by the stat structure, though it seems they
+# often are. So use stat_mode() to convert from a Unix shell mode value like
+# 0o600 to (stat.S_IRUSR | stat.S_IWUSR). It's a little like the ntohs() and
+# htons() network functions. You can get by without them if you're on a
+# big-endian platform, but it's much safer to use them.
+#
+# There's also a stat_mode() function to convert mode values in the other
+# direction.
+
+# We need a couple of maps between Unix file modes and stat file modes.
+shell_to_stat_values={
   0o4000:stat.S_ISUID,
   0o2000:stat.S_ISGID,
   0o1000:stat.S_ISVTX,
+  0o400:stat.S_IRUSR,
   0o200:stat.S_IWUSR,
   0o100:stat.S_IXUSR,
   0o040:stat.S_IRGRP,
@@ -21,35 +179,26 @@ unix_mode_to_python={
   0o001:stat.S_IXOTH,
 }
 
-python_mode_to_unix={v:k for k,v in unix_mode_to_python.items()}
+# This is the reverse look-up dictionary. If you have some bitwise combinarion
+# of stats.I[RWX](USR|GRP|OTH) values, this will give you the equivalent Unix
+# shell value.
+stat_to_shell_values={v:k for k,v in shell_to_stat_values.items()}
 
-def u2p_mode(mode):
-  "Converto mode from the Unix shell world to the Python world."
+def stat_mode(mode):
+  "Converto mode from the Unix shell world to the stat world."
 
   return reduce(
-    (lambda accumulator,bit: accumulator | unix_mode_to_python[bit]),
-    [2**b for b in range(12)], # First 12 single-1-bit values.
-    0                          # Our initializer.
+    (lambda accumulator,bit: accumulator | shell_to_stat_values[bit]),
+    [n for n in shell_to_stat_values.keys() if n & mode],
+    0
   )
 
-def p2u_mode(mode):
-  "Converto mode from the Python world to the Unix shell world."
+def shell_mode(mode):
+  "Convert mode from the stat world to the Unix shell world."
 
   return reduce(
-    (lambda accumulator,bit: accumulator | python_mode_to_unix[bit]),
-    [
-      stat.S_ISUID,
-      stat.S_ISGID,
-      stat.S_ISVTX,
-      stat.S_IWUSR,
-      stat.S_IXUSR,
-      stat.S_IRGRP,
-      stat.S_IWGRP,
-      stat.S_IXGRP,
-      stat.S_IROTH,
-      stat.S_IWOTH,
-      stat.S_IXOTH,
-    ],
+    (lambda accumulator,bit: accumulator | stat_to_shell_values[bit]),
+    [n for n in stat_to_shell_values.keys() if n & mode],
     0
   )
 
@@ -83,102 +232,233 @@ def chmod(path,mode,dir_fd=None,follow_symlinks=True):
   0001  For files, allow execution by others. For directories allow
         others to search in the directory."""
 
-  os.chmod(path,u2p_mode(mode),dir_fd=dir_fd,follow_symlinks=follow_simlinks)
+  os.chmod(path,stat_mode(mode),dir_fd=dir_fd,follow_symlinks=follow_simlinks)
 
 def getmod(path,dir_fd=None,follow_symlinks=True):
   "Return the Unix shell version of fthe given files's mode."
 
-  return p2u_mode(os.stat(path,dir_fd=dir_fd,follow_symlinks=follow_symlinks).st_mode)
+  return shell_mode(os.stat(path,dir_fd=dir_fd,follow_symlinks=follow_symlinks).st_mode)
 
-class Builder(object):
-  "Instances of builder know how to build targets from source."
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-  def __init__(self,command):
-    """Instantiate this Builder object with the command it will use to
-    build targets from source files."""
 
-    self.command=command
 
-  def build(self,sources,output,options=None,verbose=False):
-    "Run our build command on our sources to produce out output."
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-    # Make sure our sources argument is a sequence.
-    if isinstance(sources,str):
-      sources=shlex.split(sources)
-    elif not isinstance(sources,(list,tuple)):
-      sources=[sources]
+class TargetHandler(ABC):
+  """TargetHandler is an abstract base class of classes that know how to
+  produce a target file from one or more sources. Tilde- or variable-
+  expansion is performed on the target filespec if appropriate.
 
-    # Make sure any Target instances among our sources are up to date.
-    for s in sources:
-      if isinstance(s,Target):
-        s.build()
+  See the Copy class for examples.
+  """
 
-    # Continue only if any of our sources is newer than our target file.
-    if os.path.exists(output):
-      t_target=os.stat(output).st_mtime
-      if not [1 for s in sources if os.stat(str(s)).st_mtime<t_target]:
-        if verbose:
-          print(f"Target is up to date: {output}")
-        return 0 # Nothing to do, and all is well.
+  def __init__(self,target):
+    self.target=expand_all(target) # The file (or symlink) to be created.
+    self.perms=None     # Set this with the mode(perms) method.
+    self.source=None    # Set this with the from(source) method.
+    # If setting both owner and group, you MAY do so with a single call to the
+    # owner(user='someone',group='some_group') method.
+    self.user=None      # Set this with the owner(user='someone') method.
+    self.group=None     # Set this with the owner(group='some_group') method.
 
-    # So we're running the command.
-    if isinstance(sources,(list,tuple)):
-      sources=shlex.join(sources)
-    elif not isinstance(sources,str):
-      sources=str(sources)
-    if not isinstance(output,str):
-      output=str(output)
-    if not isinstance(options,str):
-      options=str(options)
-    cmd=self.command.format(sources=sources,output=output,options=options)
+  def frum(self,*args):
+    "Give one or more source files for our target."
+    
+    if len(args)>1:
+      self.source=args
+    elif len(args)==1:
+      self.source=args[0]
+    else:
+      self.source=None
 
-    if verbose:
-      arg_input=f"{len(input)} characters" if isinstance(input,(str,bytes)) else str(input)
-      arg_stdin='PIPE' if stdin==PIPE else 'STDOUT' if stdin==STDOUT else 'DEVNULL' if stdin==DEVNULL else str(stdin)
-      arg_stdout='PIPE' if stdout==PIPE else 'STDOUT' if stdout==STDOUT else 'DEVNULL' if stdout==DEVNULL else str(stdin)
-      arg_stderr='PIPE' if stderr==PIPE else 'STDOUT' if stderr==STDOUT else 'DEVNULL' if stderr==DEVNULL else str(stdin)
-      print(f"""{cmd}
-    input: {arg_input}
-    stdin: {arg_stdin}
-    stdout: {arg_stdout}
-    stderr: {arg_stderr}
-    ... running ...""")
-      t0=time.time()
-    proc=run(self.cmd.format(sources=sources,output=output,options=options))
-    if verbose:
-      t=time.time()
-      arg_stdout='None' if proc.stdout is None else f"{len(proc.stdout)} characters"
-      arg_stderr='None' if proc.stderr is None else f"{len(proc.stderr)} characters"
-      print(f"""\
-    elapsed: {t-t0:0.3f} seconds
-    return code: {proc.returncode}
-    stdout: {arg_stdout}
-    stderr: {arg_stderr}""")
+  def owner(self,user=None,group=None):
+    "Set the desired owner and/or group of the target."
 
-    if proc.stdout:
-      print(proc.stdout)
+    if user is not None:
+      self.user=user if user else None
+    if group:
+      self.group=group if group else None
 
-    if proc.returncode or pro.stderr:
-      print(f"Error {pro.returncode} on target {output}",file=sys.stderr)
-      if proc.stderr:
-        print(proc.stderror,file=sys.stderr)
+  def mode(self,perms):
+    "Set the permissions of our target file."
 
-    return proc.returncode
+    self.perms=perms
 
-class Target(object):
-  "This is a single file (with possible symlinks) to be installed."
+  @abstractmethod
+  def __call__(self):
+    """Pull the trigger by calling this Copy instance directly. This
+    method MUST be implemented in a subclass."""
 
-  def __init__(self,source,destination,mode=None,symlinks=None,dependencies=None,build_with=None):
-    self.source=source
-    self.destination=destination
-    self.mode=mode
-    self.symnlinks=symnlinks
-    self.dependencies=dependencies
-    self.build_with=build_with
+    pass
 
-    if self.mode is None:
-      self.mode=getmod(source)
+class Folder(TargetHandler):
+  """A Folder instance will create a given directory if doesn't already
+  exist, createding any missing intermediate directories along the way,
+  or it will raise an exception if it already exists as something other
+  than a directory. (It does follow symlinks.) The default mode of the
+  new directory is 0o755.
 
-  def __str__(self):
-    return self.destination
+  Tilde- and variable-expansion are performed on the name of the path
+  first.
 
+  Example: Make sure our target folder exists before attempting to
+  install files there.
+
+    Folder('~/my/bin')() # Configure and create in one step.
+
+  Example: Same as above, but specify a mode of 0o750.
+
+    Folder('~/my/bin').mode(0o750)()
+
+  Example: Create a directory and get the expanded path to the created
+  (or existing) directory.
+
+    libs=Folder('~/my/lib') # Set up the folder we need.
+    print(f"Making sure {libs.target} exists ...")
+    libs() # You have to "call" this Folder instance to do the work.
+
+  """
+
+  def __init__(self,target):
+    super().__init__(target)
+    self.mode=0o755
+
+  def __call__(self):
+    "Create the any missing parts of our given directory."
+
+    if os.path.exists(self.target) and not os.path.isdir(self.target):
+      raise Error("Cannot create directory {self.target!r} because it already exists as something else.")
+    else:
+      # Oddly, os.mkdirs() uses the umask to set permissions on any intermediate
+      # directories it creates. It uses its mode parameter only when creating
+      # the leaf directory.
+      orig_umask=os.umask(stat_mode(self.mode^0o777))
+      os.mkdirs(self.target,mode=stat_mode(self.mode))
+      os.umask(orig_umask)
+
+    return self
+
+class Copy(TargetHandler):
+  """Instances of Copy know how to copy a source file to a destination.
+  Use Copy(target).as_sysmlink() to configure the Copy instance to
+  create a symlink instead of copying the source to the target.
+
+  Instances of Copy must be given exactly one source file (using the
+  frum() method, misspelled because "from" is a keyword).
+
+  Example: Copy file named by src to file named by targ.
+
+    Copy(targ).frum(src)()
+
+  Example: Copy src to targ, setting the mode to 750 and user and group
+  ownership to root and wheel, respectively.
+
+    Copy(targ).frum(src).mode(0o750).owner(user='root',group='wheel')()
+
+  Example: Create a symlink for src at targ.
+
+    Copy(targ).frum(src).as_symlink()()
+  """
+
+  def __init__(self,target):
+    super().__init__(target)
+    self.symlink=False  # Change this with the as_symlink() method.
+
+  def as_symlink(self):
+    "We'll symplink target to source rather than copy it."
+
+    self.symlink=True
+    return self
+
+  def __call__(self):
+    "Perform the copy operation by calling this Copy instance directly."
+
+    # Make sure we have exactly one source file.
+    if not isinstance(self.source,str):
+      raise Error(f"""Class {__class__.__name__} MUST have exactly one source file (not {self.source!r}).""")
+
+    if os.path.isdir(self.target):
+      # Compute our actual target path.
+      self.target=os.path.join(self.target,os.path.basename(self.source))
+
+    if self.symlink:
+      # Simply create a symlink from our target to our source.
+      if opt.dry_run:
+        print(f"Suppressing: {self.source} --> {self.target}")
+      else:
+        os.symlink(self.source,self.target)
+    else:
+      # Copy source to target, keeping as much metadata as possible.
+      if opt.dry_run:
+        print(f"Suppressing: {self.source} ==> {self.target}")
+      else:
+        self.target=shutil.copy2(self.source,self.target)
+        # Set the user and or group ownership if this instance is so configured.
+        if self.user or self.group:
+          shutil.chown(self.target,user=self.user,group=self.group)
+
+    return self
+
+class Command(object):
+  def __init__(self,cmd,input=None,stdin=None,stdout=None,stderr=None):
+    "Initialize this Command instance."
+
+    self.cmd=cmd
+    self.input=input
+    self.stdin=stdin
+    self.stdout=stdout
+    self.strerr=stderr
+    self.result=None
+
+  def __call__(self):
+    "Run the command the caller has set up. Return the exit status."
+
+    if opt.dry_run:
+      print(f"Suppressing: {cmd}")
+      self.result=CompletedProcess(shlex.split(cmd),0) # Assume success.
+    else:
+      r=self.result=run(self.cmd,text=True,stdin=self.stdin,stdout=self.stdout,stderr=self.stderr)
+      if r.returncode:
+        if r.stdout:
+          print(r.stdout.read())
+        if r.stderr:
+          print(r.stderr.read(),file=sys.stderr)
+        raise Error(f"Non-zero return code ({r.returncode}) from \"{self.cmd}\".")
+
+    return self
+
+
+if __name__=='__main__':
+  import doctest
+
+  def test_mode_conversion():
+    """
+    >>> stat_mode(0o700)==stat.S_IRUSR|stat.S_IWUSR|stat.S_IXUSR
+    True
+    >>> stat_mode(0o070)==stat.S_IRGRP|stat.S_IWGRP|stat.S_IXGRP
+    True
+    >>> stat_mode(0o007)==stat.S_IROTH|stat.S_IWOTH|stat.S_IXOTH
+    True
+    >>> shell_mode(stat.S_IRUSR|stat.S_IWUSR|stat.S_IXUSR)==0o700
+    True
+    >>> shell_mode(stat.S_IRGRP|stat.S_IWGRP|stat.S_IXGRP)==0o070
+    True
+    >>> shell_mode(stat.S_IROTH|stat.S_IWOTH|stat.S_IXOTH)==0o007
+    True
+    >>> dir_mode(0o640)==0o750
+    True
+    >>> dir_mode(0o400)==0o500
+    True
+    """
+
+    pass
+
+  failed,total=doctest.testmod()
+  if failed:
+    print(f"Failed {failed} of {total} tests.")
+    sys.exit(1)
+
+  print(f"Passed all {total} tests!")
