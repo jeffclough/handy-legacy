@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 try:
   import argparse
@@ -39,7 +39,8 @@ def read_file(filename):
   count=[0]*256
   f=open(filename,'rb')
   for b in f.read():
-    count[ord(b)]+=1
+    #count[ord(b)]+=1
+    count[b]+=1
   f.close()
   return count
 
@@ -82,7 +83,7 @@ def write_counts(count):
       maxbyte=0x80
     else:
       maxbyte=((maxbyte+0x0f)&0xfff0)+1
-    maxrow=maxbyte/16
+    maxrow=maxbyte//16
 
     # Stringify our counts in preparation for formatting.
     if opt.values=='percent':
@@ -121,20 +122,20 @@ def write_counts(count):
     if opt.verbose:
       # Show and ASCII chart above the table of our character counts.
       for r in range(maxrow):
-        print ('%02x '%(r*16))+(
+        print(('%02x '%(r*16))+(
           ' '.join([
               '%*s'%(colwid[c],char_names.get(r*16+c,chr(r*16+c)))
                 for c in range(0x10)
             ])
-        )
+        ))
 
     # Finally, print our table.
     if opt.values=='percent':
-      print '   '+(' '.join(['%*s'%(colwid[c],'%02x '%c) for c in range(0x10)]))
+      print('   '+(' '.join(['%*s'%(colwid[c],'%02x '%c) for c in range(0x10)])))
     else:
-      print '   '+(' '.join(['%*s'%(colwid[c],'%02x'%c) for c in range(0x10)]))
+      print('   '+(' '.join(['%*s'%(colwid[c],'%02x'%c) for c in range(0x10)])))
     for r in range(maxrow):
-      print ('%02x '%(r*16))+(' '.join(['%*s'%(colwid[c],table[r][c]) for c in range(0x10)]))
+      print(('%02x '%(r*16))+(' '.join(['%*s'%(colwid[c],table[r][c]) for c in range(0x10)])))
 
 # We're reading from standard input, default to handling it first.
 if not sys.stdin.isatty() and '-' not in opt.files:
@@ -149,7 +150,7 @@ for filename in opt.files:
     aggregated=[aggregated[i]+count[i] for i in range(len(aggregated))]
   else:
     if opt.output!='csv':
-      print '\n%s:'%filename
+      print('\n%s:'%filename)
     write_counts(count)
 if opt.aggregate:
   write_count(aggregated)
