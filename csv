@@ -1,8 +1,11 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
-import csv,optparse,os,pipes,re,shlex,sys
+import csv,locale,optparse,os,pipes,re,shlex,sys
 import OptionParserFormatters
 from handy import die,shellify
+from functools import reduce
+
+#locale.setlocale(locale.LC_ALL, '')
 
 #def die(msg,rc=1):
 #  if msg:
@@ -53,14 +56,17 @@ class CsvDialectError(Exception):
   pass
 
 re_dialect=re.compile(
-  '(?P<delimiter>.)'
-  '(?P<quotechar>.)'
-  '(?P<quoting>.)'
-  '(?P<doublequote>[ft])'
-  '(?P<escapechar>.)'
-  '(?P<skipinitialspace>[ft])'
-  '(?P<commentchar>.)'
-  '(?P<linesep>.*)'
+  (
+    '(?P<delimiter>.)'
+    '(?P<quotechar>.)'
+    '(?P<quoting>.)'
+    '(?P<doublequote>[ft])'
+    '(?P<escapechar>.)'
+    '(?P<skipinitialspace>[ft])'
+    '(?P<commentchar>.)'
+    '(?P<linesep>.*)'
+  ),
+  re.DOTALL # required for <linesep> to match newline characers.
 )
 
 class CsvDialect(csv.Dialect):
@@ -71,7 +77,7 @@ class CsvDialect(csv.Dialect):
   CsvDialect(delimiter=',',quotechar='"',escapechar='\\\\',doublequote=True,skipinitialspace=False,lineterminator='\\n',quoting=0)
   """
   #>>> print repr(CsvDialect("|'"))
-  #CsvDialect(delimiter='|',quotechar="'",escapechar='\\\\',doublequote=True,skipinitialspace=False,lineterminator='\\n',quoting=0)
+  #CsvDialect(delimiter='|',quotechar="'",escapechar='\\\\',doublequote=True,quoting=0,skipinitialspace=False,commentchar='#',lineterminator='\\n')
 
   # This spec string contains default values.
   default_spec_string=',"mt\\f#'+os.linesep
@@ -130,11 +136,15 @@ class CsvDialect(csv.Dialect):
     self.escapechar=d['escapechar']
     self.doublequote=d['doublequote']=='t'
     self.skipinitialspace=d['skipinitialspace']=='t'
-    self.lineterminator=spec[6:] # Because d['lineterminator'] doesn't see the '\n' on the end of the string.
+    self.commentchar=d['commentchar']
+    if self.commentchar==' ':
+      self.commentchar=''
+    #self.lineterminator=spec[7:] # Because d['lineterminator'] doesn't see the '\n' on the end of the string.
+    self.lineterminator=d['linesep']
     return CsvDialect(**d)
 
   def __repr__(self):
-    return '%s(%s)'%(self.__class__.__name__,','.join(['%s=%r'%(a,getattr(self,a)) for a in ('delimiter','quotechar','escapechar','doublequote','skipinitialspace','lineterminator','quoting')]))
+    return '%s(%s)'%(self.__class__.__name__,','.join(['%s=%r'%(a,getattr(self,a)) for a in ('delimiter','quotechar','quoting','escapechar','doublequote','skipinitialspace','commentchar','lineterminator')]))
 
   def __str__(self):
     return "%r"%(
@@ -169,9 +179,9 @@ op=optparse.OptionParser(
 
 Regardless of which usage form is used, data values may be given as command line arguments to supply a row of data that will be appear as the first line of output. Typically, this is used to output column headings, (e.g.: 'First name' Last\ name email account zipcode), but it could just as easily be a row of actual data. Just in case it's not obvious, any data given on the command line in this way is not CSV-formatted. It is parsed by your shell, so use proper escapes and quoting to distinguish one argument (data value) from another.
 
-The output format defaults to CSV (--outfmt=csv), but it can also be set to shell, table, or markdown. If shell, each line of output is a list environment variable assignments separated by semicolons. This REQUIRES that the first line of input data consists of column headings that are valid when used to name environment variables. If --outfmt=table is used, the first row is also assumed to be column headings, but they can be any crazy thing you want. (Don't take that as a challenge.) --outfmt=markdown is just like table output, but it is formatted as Markdown."""
+The output format defaults to CSV (--outfmt=csv), but it can also be set to shell, table, or markdown. If shell, each line of output is a list environment variable assignments separated by semicolons. This REQUIRES that the first line of input data consists of column headings that are valid when used to name environment variables. If --outfmt=table is used, consider using --headings 1 (or 2 or whatever) to say how many lines of input should be treated as column headings. (The default is 0.) "-box" (the default) or "-ascii" can also be appended to "table" to determine whether box-drawing characters of normal ASCII characters are used to separate one column from another and heading roles from data rows. --outfmt=markdown is just like table output, but output is formatted as a Markdown table."""
 )
-op.add_option('--heading-lines',dest='heading_lines',action='store',type=int,default=0,
+op.add_option('--headings',dest='heading_lines',action='store',type=int,default=0,
 help="Specify how many rows (lines) of heading data are in the input. (default: %default)")
 op.add_option('--infmt',dest='infmt',action='store',choices=('csv','excel','shell'),default='csv',
 help="Specify either csv, excel, or shell as the input format. See the usage and description above for details. (default: %default)")
@@ -184,8 +194,8 @@ help="""Specify the CSV reader's dialect as SEP[Q[QSTYLE[DQUOTE[ESC[SKIPWS[EOL]]
     ESC: The escape charater, which makes the next character a literal. (default: \\)
     SKIPWS: Skip whitespace immediately following a field separator. Either 't' or 'f' (the default).
     EOL: The string that terminates every csv row. This is the only part of the dialect specification than can be more than one character in length. (default: %r)"""%(os.linesep,))
-op.add_option('--outfmt',dest='outfmt',action='store',choices=('csv','shell','table','markdown'),default='csv',
-help="Specify either csv, shell, table, or markdown as the output format. See the usage and description above for details. (default: %default)")
+op.add_option('--outfmt',dest='outfmt',action='store',default='csv',
+help="Specify either csv, shell, table, table-ascii, table-box, table-nosep, or markdown as the output format. See the usage and description above for details. (default: %default)")
 op.add_option('--writer',dest='writing',metavar='DIALECT',action='store',default=CsvDialect.default_spec_string,
 help="Specify the CSV writer's dialect, using the same syntax as for --reader. (default: %r)"%(CsvDialect.default_spec_string,))
 #op.add_option('--csv',dest='infmt',action='store_const',const='csv',default='csv',
@@ -199,11 +209,26 @@ help="Give the name or number (starting with 0) of the worksheet to read if --ex
 op.add_option('--test',dest='test',action='store_true',default=False,help="Run internal tests (for debugging purposes only).")
 opt,args=op.parse_args()
 
-#print 'D: opt.writing=%r'%(opt.writing)
+# Cook table output format specs a bit. (This is where opt.style comes from.)
+if opt.outfmt.startswith('table'):
+  if opt.outfmt=='table':
+    opt.style='box'
+  else:
+    opt.style=opt.outfmt[5:]
+    if not opt.style.startswith('-'):
+      die(f"Bad value for --outfmt: {opt.outfmt!r}")
+    opt.style=opt.style[1:]
+    if opt.style not in ('ascii','box','nosep'):
+      die(f"Bad value for --outfmt: {opt.outfmt!r}")
+  opt.outfmt='table'
+if opt.outfmt not in ('csv','shell','table','markdown'):
+  die(f"Bad value for --outfmt: {opt.outfmt!r}")
+
+#print(f"D: opt.writing={opt.writing!r}")
 opt.writing=opt.writing.replace(r'\r','\r').replace(r'\n','\n').replace(r'\t','\t')
-#print 'D: opt.writing=%r'%(opt.writing)
+#print(f"D: opt.writing={opt.writing!r}")
 opt.writing=CsvDialect(opt.writing)
-#print 'D: opt.writing=%r'%(opt.writing)
+#print(f"D: opt.writing={opt.writing!r}")
 
 if opt.worksheet!=None:
   if opt.infmt!='excel':
@@ -274,6 +299,7 @@ class TableWriter(object):
     """outfile is the open file we are to write data to. The following
     arguments are recognized:
 
+      style     either "ascii" or "box" (the default).
       none_as   holds the text to be used to represent None values in
                 the output. The default is simply '', but setting it to
                 something like 'None', 'NULL', or 'N/A' is sometimes
@@ -289,8 +315,16 @@ class TableWriter(object):
 
     self.outfile=outfile
     self.none_as=flags.get('none_as','')
-    self.col_sep=flags.get('col_sep',' | ')
-    self.head_sep=flags.get('head_sep','-')
+    self.style=flags.get('style','box')
+    if self.style=='box':
+      self.col_sep=flags.get('col_sep',' │ ')
+      self.head_sep=flags.get('head_sep','─')
+    elif self.style=='ascii':
+      self.col_sep=flags.get('col_sep',' | ')
+      self.head_sep=flags.get('head_sep','-')
+    elif self.style=='nosep':
+      self.col_sep=flags.get('col_sep',' ')
+      self.head_sep=flags.get('head_sep','')
     self.markdown=flags.get('markdown',False)
     self.data=[] # Our list of data rows.
 
@@ -298,20 +332,23 @@ class TableWriter(object):
     """Only record rows in this writer. The writerows() method is what
     actually writes the output."""
 
-    r=[]
-    for val in row:
-      if val==None:
-        val=self.none_as
-      r.append(val)
-    self.data.append(r)
+    self.data.append(
+      [self.none_as if v is None else v for v in row]
+    )
 
   def writerows(self,rows=None):
-    if rows!=None:
+    """This works just like the regular csv.reader.writerows() if the rows
+    argument refers to data to be written. But if no row data it given,
+    we assume all data has been accumulated, and it's time to write out
+    the table. This latter behavior is specific to TableWriter instances."""
+
+    if rows is not None:
       # Append the caller's rows to output.
       for row in rows:
         self.writerow(row)
     elif self.data:
       if self.markdown:
+        # Write out tabular data as Markdown.
         for r in range(len(self.data)):
           row=self.data[r]
           self.outfile.write('| '+(' | '.join([str(row[c]) for c in range(len(row))]))+'\n')
@@ -324,12 +361,18 @@ class TableWriter(object):
           reduce(max,[len(self.data[r][c]) for r in range(len(self.data))])
             for c in range(len(self.data[0]))
         ]
+        # Write out tabular data.
         for r in range(len(self.data)):
           row=self.data[r]
           self.outfile.write(self.col_sep.join([tabfmt(row[c],wid[c]) for c in range(len(row))])+'\n')
-          if opt.heading_lines>0 and r==opt.heading_lines-1:
-            # Output a line that separates our heading line(s) from the body of the data.
-            self.outfile.write(self.col_sep.replace(' ','-').join(['-'*wid[c] for c in range(len(row))])+'\n')
+          if opt.heading_lines>0 and r<opt.heading_lines:
+            if self.style!='nosep':
+              # Output a line that separates our heading line(s) from the body of the data.
+              self.outfile.write(
+                self.col_sep.replace(' ',self.head_sep).replace('│','┼').replace('|','+').join([
+                  self.head_sep*wid[c] for c in range(len(row))
+                ])+'\n'
+              )
       self.data=[]
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -339,7 +382,6 @@ class TableWriter(object):
 if opt.infmt=='csv':
   opt.reading=CsvDialect(opt.reading.replace(r'\r','\r').replace(r'\n','\n').replace(r'\t','\t'))
   reader=csv.reader(sys.stdin,dialect=opt.reading)
-
 elif opt.infmt=='excel':
   try:
     import xlrd
@@ -372,7 +414,6 @@ elif opt.infmt=='excel':
       r+=1
 
   reader=xlsreader('/dev/stdin',opt.worksheet)
-
 elif opt.infmt=='shell':
   def shellreader(f):
     for line in f:
@@ -383,9 +424,8 @@ elif opt.infmt=='shell':
       yield row
 
   reader=shellreader(sys.stdin)
-
 else:
-  die("Programming error! Unknown input format: %r"%(opt.infmt,))
+  die(f"Programming Error! Unknown input format: {opt.infmt!r}")
 
 # Set up a CSV writer.
 if opt.outfmt=='csv':
@@ -395,13 +435,13 @@ elif opt.outfmt=='shell':
 elif opt.outfmt=='markdown':
   writer=TableWriter(sys.stdout,markdown=True)
 elif opt.outfmt=='table':
-  writer=TableWriter(sys.stdout)
+  writer=TableWriter(sys.stdout,style=opt.style)
 else:
-  die('Programming Error! Bad --outfmt value: %r'%(opt.outfmt))
+  die(f"Programming Error! Bad --outfmt value: {opt.outfmt!r}")
 
 # This is where unit testing is implemented.
 if opt.test:
-  import doctest,StringIO
+  import doctest,io
   failed,total=doctest.testmod()
   if failed:
     sys.exit(1)
@@ -411,21 +451,10 @@ if opt.test:
 if args:
   writer.writerow(args)
 
-# Read standard input, if any.
-if not sys.stdin.isatty():
-  if opt.infmt=='shell':
-    # Parse each line for values as a shell would, and then write each line's
-    # values as a line of CSV-formatted values.
-    for line in sys.stdin:
-      if writing_dialog.quoting==csv.QUOTE_NONNUMERIC:
-        row=[numeric(val) for val in shlex.split(line)]
-      else:
-        row=shlex.split(line)
-      writer.writerow(row)
-  else:
-    # We're just converting from one format to another, maybe.
-    for row in reader:
-      writer.writerow(row)
-    if opt.outfmt in ('markdown','table'):
-      writer.writerows()
+# Read from the reader and write to the writer.
+for row in reader:
+  #print(f"D: row={row!r}")
+  writer.writerow(row)
+if opt.outfmt in ('markdown','table'):
+  writer.writerows()
 
