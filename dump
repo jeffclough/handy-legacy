@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import argparse,os,sys
 import ansi
@@ -27,7 +27,8 @@ def read_chunks(f,size):
   """Generator function that returns UP TO size bytes at a time."""
 
   buf=f.read(size)
-  while buf!='':
+  #while buf!='':
+  while len(buf):
     # print 'D: read %d bytes from %s'%(len(buf),f.name)
     yield buf
     buf=f.read(size)
@@ -80,7 +81,7 @@ def dump(inf,base=16,outf=sys.stdout,start=None,stop=None,bpl=16):
   if start==None: start=0
   if stop==None: stop=size
   if start<0: start=0
-  start=(start/bpl)*bpl # Back start up to the beginning of an output line.
+  start=(start//bpl)*bpl # Back start up to the beginning of an output line.
   if stop>size: stop=size
   if stop<=start or start>size:
     return # Nothing to do.
@@ -108,7 +109,7 @@ def dump(inf,base=16,outf=sys.stdout,start=None,stop=None,bpl=16):
       off=start-loc
       if (loc+off)%bpl!=0:
         # Fill in the start of this line of output.
-        outf.write(afmt%((loc+off)/bpl)*bpl)
+        outf.write(afmt%((loc+off)//bpl)*bpl)
         outf.write(blank+(' '*((cw+1)*(loc+off)%bpl))+norm)
         text=blank+(' '*((loc+off)%bpl))+norm
     else:
@@ -125,11 +126,15 @@ def dump(inf,base=16,outf=sys.stdout,start=None,stop=None,bpl=16):
           # End the previous line with a newline character.
           outf.write('\n')
         # Print the address of this new line.
-        addr=((loc+off)/bpl)*bpl
+        addr=((loc+off)//bpl)*bpl
         outf.write(afmt%addr)
       # Here begins the handling of the byte values:
-      ch=buf[off]
-      val=ord(ch)
+      if TEXT:
+        ch=buf[off]
+        val=ord(ch)
+      else:
+        val=buf[off]
+        ch=chr(val)
       write_byte(outf,bfmt,val,off)
       off+=1
     else:
@@ -164,6 +169,7 @@ def multiple_of_4(n):
 ap=argparse.ArgumentParser(
   description="Output the numeric and textual value of the content of each file on the command line."
 )
+ap.add_argument('--encoding',action='store',default='ISO-8859-1',help="Set the encoding for interpreting the input file. (default: %(default)s)")
 ap.add_argument('--base','-b',type=int,choices=(8,10,16),default=16,help="Base for numeric output. (default: %(default)s)")
 ap.add_argument('-d',dest='base',action='store_const',const=10,help="Same as --base 10.")
 ap.add_argument('-o',dest='base',action='store_const',const=8,help="Same as --base 8.")
@@ -177,11 +183,13 @@ opt=ap.parse_args()
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+TEXT=opt.encoding.lower().startswith('iso')
+
 for fn in opt.filenames:
   try:
-    f=open(fn,'rb')
+    f=open(fn,mode='r',encoding=opt.encoding)
     # print 'D: Opened %s for dumping.'%f.name
     dump(f,base=opt.base,bpl=opt.bpl,start=opt.start,stop=opt.stop)
     f.close()
-  except IOError,e:
-    die('%s: "%s"'%(e.args[1],fn))
+  except IOError as e:
+    die(f"{e.args[1]}: {fn}")
