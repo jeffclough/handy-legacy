@@ -1,0 +1,31 @@
+#!/bin/bash
+
+#
+# This little script makes running commands installed in Python virtualenvs as
+# easy as running any other command.
+# 
+# Somewhere on your PATH, create a symlink to this script with the same name as
+# the command you wan to run in this virtualenv. This script will run the
+# activate the virtualenv, run the command with whatever arguments you've
+# given it, and then deactivate the virtualenv.
+#
+# Example:
+#   cd ~/src/handy/jinja
+#   ln -s "$PATH/runner" ~/my/bin/jinja
+#
+# If there's more than on command under that virtualenv, crate more than one
+# symplink. Then, enter lotus position and breath deeply. Your life is now
+# perfect.
+#
+
+# Get name of command to run.
+cmd=$(basename "$0")
+
+# Get the virtualenv directory.
+V=$(dirname "$(readlink -f "$0")")
+
+# Initialize the virtual environment.
+source "$V/bin/activate"
+
+# Run the command.
+"$V/$cmd" "$@"

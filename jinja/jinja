@@ -1,0 +1,198 @@
+#!/usr/bin/env python
+
+"""
+
+This script's only non-standard dependency is the Jinja2 package, available
+via pip. I generally run it from a Python virtualenv ...
+
+    python3 -m venv jinja
+    cd jinja
+    . bin/activate
+    pip install Jinja2
+    cp {path_to_this_source}/jinja .
+    ./jinja -h
+    :
+    :
+    deactivate
+
+... but make Jinja2 available however you'd like. This script is otherwise
+self-contained.
+
+"""
+
+import argparse,os,pdb,re,sys,traceback
+from datetime import date,datetime,time,timedelta,timezone
+from jinja2 import FileSystemLoader,Environment
+from jinja2.exceptions import TemplateError
+
+DATE_FMT=DEF_DATE_FMT="%Y-%m-%d"
+TIME_FMT=DEF_TIME_FMT="%H:%M:%S"
+DATE_TIME_FMT=DEF_DATE_TIME_FMT=f"{DATE_FMT} at {TIME_FMT}"
+
+def numeric(s):
+  """Convert s, if possible, to an int or fload and return that numeric
+  value. Otherwise, return the original string value."""
+
+  try:
+    n=int(s)
+  except:
+    try:
+      n=float(s)
+    except:
+      n=s
+  return n
+
+def days_in_month(date):
+  "Return the number of days in the given month of the given year."
+
+  if date.month in (4,6,9,11):
+    n=30
+  elif date.month in (1,3,5,7,8,10,12):
+    n=31
+  else:
+    n=29 if date.year%400==0 or (date.year%4==0 and date.year%100!=0) else 28
+  return n
+
+variables=dict(
+  # Constants:
+  DATE_FMT=DATE_FMT,
+  TIME_FMT=TIME_FMT,
+  DATE_TIME_FMT=DATE_TIME_FMT,
+  # Date and time classes:
+  date=date,
+  datetime=datetime,
+  time=time,
+  timedelta=timedelta,
+  timezone=timezone,
+  # Pre-computed variables:
+  now=datetime.now(),
+  today=date.today(),
+  name_of_today=date.today().strftime('%A'),
+  name_of_this_month=date.today().strftime('%B'),
+  # Functions callable from Jinja:
+  days_in_month=days_in_month,
+  numeric=numeric,
+)
+
+def varval(s):
+  "Given a 'variable=value' string, parse it and return a (var,val) tuple."
+
+  eq=s.index('=')
+  var=s[:eq].strip()
+  #val=eval(s[eq+1:].strip())
+  val=s[eq+1:].strip()
+  #print(f"DEBUG: {var=} {val=}")
+  try:
+    val=eval(val,variables)
+    #print(f"DEBUG: {var=} {val=}")
+  except:
+    pass
+  return var,val
+
+ap=argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
+description="""
+Render a Jinga template to standard output. Run this command with no arguments
+for a list of variables, Python classes, and functions available from within a
+template file. You can also include your own variables on the command line as
+arguments.
+
+These are Python entities any template can use:
+
+  Default date and time formats:
+    DATE_FMT='%Y-%m-%d'
+    TIME_FMT='%H:%M:%S'
+    DATE_TIME_FMT='%Y-%m-%d at %H:%M:%S'
+
+  See https://docs.python.org/3/library/datetime.html for full docs on these
+  Python classes:
+    date
+    datetime
+    time
+    timedelta
+    timezone
+
+  Pre-initialized varaibles that might be handy:
+    now=datetime.datetime(2022, 4, 4, 18, 6, 7, 95466)
+    today=datetime.date(2022, 4, 4)
+    name_of_today='Monday'
+    name_of_this_month='April'
+
+  Functions for working with dates:
+    days_in_month(d: date) -> int
+      Returns the number of days in the given year and month.
+
+    numeric(s: str) -> [int,str]
+      Returns the numeric value of the given string if possible. Otherwise, it
+      returns the original string.
+
+""")
+ap.add_argument('--date',action='store',help="Replace toady's date with the given in %r format."%DATE_FMT.replace('%','%%'))
+ap.add_argument('--dir',action='store',type=os.path.expanduser,help="Give the name of the tmeplate directory. This can also be provided by giving a complete path in the argument to --template below.")
+ap.add_argument('--template',action='store',type=os.path.expanduser,help="Give the name of the template to be rendered. If no path is included, --dir (above) must be given.")
+ap.add_argument('--debugger',action='store_true',help="Start this script in the debugger. DON'T DO THIS unless you're familiar with textual debuggers. For the initiated, see https://docs.python.org/3/library/pdb.html#debugger-commands for docs.")
+ap.add_argument('args',metavar='VAR=VAL',action='store',type=varval,nargs='*')
+opt=ap.parse_args()
+
+if opt.debugger:
+  pdb.set_trace()
+
+if '__builtins__' in variables:
+  del variables['__builtins__']
+
+if opt.date:
+  dt=datetime.strptime(opt.date,DATE_FMT)
+  variables['today']=dt.date()
+  variables['now'].replace(year=dt.year,month=dt.month,day=dt.day)
+  variables['name_of_today']=variables['today'].strftime('%A')
+  variables['name_of_this_month']=variables['today'].strftime('%B')
+
+# Let the user choose his own formats for dates and times.
+for var,val in opt.args:
+  if var=='DATE_FMT':
+    DATE_FMT=val
+  elif var=='TIME_FMT':
+    TIME_FMT=val
+  elif var=='DATE_TIME_FMT':
+    DATE_TIME_FMT=var
+# Conditionally update DATE_TIME_FMT.
+if (DATE_FMT!=DEF_DATE_FMT or TIME_FMT!=DEF_TIME_FMT) and DATE_TIME_FMT==DEF_DATE_TIME_FMT:
+  DATE_TIME_FMT=f"{DATE_FMT} at {TIME_FMT}"
+
+for var,val in opt.args:
+  if var not in ('DATE_FMT','TIME_FMT','DATE_TIME_FMT'):
+    variables[var]=val
+
+if not opt.template:
+  print("Available values, classes, and functions available within Jinja templates:")
+  for var,val in variables.items():
+    print(f"    {var}={val!r}")
+  sys.exit(0)
+
+def render_from_template(directory,template_name,**kwargs):
+  loader=FileSystemLoader(directory)
+  env=Environment(loader=loader)
+  template=env.get_template(template_name)
+  return template.render(**kwargs)
+
+path,filename=os.path.split(opt.template)
+if path:
+  opt.dir=path
+  opt.template=filename
+elif filename and not opt.dir:
+  print("""Error: If you give a template filename with not path information, you MUST give a --dir path where the template can be found, even if it's only "." for the current directory.""",file=sys.stderr)
+  ap.print_help()
+  sys.exit(1)
+
+try:
+  s=render_from_template(opt.dir,opt.template,**variables)
+except Exception as e:
+  tb=sys.exc_info()[2]
+  stack=traceback.extract_tb(tb) # Our list of traceback levels, upper to lower.
+  if isinstance(e,(SyntaxError,TypeError,TemplateError)):
+    f=stack[-1]
+    print(f"{f.filename}({f.lineno}): {f.line}",file=sys.stderr)
+    print(f"{e}",file=sys.stderr)
+    sys.exit(1)
+  else:
+    raise
+print(s)
