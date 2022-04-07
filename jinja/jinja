@@ -28,7 +28,7 @@ from jinja2 import FileSystemLoader,Environment
 from jinja2.exceptions import TemplateError
 
 Version=namedtuple('Version','major minor micro releaselevel,serial')
-version=Version(1,1,0,'beta',1)
+version=Version(1,1,0,'beta',2)
 
 DATE_FMT=DEF_DATE_FMT="%Y-%m-%d"
 TIME_FMT=DEF_TIME_FMT="%H:%M:%S"
@@ -196,12 +196,18 @@ These are Python entities for use within templates:
 ap.add_argument('--date',action='store',help="Replace toady's date with the given in %r format."%DATE_FMT.replace('%','%%'))
 ap.add_argument('--dir',action='store',type=os.path.expanduser,help="Give the name of the tmeplate directory. This can also be provided by giving a complete path in the argument to --template below.")
 ap.add_argument('--template',action='store',type=os.path.expanduser,help="Give the name of the template to be rendered. If no path is included, --dir (above) must be given.")
+ap.add_argument('--line-comment','-C',action='store',help="If given, any line begginning with this string will be a comment. Ordinarily statements must be surrounded by {# and #}.")
+ap.add_argument('--line-statement','-S',action='store',help="If given, any line begginning with this string will be a statement. Ordinarily statements must be surrounded by {%% and %%}.")
+ap.add_argument('--extension','-x',dest='extensions',metavar='EXT',action='append',help="Load the given Jinja2 extension (e.g. debug, do, i18n, or loopcontrols), one at a time, using as many --extension options as needed. See https://jinja.palletsprojects.com/en/3.1.x/extensions/#jinja-extensions for how each extension works. A warning message to standard error will result from any attempt to load an unavailable Jinja2 extension.")
 ap.add_argument('--debugger',action='store_true',help="Start this script in the debugger. DON'T DO THIS unless you're familiar with textual debuggers. For the initiated, see https://docs.python.org/3/library/pdb.html#debugger-commands for docs.")
 ap.add_argument('args',metavar='VAR=VAL',action='store',type=varval,nargs='*')
 opt=ap.parse_args()
 
 if opt.debugger:
   pdb.set_trace()
+
+if not opt.extensions:
+  opt.extensions=[]
 
 if '__builtins__' in variables:
   del variables['__builtins__']
@@ -277,20 +283,28 @@ if not opt.template:
 
 def render_from_template(directory,template_name,**kwargs):
   loader=FileSystemLoader(directory)
-  env=Environment(loader=loader)
-  template=env.get_template(template_name)
-  return template.render(**kwargs)
+  env=Environment(loader=loader,line_comment_prefix=opt.line_comment,line_statement_prefix=opt.line_statement)
+  for x in opt.extensions:
+    ext=f"jinja2.ext.{x}"
+    try:
+      env.add_extension(ext)
+    except:
+      print(f"WARNING: Extension {ext!r} could not be loaded.",file=sys.stderr)
+  try:
+    template=env.get_template(template_name)
+    s=template.render(**kwargs)
+  except Exception as e:
+    tb=sys.exc_info()[2]
+    stack=traceback.extract_tb(tb) # Our list of traceback levels, upper to lower.
+    if isinstance(e,(SyntaxError,TypeError,TemplateError)):
+      f=stack[-1]
+      print(f"{f.filename}({f.lineno}): {f.line}",file=sys.stderr)
+      print(f"{e}",file=sys.stderr)
+      sys.exit(1)
+    else:
+      raise
+  return s
 
-try:
-  s=render_from_template(template_dir,template_name,**variables)
-except Exception as e:
-  tb=sys.exc_info()[2]
-  stack=traceback.extract_tb(tb) # Our list of traceback levels, upper to lower.
-  if isinstance(e,(SyntaxError,TypeError,TemplateError)):
-    f=stack[-1]
-    print(f"{f.filename}({f.lineno}): {f.line}",file=sys.stderr)
-    print(f"{e}",file=sys.stderr)
-    sys.exit(1)
-  else:
-    raise
+# Now let Jinja2 do all the heavy lifting.
+s=render_from_template(template_dir,template_name,**variables)
 print(s)
