@@ -118,7 +118,7 @@ Description:
   passwords.
 
   if the RULES argument is given, it is interpreted exactly as the arguemnt
-  to --rules. (The -r and --rules options are depricated and likely to be
+  to --rules. (The -r and --rules options are deprecated and likely to be
   removed in a future version.
   
   If the N argument is given, that number of random strings will be output,
