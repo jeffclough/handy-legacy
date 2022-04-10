@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 
 import base64,optparse,random,re,string,sys
+from collections import namedtuple
 try:
   from OptionParserFormatters import IndentedHelpFormatterWithNL
 except:
   IndentedHelpFormatterWithNL=optparse.IndentedHelpFormatter
+
+Version=namedtuple('Version','major minor micro releaselevel serial')
+version_info=Version(1,1,0,'final',0)
+version=f"{version_info.major}.{version_info.minor}.{version_info.micro}-{version_info.releaselevel}-{version_info.serial}"
 
 debug_indent=0
 def debug(msg,**kwargs):
@@ -79,6 +84,18 @@ rule_sets=dict(
     pronounceable=False,
     typable=False,
     unambiguous=False,
+  ),
+  web=dict( # For website password values.
+    binary=None,
+    classes='Aa1{1,5}_{1,2}',
+    dictionary=False,
+    format='text',
+    min_length=24,
+    max_length=32,
+    capitalize=False,
+    pronounceable=False,
+    typable=False,
+    unambiguous=False,
   )
 )
 rule_set_names=tuple(sorted(rule_sets.keys()))
@@ -91,16 +108,22 @@ rules=type('',(),rule_sets[default_rule_set])
 op=optparse.OptionParser(
   formatter=IndentedHelpFormatterWithNL(2,8),
   usage='''\
-  %prog [options] [N]
+  %%prog [options] [RULES] [N]
+
+Version: %s
 
 Description:
   This command produces a single string of random characters according to the
   options given and writes it to standard output. Such strings are useful as
   passwords.
+
+  if the RULES argument is given, it is interpreted exactly as the arguemnt
+  to --rules. (The -r and --rules options are depricated and likely to be
+  removed in a future version.
   
   If the N argument is given, that number of random strings will be output,
   one per line. Otherwise, a single password will be output.
-'''
+'''%(version,)
 )
 
 op.add_option('--bin',dest='binary',action='store_const',const=8,default=rules.binary,help="""Generate a binary password of 8-bit characters. You should redirect output to a file and/or use the "--format base64" option to avoid spewing random binary crap to your terminal with this option.""")
@@ -109,6 +132,7 @@ op.add_option('-c','--capitalize',dest='capitalize',action='store_true',default=
 op.add_option('--classes',dest='classes',action='store',default=rules.classes,help="""The CLASSES value, which defaults to \"%default\", should contain one character from each character class (lower case, upper case, numerals, and punctuation) that must appear in the generated string.
 
 The format of this option's argument is '(C[{N[,M]}]) ...'. C is a character from the desired characer class (e.g. A-Z for upper case, 0-9 for digits, etc.), N is the minimum number of caracters from from that class (defauls to 1), and M is the maximum number (defaults to --max's value). The (, [, ], and ) are the usual BNF syntax elements. If {N[,M]} is not given, N defaults to 1, and M defauls to --max's value. For example, an argument of Aa9: is the same as Aa9{1}:{1}, but you can use Aa9{1,1}:{1,1} to require at least one and allow no more than one digit and punctuation (each) in a generated password.""")
+op.add_option('-C','--color',dest='color',action='store_true',default=False,help="Colorize each character of passwords according to its character class.")
 op.add_option('-d','--dictionary',dest='dictionary',action='store_true',default=rules.dictionary,help="Use the system dictionary to compose the random password.")
 op.add_option('--debug',dest='debug',action='store_true',default=False,help='For output only a developer could love.')
 op.add_option('-f','--format',dest='format',action='store',choices=('base64','hex','text'),default='text',help="Choose the output format (base64, hex, or text) of the generated password(s). Text output yields one password per line unless --bin or --bin16 is given, in which case text output yields binary output with terminating nulls (8- or 16-bit values, depending on the option given) after each password. (default: %default)")
@@ -118,7 +142,12 @@ op.add_option('-p','--pronounceable',dest='pronounceable',action='store_true',de
 op.add_option('-r','--rules',dest='rules',action='store',choices=rule_set_names,default=None,help="Specify what rule set (choose from %s) to apply when generating passwords, obviating any other options that might be given before or after this one."%(', '.join(rule_set_names)))
 op.add_option('-t','--typable',dest='typable',action='store_true',default=rules.typable,help="Generates random passwords, but ensures they they can be typed easily (on a QWERTY keyboard). May be combined with -p (--pronounceable).")
 op.add_option('-u','--unambiguous',dest='unambiguous',action='store_true',default=rules.unambiguous,help="Don't use characters that are easily misread.")
+op.add_option('--version',action='store_true',help="Show the version of this command and terminate.")
 opt,args=op.parse_args()
+
+if opt.version:
+  print(version)
+  sys.exit(0)
 
 if opt.debug:
   debug('Before testing for rules ...')
@@ -136,10 +165,17 @@ if opt.debug:
 
 # Apply any rule set that may have been given.
 if opt.rules:
-  debug('Applying rules ...')
+  debug('Applying rules-set %r ...'%(opt.rules,))
   for o,v in list(rule_sets[opt.rules].items()):
     debug(    '%s=%r'%(o,v))
     setattr(opt,o,v)
+
+for r in [a for a in args if not a.isdigit()]: # Use all non-numeric arguments as rule-sets.
+  debug('Applying rules-set %r ...'%(r,))
+  for o,v in list(rule_sets[r].items()):
+    debug(    '%s=%r'%(o,v))
+    setattr(opt,o,v)
+args=[a for a in args if a.isdigit()] # Only numeric arguments are left now.
 
 if opt.debug:
   debug('After processing rules (if given) ...')
@@ -685,29 +721,6 @@ class RandomString(object):
     debug('RandomString.__str__() returns %r'%(rs,))
     return rs
     
-
-#class_n='0123456789'
-#class_l='abcdefghijklmnopqrstuvwxyz'
-#class_u='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-#class_p='!@#$%^&*()-=_+~[]{}|;:,./<>?' # I've left out backslash and all quotes.
-#class_s=' '
-#classes=[class_n,class_l,class_u,class_p,class_s]
-## Remove any unneeded character classes.
-## FIXME: The "ch in opt.classes" condition needs to be rewritten to consider
-##        new, more sophisticated syntax of the --classes option's value.
-#for i in range(len(classes)-1,-1,-1):
-#  if not any([ch in classes[i] for ch in opt.classes]):
-#    del classes[i]
-## Make sure we can hold all our character classes in a password.
-#if opt.max_length<len(classes):
-#  print >>sys.stderr,'For %d character classes, a maximum length of %d is too short!'%(len(classes),opt.max_length)
-#  sys.exit(1)
-#chars=''.join(classes)
-#non_alpha_classes=[
-#  s for s in (class_n,class_p,class_s)
-#    if any([ch in s for ch in opt.classes])
-#]
-
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 if len(args)>0:
@@ -734,13 +747,20 @@ debug('    mode=%r'%(mode))
 #def __init__(self,character_classes='A{1}a{10}9',min_length=None,max_length=None):
 randstr=RandomString(opt.classes,opt.min_length,opt.max_length)
 
+if opt.color:
+  import ansi
+  UPPER=ansi.Color('bold yellow on black')
+  LOWER=ansi.Color('bold white on black')
+  NUMBER=ansi.Color('bold green on black')
+  PUNCT=ansi.Color('normal magenta on black')
+
 i=0
 random.seed()
 while i<N:
   s=randstr(mode)
   # The string in s must be valid to get to this point, so print it.
   if opt.format=='base64':
-    print(base64.b64encode(s))
+    print(base64.b64encode(s.encode('utf-8')))
   elif opt.format=='hex':
     print(''.join(['%02x'%ord(ch) for ch in s]))
   elif opt.binary:
@@ -753,5 +773,16 @@ while i<N:
       else:
         sys.stdout.write('\x00\x00')
   else:
-    print(s)
+    if opt.color:
+      ctext=[]
+      for ch in s:
+        if ch.isupper(): color=UPPER
+        elif ch.islower(): color=LOWER
+        elif ch.isdigit(): color=NUMBER
+        else: color=PUNCT
+        ctext.append(color)
+        ctext.append(ch)
+      ansi.paint(*ctext)
+    else:
+      print(s)
   i+=1
