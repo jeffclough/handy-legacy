@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import base64,optparse,random,re,string,sys
 try:
@@ -83,7 +83,7 @@ rule_sets=dict(
 )
 rule_set_names=tuple(sorted(rule_sets.keys()))
 default_rule_set=None
-for rsn,rs in rule_sets.items():
+for rsn,rs in list(rule_sets.items()):
   if rs.get('default'):
     default_rule_set=rsn
 rules=type('',(),rule_sets[default_rule_set])
@@ -137,7 +137,7 @@ if opt.debug:
 # Apply any rule set that may have been given.
 if opt.rules:
   debug('Applying rules ...')
-  for o,v in rule_sets[opt.rules].items():
+  for o,v in list(rule_sets[opt.rules].items()):
     debug(    '%s=%r'%(o,v))
     setattr(opt,o,v)
 
@@ -241,7 +241,7 @@ except NameError:
       return val in self.d
 
     def __repr__(self):
-      return 'set(['+', '.join([repr(val) for val in self.d.keys()])+'])'
+      return 'set(['+', '.join([repr(val) for val in list(self.d.keys())])+'])'
 
     def __str__(self):
       return repr(self)
@@ -292,7 +292,7 @@ def dump_character_classes():
 
   debug("Character classes:")
   debug(None,indent=1)
-  for cc in RandomString.CharacterClass.classes.values():
+  for cc in list(RandomString.CharacterClass.classes.values()):
     debug(repr(cc))
   debug(None,indent=-1)
 
@@ -343,7 +343,7 @@ class RandomString(object):
     def choice(cls):
       "Return a random character class instance."
 
-      return cls.classes[random.choice(cls.classes.keys())]
+      return cls.classes[random.choice(list(cls.classes.keys()))]
 
     @classmethod
     def resetAll(cls):
@@ -351,7 +351,7 @@ class RandomString(object):
 
       debug("CharacterClass.resetAll() ...")
       debug(None,indent=1)
-      for cc in cls.classes.values():
+      for cc in list(cls.classes.values()):
         debug('before: %r'%(cc,))
         cc.resetCount()
         debug('after:  %r'%(cc,))
@@ -512,13 +512,13 @@ class RandomString(object):
         debug("RandomString.CharacterClass.first=%r"%(RandomString.CharacterClass.first,))
 
     # Give min_length a workable value if not supplied by the caller.
-    l=sum([cl.min_count for cl in RandomString.CharacterClass.classes.values()])
+    l=sum([cl.min_count for cl in list(RandomString.CharacterClass.classes.values())])
     if min_length==None or min_length<l:
       min_length=l
     self.min_length=min_length
 
     # Give max_length a workable value if not supplied by the caller.
-    l=sum([cl.max_count for cl in RandomString.CharacterClass.classes.values()])
+    l=sum([cl.max_count for cl in list(RandomString.CharacterClass.classes.values())])
     if max_length==None:
       max_length=l
     if max_length<min_length:
@@ -552,7 +552,7 @@ class RandomString(object):
           
         # Add other character classes as needed.
         if len(pw)<=self.max_length:
-          for cc in RandomString.CharacterClass.classes.values():
+          for cc in list(RandomString.CharacterClass.classes.values()):
             if any([ch in pw for ch in cc.members]):
               continue
             if 'a' in cc.members:
@@ -591,8 +591,8 @@ class RandomString(object):
 
     # Validate number of instances of each character class.
     debug('Checking character classes ...',indent=1)
-    for cl in RandomString.CharacterClass.classes.values():
-      l=len(filter(lambda ch:ch in cl.members,candidate))
+    for cl in list(RandomString.CharacterClass.classes.values()):
+      l=len([ch for ch in candidate if ch in cl.members])
       if l<cl.min_count or l>cl.max_count:
         debug("Not valid (%r). Has %d of class %r. Range is [%d,%d]."%(candidate,l,cl.getName(),cl.min_count,cl.max_count))
         debug(None,indent=-1)
@@ -610,8 +610,8 @@ class RandomString(object):
       if mode.startswith('binary'):
         # Generate an 8- or 16-bit binary password.
         if mode=='binary16':
-          pw=u''.join([
-            unichr(random.randint(0,65535))
+          pw=''.join([
+            chr(random.randint(0,65535))
               for x in range(random.randint(opt.min_length,opt.max_length))
           ])
         else:
@@ -714,7 +714,7 @@ if len(args)>0:
   try:
     N=int(args[0])
   except:
-    print >>sys.stderr,"The N argument must be an integer value."
+    print("The N argument must be an integer value.", file=sys.stderr)
     sys.exit(1)
 else:
   N=1
@@ -740,9 +740,9 @@ while i<N:
   s=randstr(mode)
   # The string in s must be valid to get to this point, so print it.
   if opt.format=='base64':
-    print base64.b64encode(s)
+    print(base64.b64encode(s))
   elif opt.format=='hex':
-    print ''.join(['%02x'%ord(ch) for ch in s])
+    print(''.join(['%02x'%ord(ch) for ch in s]))
   elif opt.binary:
     sys.stdout.write(s)
     if N>1:
@@ -753,5 +753,5 @@ while i<N:
       else:
         sys.stdout.write('\x00\x00')
   else:
-    print s
+    print(s)
   i+=1
