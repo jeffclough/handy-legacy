@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import argparse,datetime,csv,json,os,re,sys
 from pprint import pprint
@@ -44,8 +44,8 @@ ap.add_argument('--show-structure','-S',dest='show_structure',action='store_true
 ap.add_argument('filename',action='store',nargs='?',default=None,help="Name of the file to read JSON data from.")
 try:
   opt=ap.parse_args()
-except Exception,e:
-  print >>sys.stderr,str(e)
+except Exception as e:
+  print(str(e), file=sys.stderr)
   sys.exit(2)
 
 # Set up our dialects.
@@ -66,7 +66,7 @@ def strip_field(s,sides):
   '''Return s stripped of left and/or right white space depending on
   whether sides includes l and/or r.'''
 
-  if type(s) in (str,unicode):
+  if type(s) in (str):
     l='l' in sides
     r='r' in sides
     if l and r:
@@ -92,7 +92,7 @@ def type_description(value):
   elif t==list:
     c+='36' # Cyan
     t='list of %d items'%len(value)
-  elif t in (str,unicode):
+  elif t in (str):
     c+='33' # Yellow
     t='string of %d characters'%len(value)
   elif t==int:
@@ -117,7 +117,7 @@ def show_structure(d,indent=0):
 
   if indent==0:
     c,t=type_description(d)
-    print '%s/%s (%s)'%(c,norm_color,t)
+    print('%s/%s (%s)'%(c,norm_color,t))
     indent+=2
 
   if not (isinstance(d,dict) or isinstance(d,list)):
@@ -126,7 +126,7 @@ def show_structure(d,indent=0):
   if type(d)==dict:
     for k in sorted(d.keys()):
       c,t=type_description(d[k])
-      print '%*s%s%s%s (%s)'%(indent,'',c,k,norm_color,t)
+      print('%*s%s%s%s (%s)'%(indent,'',c,k,norm_color,t))
       show_structure(d[k],indent+2)
   elif isinstance(d,list):
     if len(d):
@@ -214,7 +214,7 @@ type_parsers=(
 )
 
 def evaluate(val):
-  if isinstance(val,basestring):
+  if isinstance(val,str):
     for parser in type_parsers:
       v=parser(val)
       if v!=TypeParser.novalue:
@@ -279,7 +279,7 @@ def all_values(d):
   values=[]
   reading_traversal(d,lambda i,v:values.append((i,v)))
   for i,v in values:
-    print 'i=%r, val=%r'%(i,v)
+    print('i=%r, val=%r'%(i,v))
 
 #def query_hierarchy(data,*args,**kwargs):
 #  """This gererator function returns an iterator over any matching
@@ -308,8 +308,8 @@ if opt.filename==None or opt.filename=='-':
   opt.filename='/dev/stdin'
 if url_parser.match(opt.filename):
   # From a web app.
-  import urllib2
-  f=urllib2.urlopen(opt.filename)
+  import urllib.request, urllib.error, urllib.parse
+  f=urllib.request.urlopen(opt.filename)
   d=f.read()
   f.close()
   d=json.loads(d)
@@ -335,9 +335,9 @@ else:
   elif opt.output_format=='traverse':
     for i,val,depth in iterating_traversal(d):
       if isinstance(val,(dict,list,tuple)):
-        print '%s%s:'%('\t'*depth,i)
+        print('%s%s:'%('\t'*depth,i))
       else:
-        print '%s%s=%r'%('\t'*depth,i,val)
+        print('%s%s=%r'%('\t'*depth,i,val))
   else:
     die("Unrecognized output format %s!. Please complain to the developer."%(opt.output_format,))
 sys.exit(0)
