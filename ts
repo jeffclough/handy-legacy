@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #
@@ -100,14 +100,14 @@ opt,args=op.parse_args()
 if opt.age:
   div=time_unit_divisor(opt.age)
   if div==None:
-    print >>sys.stderr,'%s: Bad --age argument: %s'%(prog,opt.age)
+    print('%s: Bad --age argument: %s'%(prog,opt.age), file=sys.stderr)
     sys.exit(1)
   opt.age=div
 if opt.offset:
   # Convert our --offset argument to positive or negative seconds.
   m=re.match(r'(?P<sign>[-+])?((?P<hours>\d+):(?P<minutes>\d+)|(?P<seconds>\d+))$',opt.offset)
   if not m:
-    print >>sys.stderr,'%s: Bad --offset argument: %r'%(prog,opt.offset)
+    print('%s: Bad --offset argument: %r'%(prog,opt.offset), file=sys.stderr)
     sys.exit(1)
   d=m.groupdict('0')
   for k in d:
@@ -149,7 +149,7 @@ if args:
       t+=utc_offset
       t+=opt.offset
       if opt.age:
-        print int(time.time()-t+utc_offset)/opt.age
+        print(int(time.time()-t+utc_offset)/opt.age)
         continue
       # Format the time as a string.
       t=time.strftime(opt.time_format,time.localtime(t))
@@ -170,11 +170,11 @@ if args:
       if opt.zip:
         filename+='.gz'
       if opt.filename_only:
-        print filename
+        print(filename)
       elif opt.dry_run:
         # Just output the new name of the file.
         if not opt.quiet:
-          print "'%s' %s> '%s'"%(f,'-='[opt.copy],filename)
+          print("'%s' %s> '%s'"%(f,'-='[opt.copy],filename))
       else:
         # Ensure that there's no existing file by the new filename.
         if lexists(filename):
@@ -186,7 +186,7 @@ if args:
           if opt.copy or opt.zip:
             # Copy f to filename.
             if not opt.quiet:
-              print "'%s' %s> '%s'"%(f,'-='[opt.copy],filename)
+              print("'%s' %s> '%s'"%(f,'-='[opt.copy],filename))
             try:
               src=file(f,'rb')
               if opt.zip:
@@ -209,18 +209,18 @@ if args:
           else:
             # Rename f to filename.
             if not opt.quiet:
-              print "'%s' -> '%s'"%(f,filename)
+              print("'%s' -> '%s'"%(f,filename))
             os.rename(f,filename)
   except (IOError,OSError):
     _,e,_=sys.exc_info()
     if e.filename==None:
-      print >>sys.stderr,'%s: %s'%(prog,e.strerror)
+      print('%s: %s'%(prog,e.strerror), file=sys.stderr)
     else:
-      print >>sys.stderr,'%s: %s: %s'%(prog,e.strerror,e.filename)
+      print('%s: %s: %s'%(prog,e.strerror,e.filename), file=sys.stderr)
     sys.exit(2)
 else:
   # We're just outputting the current (or offset) time.
   if opt.age:
-    print (int(time.time())+opt.offset+utc_offset)/opt.age
+    print((int(time.time())+opt.offset+utc_offset)/opt.age)
   else:
-    print time.strftime(opt.time_format,time.localtime(time.time()+opt.offset+utc_offset))
+    print(time.strftime(opt.time_format,time.localtime(time.time()+opt.offset+utc_offset)))
