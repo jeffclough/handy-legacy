@@ -1,0 +1,302 @@
+#!/usr/bin/env python3
+
+import argparse,os,re,sys
+import handy
+
+# Get a debug channel on standard input.
+from debug import DebugChannel
+debug=DebugChannel(False,sys.stdout)
+
+def isbin(filename):
+  """Return True iff the first 4096 bytes of this file contains a non-
+  ASCII byte."""
+
+  ascii=bytearray(set((7,8,9,10,12,13,27))|set(range(0x20, 0x80)))
+  f=open(filename,'rb')
+  buf=f.read(4096)
+  f.close()
+  return bool(buf.translate(None,ascii))
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+#class Format(object):
+#  """This is a very limited implementation of Python 2.7's str.format()
+#  method, but this operates as an independent class. Fieldspecs are {},
+#  {number}, or {name}, where {number} is replaced by a positional
+#  argument, {name} is replaced by a named argument, and {} is a self-
+#  incrementing version of {number}. For example "{}, {}" is the same as
+#  "{1}, {2}".
+#  
+#  >>> args=('Alpha','Bravo','Charlie','Delta')
+#  >>> kwargs=dict(alpha=1,bravo=2,charlie=3,delta=4)
+#  >>> f=Format('One {1} two {2} three {3} four {4} five',strict=True)
+#  >>> f(*args,**kwargs)
+#  'One Alpha two Bravo three Charlie four Delta five'
+#  >>> f=Format('{alpha} {bravo} {charlie} {delta}',strict=True)
+#  >>> f(*args,**kwargs)
+#  '1 2 3 4'
+#  """
+#
+#  format_fieldspec=re.compile(r'{([0-9A-Za-z_]*)}')
+#
+#  def __init__(self,fmt,**kwargs):
+#    '''"Compile" this format spec for easy formatting later. If the
+#    optional strict keyword argument is True, the positional arguments
+#    that don't exist raise IndexError, and named arguments that don't
+#    exist raise KeyError. If strict is False (the default), an empty
+#    string is quietly substituted for that field.'''
+#
+#    self.fmt=fmt
+#    self.strict=kwargs.get('strict',False)
+#
+#    # Get a list of fields in the format string: (start,end,id) tuples
+#    self.fields=[]
+#    i=0 # Empty fieldspecs ({}) will begin with field number 1.
+#    for m in Format.format_fieldspec.finditer(self.fmt):
+#      id=m.group(1)
+#      if len(id)==0:
+#        id=i
+#        i+=1
+#      elif id.isdigit():
+#        i=int(id)
+#        id=i-1
+#      else:
+#        i=len(self.fields)
+#      self.fields.append((m.start(),m.end(),id))
+#    self.fields.reverse() # We always process fields in reverse order.
+#    #print('fields=%r'%(self.fields))
+#
+#  def __call__(self,*args,**kwargs):
+#    """Replace the fieldspecs in this format with our positional and/or
+#    named arguments. Return the resulting string."""
+#
+#    s=self.fmt
+#    
+#    #print('args=%r'%(args,))
+#    #print('kwargs=%r'%(kwargs,))
+#    # Replace fieldspecs with field values.
+#    for start,end,ndx in self.fields:
+#      #print('s=%r, start=%r, end=%r, ndx=%r'%(s,start,end,ndx))
+#      if isinstance(ndx,int):
+#        # Replace fieldspec with this positional argument.
+#        if ndx>=0 and ndx<len(args):
+#          #print('s[:start]=%r, args[ndx]=%r, str(s[end:])=%r'%(s[:start],str(args[ndx]),s[end:]))
+#          s=s[:start]+str(args[ndx])+s[end:]
+#        elif self.strict:
+#          raise IndexError("Format %r given with only %d positional arguments."%(self.fmt,len(args)))
+#        # Snip this out-of-range fieldspec from the result.
+#        s=s[:start]+s[end:]
+#      else:
+#        # Replace fieldspec with this named argument.
+#        if ndx in kwargs:
+#          s=s[:start]+str(kwargs[ndx])+s[end:]
+#        elif self.strict:
+#          raise KeyError("Format %r given with no %r value."%(self.fmt,ndx))
+#        s=s[:start]+s[end:]
+#    #print('s=%r'%(s,))
+#    return s
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+def grep_flags(s):
+  """Return numeric value of all flags in this string. This function is
+  used as a "type" for argparse's purposes."""
+
+  flags=0
+  for ch in s:
+    if ch=='i':
+      flags|=re.IGNORECASE
+    elif ch=='l':
+      flags|=re.LOCALE
+    elif ch=='m':
+      flags|=re.MULTILINE
+    elif ch=='s':
+      flags|=re.DOTALL
+    elif ch=='x':
+      flags|=re.VERBOSE
+    else:
+      raise argparse.ArgumentTypeError('%r is not a valid flag character'%(ch,))
+  return flags
+
+ap=argparse.ArgumentParser()
+ap.add_argument('--flags',metavar='N',type=grep_flags,default=0,help="Use as many of the following as you'd like to set the RE options: i=ignore case, l=make \\w, \\W, \\b, \\B, \\s, and \\S locale dependent, m=multiline mode, s=. also matches newlines, u=make \\w, \\W, \\b, \\B, \\s, and \\S Unicode compatible, x=allow comments and whitespace in REs to pretty them up.")
+ap.add_argument('-1',dest='one_file',action='store_true',help="Matching lines are normally prefixed with the filename followed by a colon when more than one file is being scanned. When only one filename is given, this prefix is omitted. The -1 option tells %(prog)s to behave as if only one file were given, regardless of how many are actually given.")
+ap.add_argument('-i',dest='ignore_case',action='store_true',help="Ignore case. (Same as --flags=i.)")
+ap.add_argument('--ignore',action='store',nargs='*',default=[],help="A list of filespecs and/or regular expressions (prefixed with 're:') that identify files to be completely ignored.")
+ap.add_argument('-l',dest='filename_only',action='store_true',help="Suppress normal output. Just print the name of any file containing at least one match. If -n is used as well, print the number of matches in each file after the filename, separated by a colon.")
+ap.add_argument('-m',dest='match',action='store_true',help="Use the match() function rather than the search() re class method. To over-simplify, match() only finds matches at the beginning of a line, while search() will scan the whole line for a match anywhere within it.")
+ap.add_argument('-n',dest='line_numbers',action='store_true',help="Prefix each line with its linenumber within its file. See -l for how it modifies -n's behavior.")
+ap.add_argument('-v',dest='invert',action='store_true',help="Invert the sense of matching so that non-matching lines are printed.")
+ap.add_argument('--format',action='store',help="Format output with positiononal ({number}) and named ({name}) arguments from matched groups.")
+ap.add_argument('--strict-format',action='store',help="Just like --format, but missing fields cause errors rather than being replace with empty strings.")
+ap.add_argument('--shell',action='store_true',help="Matched named groups are output as 'variable=value' strings separated by semicolons and properly escaped to be save for your shell's eval command.")
+ap.add_argument('--recurse','-r',action='store_true',help="Traverse any given or found directories recursively.")
+ap.add_argument('--depth',action='store',type=handy.non_negative_int,default=sys.maxsize,help="The number of directories to descend below the given path when recursing a directory structure.")
+ap.add_argument('--follow',action='store_true',help="Follow symlinks to directories during recursion. This is done in a way that's safe from symlink loops.")
+ap.add_argument('--prune',metavar='DIR',action='store',nargs='*',default=[],help="A list of filespecs and/or regular expressions (prefixed with 're:') that itentify directories NOT to be recursed into.")
+ap.add_argument('pattern',action='store',help="The regular expression we're looking for.")
+ap.add_argument('args',metavar='FILE',action='store',nargs='*',default=['-'],help="List of files to scan for matches.")
+ap.add_argument('--debug',action='store_true',help="Turn on debug messages.")
+opt=ap.parse_args()
+
+# Fold -i into our flags value.
+if opt.ignore_case:
+  opt.flags|=re.IGNORECASE
+
+## "Compile" any --format value.
+#if opt.strict_format:
+#  opt.format=Format(opt.strict_format,strict=True)
+#elif opt.format:
+#  opt.format=Format(opt.format)
+
+# If we're not explicitly recursing, set the max depth for scanning directories
+# to 0.
+if not opt.recurse and opt.depth==sys.maxsize:
+  opt.depth=0
+
+# If we have only one argument and that argument is not a directory, operate
+# in one-file mode.
+if len(opt.args)==1 and not os.path.isdir(opt.args[0]):
+  opt.one_file=True
+
+opt.prune=handy.compile_filename_patterns(opt.prune)
+opt.ignore=handy.compile_filename_patterns(opt.ignore)
+
+# Compile the user's regular expression with whatever flags the user gave.
+opt.pattern=re.compile(opt.pattern,opt.flags)
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+def grep(filename,pattern,func=None,**kwargs):
+  """For each line in the file that matches the RE in pattern, call
+  func(filename,line_number,line,match,mode), where filename is the name
+  of the file being scanned, line_number is the number of the line
+  within that file where a match was found, line is the text on that
+  line, match is the _sre.SRE_Match object that describes the match, and
+  mode is the grep()'s mode argument. Keyword arguments may be:
+
+    invert - (Default: False) Call func only on non-matching lines.
+    match  - (Default: False) Use match() rather than search().
+    bin_ok - (Default: False) Try to match binary files if True.
+    mode   - (Default: 'print')
+             'print' - Call func(filename,line_number,line,match) for
+                       each match in each file, giving the line number,
+                       content, and match object.
+             'first' - Call func(filename,line_number,line,match) for
+                       the first match in each file.
+             'count' - Call func(filename,match_count,None,None) once
+                       for each file indicating how many matches were
+                       found in that file.
+
+  Return the number of matches found.
+  """
+
+  bin_ok=kwargs.get('bin_ok',False)
+  invert=kwargs.get('invert',False)
+  match=kwargs.get('match',False)
+  mode=kwargs.get('mode','print') # Can be 'print', 'first', or 'count'.
+
+  debug('grep(%r,%r,%s,%s)'%(filename,pattern.pattern,func.__name__,','.join(['%s=%r'%(k,kwargs[k]) for k in sorted(kwargs.keys())])))
+
+  if filename=='-':
+    filename='/dev/stdin'
+    f=sys.stdin
+  else:
+    if isbin(filename) and not bin_ok:
+      return 0
+    f=open(filename)
+  line_count=0
+  matches=0
+  for line in f:
+    line_count+=1
+    if match:
+      m=pattern.match(line)
+    else:
+      m=pattern.search(line)
+    if bool(m)!=invert:
+      matches+=1
+      if mode=='print':
+        func(filename,line_count,line,m,mode)
+      elif mode=='first':
+        func(filename,line_count,line,m,mode)
+        return matches
+      elif mode=='count':
+        pass
+      else:
+        raise ValueError("grep()'s mode argument must be one of 'print', 'first', or 'count'.")
+  if mode=='count':
+    func(filename,matches,None,None,mode)
+  return matches
+
+def show_match(filename,line_number,line,match,mode):
+  """grep() calls this function when it finds matching text in a file
+  (or when it finds a line of non-matching text in a file being
+  processed with grep()'s "invert" argument set to True). Our arguments
+  are described in grep()'s docstring, and What it does is completely up
+  to the application."""
+
+  # Compose any prefix our output line might need.
+  if opt.one_file:
+    out=[]
+  else:
+    out=[filename]
+  if opt.line_numbers or mode=='count':
+    out.append(str(line_number))
+
+  if mode=='print':
+    if line and line[-1]=='\n':
+      line=line[:-1]
+    if opt.format:
+      out.append(opt.format.format(*match.groups(),**match.groupdict()))
+    elif opt.shell:
+      d=match.groupdict()
+      out.append(';'.join([
+        '%s=%s'%(x,replace(' ','_'),handy.shellify(d[x]))
+          for x in sorted(d.keys())
+      ]))
+    else:
+      out.append(line)
+
+  sys.stdout.write(':'.join(out)+'\n')
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+import doctest
+failed,tested=doctest.testmod()
+if failed:
+  sys.exit(1)
+
+# Figure out what "mode" we want grep() to operate in.
+if opt.filename_only:
+  if opt.line_numbers:
+    mode='count'
+  else:
+    mode='first'
+else:
+  mode='print'
+
+# Scan whatever we find in our command line arguments.
+matches=0
+debug('pattern=%r'%(opt.pattern.pattern,))
+debug('args=%r'%(opt.args,))
+for arg in opt.args:
+  if arg!='-' and not os.path.exists(arg):
+    sys.stderr.write('%s: %s: No such file or directory\n'%(ap.prog,arg))
+  if os.path.isdir(arg):
+    if opt.recurse:
+      for fn in handy.file_walker(
+        arg,
+        depth=(0,opt.depth)[opt.recurse],
+        follow_links=opt.follow,
+        prune=opt.prune,
+        ignore=opt.ignore
+      ):
+        #print 'DEBUG: Trying %r'%(fn,)
+        matches+=grep(fn,opt.pattern,show_match,invert=opt.invert,match=opt.match,mode=mode)
+  else:
+    pat,mat=handy.first_match(arg,opt.ignore)
+    if not pat:
+      matches+=grep(arg,opt.pattern,show_match,invert=opt.invert,match=opt.match,mode=mode)
+
+# Set our exit code according to the success or failure of our search.
+sys.exit((1,0)[matches>0])
