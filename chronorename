@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -31,14 +31,14 @@ from optparse import OptionParser,IndentedHelpFormatter
 
 import exiftool
 
-VERSION='0.81'
+VERSION='0.90'
 prog=os.path.basename(sys.argv[0])
 
 def warn(msg):
   '''Write the given message to standard error.'''
 
   if msg:
-    print >>sys.stderr,'%s: %s'%(prog,msg)
+    print('%s: %s'%(prog,msg), file=sys.stderr)
     sys.stderr.flush()
 
 def die(msg,rc=1):
@@ -176,32 +176,32 @@ epilog="""
 FILENAME FORMATTING:
 Use the following field specifiers in the FORMAT value of the -f option. Also, be sure to read through the WARNINGS section below for caveats regarding the horrible things that can happen if you use an unfortunate FORMAT value.
 
-    ${dir}	is replaced with the the path (including the ending '/')
-		to the file being renamed.
+    ${dir}      is replaced with the the path (including the ending '/')
+                to the file being renamed.
 
     ${filename} is replaced with name (but not the extension) of file
-		being renamed.
+                being renamed.
 
-    ${ext}	is replaced with the lower-cased extension (including
-		the dot) of the file being renamed.
+    ${ext}      is replaced with the lower-cased extension (including
+                the dot) of the file being renamed.
 
-    ${EXT}	is replaced with the unmodified extension (including
-		the dot) of the file being renamed.
+    ${EXT}      is replaced with the unmodified extension (including
+                the dot) of the file being renamed.
 
     ${series}   is replaced with the series text specified on the
-		command line, which might be an empty string. (See -s
-		and -S.)
+                command line, which might be an empty string. (See -s
+                and -S.)
 
     ${suffix}   is replaced with the numeric suffix, including a leading
-		- (dash) character that's used to keep from having two
-		files by the same name. If there is no filename
-		conflict, ${suffix} is not used.
+                - (dash) character that's used to keep from having two
+                files by the same name. If there is no filename
+                conflict, ${suffix} is not used.
 
-    ${time}	is replaced with the date and time of the file being
-		renamed. The format of this time stamp is determined by
-		the TIME_FMT value of the --time-fmt option. Use the -t
-		option to determine what date and time are used for a
-		given file.
+    ${time}     is replaced with the date and time of the file being
+                renamed. The format of this time stamp is determined by
+                the TIME_FMT value of the --time-fmt option. Use the -t
+                option to determine what date and time are used for a
+                given file.
 
 TIME FORMATTING:
 The following fields may be used in the TIME_FMT value specified in the --time-fmt option. These are copied directly from Python's strftime() function's documentation.
@@ -220,12 +220,12 @@ The following fields may be used in the TIME_FMT value specified in the --time-f
     %p  Locale's equivalent of either AM or PM.
     %S  Second as a decimal number [00,61].
     %U  Week number of the year (Sunday as the first day of the week)
-	as a decimal number [00,53]. All days in a new year preceding
-	the first Sunday are considered to be in week 0.
+        as a decimal number [00,53]. All days in a new year preceding
+        the first Sunday are considered to be in week 0.
     %w  Weekday as a decimal number [0(Sunday),6].
     %W  Week number of the year (Monday as the first day of the week)
-	as a decimal number [00,53]. All days in a new year preceding
-	the first Monday are considered to be in week 0.
+        as a decimal number [00,53]. All days in a new year preceding
+        the first Monday are considered to be in week 0.
     %x  The national representation of the date.
     %X  The national representation of the time.
     %y  Year without century as a decimal number [00,99].
@@ -336,7 +336,7 @@ if opt.inc_start<1:
 if opt.file_mode:
   try:
     opt.file_mode=int(opt.file_mode,8)
-  except ValueError,e:
+  except ValueError as e:
     die('Invalid file mode: %r'%opt.file_mode)
 
 m=re.match(r'(file|photo|system)([-+])?(\d+[ywdhms])?(\d+[ywdhms])?(\d+[ywdhms])?(\d+[ywdhms])?(\d+[ywdhms])?(\d+[ywdhms])?$',opt.time_from)
@@ -353,10 +353,10 @@ if tsc[0]:
   for dif in tsc[1:]:
     if dif:
       try:
-	#print 'DEBUG: dif=%r, dif[:-1]=%r, dif[-1]=%r'%(dif,dif[:-1],dif[-1])
-	n,u=int(dif[:-1]),dif[-1]
-      except ValueError,e:
-	die('Invalid integer in time-shift component (%s) of %r'%(dif,opt.time_from))
+        #print 'DEBUG: dif=%r, dif[:-1]=%r, dif[-1]=%r'%(dif,dif[:-1],dif[-1])
+        n,u=int(dif[:-1]),dif[-1]
+      except ValueError as e:
+        die('Invalid integer in time-shift component (%s) of %r'%(dif,opt.time_from))
       if u=='y': n*=365*86400
       elif u=='w': n*=7*86400
       elif u=='d': n*=86400
@@ -482,14 +482,15 @@ for oldfn in args:
     continue
 
   # Rename oldfn to newfn.
-  print '%s -> %s'%(oldfn,newfn)
+  print('%s -> %s'%(oldfn,newfn))
   sys.stdout.flush()
   if not opt.dry_run:
     try:
       os.rename(oldfn,newfn)
       if opt.file_mode:
-	chmod(newfn,opt.file_mode)
-    except OSError,(errno,strerr):
+        chmod(newfn,opt.file_mode)
+    except OSError as e:
+      (errno,strerr)=e.args
       warn('%s: %s'%(strerr,oldfn))
 
 #except Exception,e:
