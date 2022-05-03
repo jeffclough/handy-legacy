@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 import optparse,os,sys
 from math import ceil
 from OptionParserFormatters import IndentedHelpFormatterWithNL
@@ -48,8 +48,8 @@ op.add_option('--table',dest='table',action='store_true',help="Rather than trans
 op.add_option('--help',dest='help',action='store_true',default=False,help="Show this usage message.")
 try:
   opt,args=op.parse_args()
-except Exception,e:
-  print >>sys.stderr,str(e)
+except Exception as e:
+  print(str(e), file=sys.stderr)
   sys.exit(2)
 if opt.help:
   op.print_help()
@@ -93,7 +93,7 @@ def based_integer(n,b,prefix='',pad=0):
   n*=sign
   while n>0:
     chars.insert(0,digits[n%b])
-    n/=b
+    n//=b
   if sign==-1:
     chars.insert('-')
   if len(chars)<pad:
@@ -131,10 +131,10 @@ if opt.table:
   sys.stdout.write('\n')
 else:
   if opt.value_only:
-    print opt.delimiter.join([
+    print(opt.delimiter.join([
       based_integer(ord(ch),opt.radix,opt.prefix,opt.pad) for ch in instr
-    ])
+    ]))
   else:
     for ch in instr:
       n=based_integer(ord(ch),opt.radix,opt.prefix,opt.pad)
-      print '%r: %s'%(ch,n)
+      print('%r: %s'%(ch,n))
