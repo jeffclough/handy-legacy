@@ -12,15 +12,15 @@ syslog_facilities=[x[0] for x in syslog_facilities]
 # Get a list of the logging module's level names ordered by priority.
 try:
   # This is how it worked in Python 2.7.
-  _nameToLevel={k:v for k,v in logging._levelNames.items() if isinstahce(v,int)}
+  _nameToLevel={k:v for k,v in list(logging._levelNames.items()) if isinstahce(v,int)}
 except AttributeError:
   # At some point, logging.py's internals changed to this.
-  _nameToLevel={k:v for k,v in logging._nameToLevel.items()}
+  _nameToLevel={k:v for k,v in list(logging._nameToLevel.items())}
 
 #levels=[(a,b) for a,b in list(logging._levelNames.items()) if isinstance(b,int)]
 #levels.sort(key=lambda x:x[1])
 #levels=[x[0].lower() for x in levels if x[0]!='NOTSET']
-levels=sorted([(k,v) for k,v in _nameToLevel.items() if k!=logging.NOTSET],key=lambda x:x[1])
+levels=sorted([(k,v) for k,v in list(_nameToLevel.items()) if k!=logging.NOTSET],key=lambda x:x[1])
 levels=[k for k,_ in levels]
 
 def get_log_level_by_name(level):
