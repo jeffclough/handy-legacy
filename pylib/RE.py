@@ -767,4 +767,5 @@ if __name__=='__main__':
    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
   # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
   # Do whatever our command line says.
-  opt.func(opt)
+  if hasattr(opt,'func'):
+    opt.func(opt)
