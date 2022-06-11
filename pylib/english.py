@@ -38,9 +38,9 @@ bottom for the practical part of the documentation.
 
 Finally, if the English documentation for this module is confusing,
 that's because English itself is a minefield of logical "gotchas." The
-good news is that the Python code that implements each class and
-funciton may well be simpler to understand than the English text that
-documents it. Don't be afraid to look at the code. :-)
+good news is the Python code that implements each class and funciton may
+well be simpler to understand than the English text that documents it.
+Don't be shy about looking at the code. :-)
 """
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -63,13 +63,13 @@ class Suffixer(object):
           s.endswith(e) for e in ('s','sh','ch','x')
         ])),
         text=('A word ending with "s", "sh", "ch", or "x" '
-              'becomes plural by ending "es" instead.')
+              'becomes plural by ending with "es" instead.')
       ),
       Suffixer('y','ies',replace=-1,
         test=(lambda s:
           len(s)>2 and s[-1]=='y' and s[-2] not in 'aeiou'
         ),
-        text=('A word ending with y becomes plural by ending with y '
+        text=('A word ending with y becomes plural by ending with ies '
               'instead, unless preceded by a vowel.')
       ),
       Suffixer('','s'),
@@ -77,21 +77,20 @@ class Suffixer(object):
 
   Notice how the replace argument to Suffixer's constructor is used in
   rules[1]. The -1 value indicates that whatever suffix is applied to
-  the root (we'll talk about root words below), should replace the last
-  character of the given root. This is helpful for pluralizing "penny"
-  to "pennies".
+  the root (we'll talk about root words below), it should replace the
+  last character of the given root. This is helpful for pluralizing
+  "penny" to "pennies".
 
   Notice also that there's no "test" function for that last suffixing
-  rule. That means that its willing to be applied to any root you give
+  rule. That means that it's willing to be applied to any root you give
   it. (And that's why it comes last.)
 
   Here's how those rules express themselves in english:
   1. A word ending with "s", "sh", "ch", or "x" becomes plural by ending
      "es" instead.
-  2. A word ending with y becomes plural by ending with y instead,
+  2. A word ending with y becomes plural by ending with ies instead,
      unless preceded by a vowel.
-  3. A word ending with anything becomes plural by ending with "s"
-     instead.
+  3. All remaining words can be made plural by appending "s" to them.
 
   You might apply this list of suffixing rules to a given root noun like
   this:
@@ -107,7 +106,7 @@ class Suffixer(object):
   The result is to print the word, "cows" because the first matching
   rule was rule[2], and there were 5 cows. But if you change the noun
   in the above example to "church", you'll see "churches" printed
-  because "church" matches the conditions of rule[0].
+  because "church" matches rule[0]'s test.
 
   It's easy (and typical) to wrap all this in a convenient function, and
   maybe subclass Suffixer for special parts of speech, like one for
@@ -124,19 +123,18 @@ class Suffixer(object):
     self.plural=plural
     if replace==None:
       replace=-len(singular)
+      if replace==0:
+        replace='append'
     self.replace=replace
     if text:
       self.text=text
     else:
-      if singular=='':
-        singular='anything'
-      else:
-        singular='"%s"'%(singular,)
-      plural='"%s"'%(plural,)
+      singular='Any word' if singular=='' else f'A word ending with "{singular}"'
+      plural=f'"{plural}"'
       if replace=='append':
-        self.text='A word ending with %s becomes plural by appending %s.'%(singular,plural)
+        self.text=f"{singular} becomes plural by appending {plural}."
       else:
-        self.text='A word ending with %s becomes plural by ending with %s instead.'%(singular,plural)
+        self.text=f"{singular} becomes plural by ending with {plural} instead."
     # Ignore the caller's test function if we already have a test() method.
     if not hasattr(self,'test'):
       if test:
@@ -158,7 +156,7 @@ class Suffixer(object):
       try:
         root=str(root)
       except:
-        raise ValueError('%r (type=%s) is not a string and cannot be converted to a string.'%(root,type(root)))
+        raise ValueError(f"{root!r} (type={type(root)}) is not a string and cannot be converted to a string.")
         
     # Use count to determine which suffix to use.
     if count==1:
@@ -171,22 +169,19 @@ class Suffixer(object):
     else:
       word=root+suffix
 
+    # Calling matchCapitalization() is needed because of how some of our
+    # subclasses work.
     return self.matchCapitalization(root,word)
 
   def __repr__(self):
     """Return a string representing how this object was created."""
 
-#   return "%s(%r,%r,replace=%r,test,text=%r)"%(
-#     self.__class__.__name__,
-#     self.singular,
-#     self.plural,
-#     self.replace,
-#     self.text,
-#   )
+    #return "%s(%r,%r,replace=%r,test=%r,text=%r)"%(
+    #  self.__class__.__name__,self.singular,self.plural,self.replace,self.test,self.text
+    #)
 
-    return "%s(%r,%r,replace=%r,test=%r,text=%r)"%(
-      self.__class__.__name__,self.singular,self.plural,self.replace,self.test,self.text
-    )
+    return
+    f"{self.__class__.__name__}({self.singular!r},{self.plural!r},{self.replace=},{self.test=},{self.text=})"
 
   def __str__(self):
     """Return this object's text value, the one it was created with or,
@@ -203,9 +198,9 @@ class Suffixer(object):
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 class NounSuffixer(Suffixer):
-  """This class builds on Suffixer, adding an understanding of possive
-  nouns, but singular and plural. It implements the "Chicago Manual of
-  Style, 17th edition" rules for posessive nouns."""
+  '''This class builds on Suffixer, adding an understanding of possive
+  nouns. It implements the rules laid out in "Chicago Manual of Style,
+  17th edition."'''
 
   def __init__(self,singular,plural,replace=None,test=None,text=None):
     """This consructor is just like Suffixer's constructor, but if the
@@ -213,8 +208,11 @@ class NounSuffixer(Suffixer):
     value is changed from "A word ..." to "A noun ..."."""
 
     super(NounSuffixer,self).__init__(singular,plural,replace,test,text)
-    if not text and self.text.startswith('A word'):
-      self.text='A noun'+self.text[6:]
+    if not text:
+      if self.text.startswith('A word'):
+        self.text='A noun'+self.text[6:]
+      elif self.text.startswith('Any word'):
+        self.text='Any noun'+self.text[8:]
 
   def __call__(self,root,count,pos=False):
     """Return our root noun suffixed appropriatly for count's value and,
@@ -229,10 +227,10 @@ class NounSuffixer(Suffixer):
     if pos:
       # Apply "Chicago Manual of Style, 17th edition".
       if count==1:
-        # Singular nouns are posessified with "'s", regardless of how they end.
+        # Singular posessives end with "'s", regardless of how the root ends.
         word+="'s"
       else:
-        # With plural possessives, it depends on the word ending.
+        # With plural possessives, it depends on how the plural ends.
         if word[-1]=='s':
           word+="'"
         else:
@@ -244,45 +242,45 @@ class NounSuffixer(Suffixer):
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 # Make a map of irregularly pluralized nouns.
-irregular_noun_plurals=dict((
-  ('alumnus','alumni'),
-  ('appendix','appendices'),
-  ('atrium','atriums'),
-  ('buffalo','buffalo'),
-  ('cactus','cacti'),
-  ('child','children'),
-  ('chum','chums'),
-  ('cod','cod'),
-  ('cranium','craniums'),
-  ('deer','deer'),
-  ('die','dice'),
-  ('fish','fish'),
-  ('focus','foci'),
-  ('foot','feet'),
-  ('fungus','fungi'),
-  ('goose','geese'),
-  ('index','indices'),
-  ('louse','lice'),
-  ('man','men'),
-  ('moose','moose'),
-  ('mouse','mice'),
-  ('nucleus','nuclei'),
-  ('octopus','octopi'),
-  ('ox','oxen'),
-  ('person','people'),
-  ('quail','quail'),
-  ('radius','radii'),
-  ('sheep','sheep'),
-  ('shrimp','shrimp'),
-  ('stadium','stadiums'),
-  ('swine','swine'),
-  ('tooth','teeth'),
-  ('trout','trout'),
-  ('vacuum','vacuums'),
-  ('vertex','vertices'),
-  ('vortex','vortices'),
-  ('woman','women'),
-))
+irregular_noun_plurals=dict(
+  alumnus='alumni',
+  appendix='appendices',
+  atrium='atriums',
+  buffalo='buffalo',
+  cactus='cacti',
+  child='children',
+  chum='chums',
+  cod='cod',
+  cranium='craniums',
+  deer='deer',
+  die='dice',
+  fish='fish',
+  focus='foci',
+  foot='feet',
+  fungus='fungi',
+  goose='geese',
+  index='indices',
+  louse='lice',
+  man='men',
+  moose='moose',
+  mouse='mice',
+  nucleus='nuclei',
+  octopus='octopi',
+  ox='oxen',
+  person='people',
+  quail='quail',
+  radius='radii',
+  sheep='sheep',
+  shrimp='shrimp',
+  stadium='stadiums',
+  swine='swine',
+  tooth='teeth',
+  trout='trout',
+  vacuum='vacuums',
+  vertex='vertices',
+  vortex='vortices',
+  woman='women',
+)
 
 class IrregularNounSuffixer(NounSuffixer):
   """This class builds on NounSuffixer and knows how to handle several
@@ -293,12 +291,18 @@ class IrregularNounSuffixer(NounSuffixer):
 
   IrregularNounSuffixer consults the english.irregular_noun_plurals
   dictionary to map a singular noun to the corresponding plural noun. It
-  comes preloaded with several of the most commonly used nouns with
+  comes preloaded with several of the most commonly used nouns having
   irregularly formed plurals, but you can always add your own. For
   example, kleenex's plural is regularly kleenexes, but you can make it
   kleenices (just for fun) if you change the map like this:
 
       english.irregular_noun_plurals['kleenex']='kleenices'
+
+  So we leave it to the calling code to decide things like wether the
+  plural of box should be boxen. :-)
+
+  Note this class's constructor takes no arguments. They wouldn't make
+  sense here.
 
   """
 
@@ -332,7 +336,6 @@ noun_suffixing_rules=[
   IrregularNounSuffixer(),
 
   # Words ending with "is" are often pluralised by replacing that with "es".
-  #NounSuffixer('is','es',-2,lambda s: s.endswith('is')),
   NounSuffixer('is','es',-2),
 
   # There are a few word-endings that call for "es" plural suffixes.
