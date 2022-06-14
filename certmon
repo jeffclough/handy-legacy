@@ -1,7 +1,8 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
-import argparse,atexit,datetime,json,os,re,socket,ssl,StringIO,subprocess,sys,time,threading
+import argparse,atexit,datetime,json,os,re,socket,ssl,io,subprocess,sys,time,threading
 from pprint import pprint
+from debug import DebugChannel
 
 # Put a little extra effort into finding our non-standard modules if needed.
 try:
@@ -20,7 +21,7 @@ def neg_check(n):
   """Return some brightly colored version of n if it is less than 0.
   Otherwise, simply return the string value of n."""
 
-  if isinstance(n,basestring):
+  if isinstance(n,str):
     if n.startswith('-'):
       n=neg_text(n)
     return n
@@ -76,7 +77,7 @@ class Certificate(object):
       self.error=re.sub(r'^\[.*\] ','',str(e))
     except Exception as e:
       t1=time.time()
-      print 'Debug: (%s) e=%r'%(type(e),e)
+      print('Debug: (%s) e=%r'%(type(e),e))
       self.error=str(e)
     else:
       t1=time.time()
@@ -92,6 +93,10 @@ class Certificate(object):
     cmd=("openssl x509 -in %s -noout -text -serial -subject -issuer -email -dates"%(fn,)).split()
     proc=subprocess.Popen(cmd,stdout=subprocess.PIPE)
     output,error=proc.communicate()
+    if isinstance(output,bytes):
+      output=output.decode()
+    if isinstance(error,bytes):
+      error=error.decode()
     os.unlink(fn)
     for line in output.split('\n'):
       #print 'D: line=%r'%(line,)
@@ -133,6 +138,8 @@ class Certificate(object):
     d.update(self.values)
     return d
 
+def_log_file=f"~/.{prog.name}.log"
+
 # Deal with command line arguments.
 ap=argparse.ArgumentParser(description="Get certificate expiration data. The HOST:PORT command line arguments may also be supplied, one per line, on standard input.")
 ap.add_argument('-c','--color',dest='color',action='store_true',default=False,help="Turn on colored output.")
@@ -140,25 +147,29 @@ ap.add_argument('--json',dest='format',action='store_const',const='json',default
 ap.add_argument('-w','--warn',dest='warn',default=None,type=int,help="Output only warnings about certs expiring within the given number of days.")
 ap.add_argument('--summary',dest='summary',action='store_true',default=False,help="""Only summarize each host:port argument's certificant's "valid from ___ to ___" information.""")
 ap.add_argument('--light',dest='light',action='store_true',default=False,help="Use colors suitable for a light background.")
-ap.add_argument('--log-facility',dest='log_facility',metavar='FACILITY',action='store',default='local0',help="Log to the given syslog facility. (default: %(default)s)")
+ap.add_argument('--log-facility',dest='log_facility',metavar='FACILITY',action='store',default=def_log_file,help="Log to the given file or syslog facility. (default: %(default)s)")
 ap.add_argument('--log-level',dest='log_level',metavar='LEVEL',action='store',default='info',help="Log at the given level. (default: %(default)s)")
 ap.add_argument('--timeout',dest='timeout',metavar='SECS',action='store',type=int,default=20,help="Number of seconds to wait for any given certificate. (default: %(default)s)")
 ap.add_argument('services',metavar='HOST:PORT',nargs='*',help="One or more HOST:PORT arguments.")
 opt=ap.parse_args()
 
-# Adjust log level first (if needed).
+# Set up our logger and debug channel instances.
 log=loggy.get_logger(facility=opt.log_facility,level=opt.log_level)
+dc=DebugChannel(
+  opt.log_level=='debug',
+  stream=loggy.LogStream(logger=log),
+  line_fmt='{function}:{line} - {indent}{message}'
+)
 
 # Get our saved config data if it's available.
 opt.data_file=os.path.expanduser("~/.%s.json"%(prog.name,))
 if os.path.exists(opt.data_file):
-  f=open(opt.data_file)
-  try:
-    opt.data=json.load(f)
-  except Exception as e:
-    sys.stderr.write("%s: Error reading %s: %s\n"%(prog.name,opt.data_file,e))
-    sys.exit(1)
-  f.close()
+  with open(opt.data_file) as f:
+    try:
+      opt.data=json.load(f)
+    except Exception as e:
+      sys.stderr.write("%s: Error reading %s: %s\n"%(prog.name,opt.data_file,e))
+      sys.exit(1)
 else:
   opt.data=dict(options={},services=[])
 
@@ -192,8 +203,9 @@ def add_cert(service):
 
   connections.acquire()
   log.info("Queuinig %s:%d for SSL cert retrieval"%service)
-  certs[service]=Certificate(service,timeout=opt.timeout)
-  c=certs[service]
+  c=Certificate(service,timeout=opt.timeout)
+  certs[service]=c
+  dc(f"{c=}")
   if certs[service].error:
     log.error("Error (%s) from %s:%d after %0.3f seconds"%(c.error,service[0],service[1],c.query_seconds))
   else:
@@ -245,13 +257,13 @@ if opt.warn!=None:
   warnings=dict([
     ((c.host,c.port),c.toDict())
     #('%s%s%s'%(host_text(c.host),port_text(c.port)),c.toDict())
-      for c in certs.values()
+      for c in list(certs.values())
         if c.daysRemaining<opt.warn
   ])
   if opt.format=='text':
-    services=warnings.keys()
+    services=list(warnings.keys())
     services.sort(key=lambda s:warnings[s]['daysRemaining'])
-    print 'Certificates expiring in the next %s:'%nounf('day',opt.warn)
+    print('Certificates expiring in the next %s:'%nounf('day',opt.warn))
     for s in services:
       h,p=s # Extract host and port from service s.
       info=warnings[s]['daysRemaining']
@@ -263,40 +275,44 @@ if opt.warn!=None:
       ansi.paint(host_text,h,':',port_text,p,norm_text,' ',info)
       #print '%s: %s'%(s,info)
   elif opt.format=='json':
-    print json.dumps(warnings,indent=2,sort_keys=True,default=str)
+    print(json.dumps(warnings,indent=2,sort_keys=True,default=str))
 else:
   # "Normal" output, which outputs everything we know about these certs.
   if opt.format=='text':
+    dc(f"{certs=}")
+    dc(f"{opt.services=}").indent()
     for service in opt.services:
+      dc(f"{service=}")
       c=certs[service]
-      print norm_text('%s'%(c.service,))
+      print(norm_text('%s'%(c.service,)))
       if isinstance(c.names,list):
-        print norm_text('  names=%s'%(', '.join(c.names)))
+        print(norm_text('  names=%s'%(', '.join(c.names))))
       else:
-        print norm_text('  names=%s'%(c.names,))
-      print norm_text('  serial=%s'%(c.serial,))
-      print norm_text('  subject=%s'%(c.subject,))
-      print norm_text('  issuer=%s'%(c.issuer,))
-      print norm_text('  notBefore=%s'%(c.notBefore,))
+        print(norm_text('  names=%s'%(c.names,)))
+      print(norm_text('  serial=%s'%(c.serial,)))
+      print(norm_text('  subject=%s'%(c.subject,)))
+      print(norm_text('  issuer=%s'%(c.issuer,)))
+      print(norm_text('  notBefore=%s'%(c.notBefore,)))
       if c.daysRemaining!=None and c.daysRemaining<=30:
-        print norm_text('  notAfter=%s'%warn_text(c.notAfter))
-        print norm_text('  timeRemaining=%s'%warn_text(c.timeRemaining))
-        print norm_text('  daysRemaining=%s'%warn_text(c.daysRemaining))
+        print(norm_text('  notAfter=%s'%warn_text(c.notAfter)))
+        print(norm_text('  timeRemaining=%s'%warn_text(c.timeRemaining)))
+        print(norm_text('  daysRemaining=%s'%warn_text(c.daysRemaining)))
       else:
-        print norm_text('  notAfter=%s'%(c.notAfter,))
-        print norm_text('  timeRemaining=%s'%(c.timeRemaining,))
-        print norm_text('  daysRemaining=%s'%(c.daysRemaining,))
+        print(norm_text('  notAfter=%s'%(c.notAfter,)))
+        print(norm_text('  timeRemaining=%s'%(c.timeRemaining,)))
+        print(norm_text('  daysRemaining=%s'%(c.daysRemaining,)))
       if c.error==None:
-        print norm_text('  error=%s'%(c.error,))
+        print(norm_text('  error=%s'%(c.error,)))
       else:
-        print norm_text('  error=%s'%error_text(c.error))
-      print norm_text('  query_seconds=%0.3f'%(c.query_seconds,))
-      print norm_text('')
+        print(norm_text('  error=%s'%error_text(c.error)))
+      print(norm_text('  query_seconds=%0.3f'%(c.query_seconds,)))
+      print(norm_text(''))
+    dc.undent()
   elif opt.format=='json':
     # Output certs as a JSON dictionary. The diction
-    print json.dumps(
+    print(json.dumps(
       dict([("%s:%d"%s,certs[s].toDict()) for s in opt.services]),
       indent=2,       # Make our JSON output more readable to human eyes.
       sort_keys=True, # Keep the output order predictable.
       default=str     # This makes datetime's classes serializable.
-    )
+    ))
