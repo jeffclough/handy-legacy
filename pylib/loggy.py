@@ -194,7 +194,9 @@ class LogStream(object):
     if 'level' not in kwargs:
       kwargs['level']='debug'
     self.level=kwargs['level'].upper()
-    self.log=get_logger(**kwargs)
+    self.log=kwargs.get('logger')
+    if not self.log:
+      self.log=get_logger(**kwargs)
 
   def write(self,s):
     self.log.log(_nameToLevel[self.level],s)
@@ -202,6 +204,11 @@ class LogStream(object):
   def writelines(self,seq):
     for s in seq:
       self.write(s)
+
+  def flush(self):
+    "This method does nothing, but it needs to be here."
+
+    pass
 
 
 if __name__=='__main__':
