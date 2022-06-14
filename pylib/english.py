@@ -81,16 +81,22 @@ class Suffixer(object):
   last character of the given root. This is helpful for pluralizing
   "penny" to "pennies".
 
-  Notice also that there's no "test" function for that last suffixing
-  rule. That means that it's willing to be applied to any root you give
-  it. (And that's why it comes last.)
+  If no test funciton is given, but singular evaluates as True, Suffixer
+  uses writes its own test function that returns true for any word
+  ending with singular's value. If singular evaluates as False, Suffixer
+  creates a function that always returns True.
 
-  Here's how those rules express themselves in english:
-  1. A word ending with "s", "sh", "ch", or "x" becomes plural by ending
+  With that in mind, notice there's no test function given for that last
+  suffixing rule, and suffix's value ('') means Suffixer uses a test
+  function that always returns True. So that rule is willing to be
+  applied to any root you give it. (And that's why it comes last.)
+
+  Here's how we might express those rules in english:
+  0. A word ending with "s", "sh", "ch", or "x" becomes plural by ending
      "es" instead.
-  2. A word ending with y becomes plural by ending with ies instead,
+  1. A word ending with y becomes plural by ending with ies instead,
      unless preceded by a vowel.
-  3. All remaining words can be made plural by appending "s" to them.
+  2. All remaining words can be made plural by appending "s" to them.
 
   You might apply this list of suffixing rules to a given root noun like
   this:
@@ -254,12 +260,14 @@ irregular_noun_plurals=dict(
   cranium='craniums',
   deer='deer',
   die='dice',
+  fireman='firemen',
   fish='fish',
   focus='foci',
   foot='feet',
   fungus='fungi',
   goose='geese',
   index='indices',
+  journeyman='journeymen',
   louse='lice',
   man='men',
   moose='moose',
@@ -268,6 +276,7 @@ irregular_noun_plurals=dict(
   octopus='octopi',
   ox='oxen',
   person='people',
+  policeman='policemen',
   quail='quail',
   radius='radii',
   sheep='sheep',
@@ -280,6 +289,7 @@ irregular_noun_plurals=dict(
   vertex='vertices',
   vortex='vortices',
   woman='women',
+  workman='workmen',
 )
 
 class IrregularNounSuffixer(NounSuffixer):
@@ -351,6 +361,9 @@ noun_suffixing_rules=[
   # Words ending with "f" or "fe" usually get special treatment.
   NounSuffixer('f','ves',-1,lambda s: s.endswith('f')),
   NounSuffixer('fe','ves',-2,lambda s: s.endswith('fe')),
+
+  # Words ending with "craft" do not change when plural.
+  NounSuffixer('craft','','append',text="Words ending with \"craft\" do not change when plural."),
 
   # Words ending with "um" are often pluralised by replacing that with "a".
   NounSuffixer('um','a',-2,lambda s: s.endswith('um')),
@@ -971,6 +984,8 @@ if __name__=='__main__':
     "2 dogs' tails"
     >>> "I stepped on %s."%nounf('person',3,'foot')
     "I stepped on 3 people's feet."
+    >>> "I made %s today."%nounf('fireman',3,'hat')
+    "I made 3 firemen's hats today."
     >>> #
     >>> # Testing english.join()
     >>> #
