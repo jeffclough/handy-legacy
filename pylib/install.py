@@ -28,21 +28,65 @@ from subprocess import run,DEVNULL,PIPE,STDOUT,CompletedProcess
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+import logging
+from logging.handlers import SysLogHandler,TimedRotatingFileHandler
+
+# This code uses the (possibly default) root logger of the application that's
+# using it. If the root logger has no handlers (its default state) a
+# TimedRotatingFileHandler is assigned to it.
+log=logging.getLogger(os.path.basename(sys.argv[0]).rsplit('.',1)[0])
+if log.handlers: # I know. I'm being bad.
+  # Our logger will be a child of the already-configured main logger.
+  log=log.getChild('install')
+else:
+  # We need to set up our own logging.
+  if False:
+    # Log to ~/.buzzapi.log.
+    h=TimedRotatingFileHandler(
+      os.path.expanduser('~/.buzzapi.log'),
+      when='W6',
+      interval=1,
+      backupCount=6
+    )
+    h.setFormatter(
+      logging.Formatter(
+        "%(asctime)s %(name)s %(levelname).1s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+      )
+    )
+  else:
+    # Log to stdout.
+    h=logging.StreamHandler(sys.stdout)
+    h.setFormatter(logging.Formatter("%(levelname).1s: %(message)s"))
+  log.addHandler(h)
+  del h # Don't leave crumbs.
+  log.setLevel(logging.INFO)
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Some constants and configuration variables.
 
 # These verbosity flag values can be combined bitwise in any
-# combination.
+# combination in an instance of V.
 class V(Flag):
-  QUIET=0
-  DEPS=auto()
-  TIME=auto()
-  DEBUG=auto()
+  QUIET=0       # A value that leaves all the others off.
+  DEPS=auto()   # Log dependency logic.
+  TIME=auto()   # Log time comparison logic.
+  DEBUG=auto()  # Log debug statements.
 
-opt=type('',(),dict(
-  verbosity=V.QUIET,
-  force=False,
-  dry_run=False
-))
+class Options(object):
+  def __init__(self):
+    self.dry_run=False
+    self.force=False
+    self.tdir=os.path.expandvars(os.path.expanduser('~/my'))
+    self.verb=V.QUIET
+
+  def __str__(self):
+    return f"dry_run={self.dry_run}, force={self.force}, tdir={self.tdir!r} verb={self.verb}"
+
+opt=Options()
+log.debug(f"Defaults: {opt}")
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -59,20 +103,21 @@ def expand_all(filename):
   "Return the filename with ~ and environment variables expanded."
 
   p=os.path.expandvars(os.path.expanduser(filename))
-  if opt.verbosity & V.DEBUG:
-    print(f"expand_all({filename!r}) -> {p!r}",file=stderr)
+  if opt.verb & V.DEBUG:
+    log.info(f"expand_all({filename!r}) -> {p!r}")
   return p
 
 def filetime(filename,default=0):
   """Return the modification time of the given file in floating point
-  epoch seconds. If the file does not exist, return the default value."""
+  epoch seconds. If the file does not exist, return the default value
+  (presumably something that represents this file to be VERY old)."""
 
   try:
     default=os.path.getmtime(filename)
+    if opt.verb & V.TIME:
+      log.info(f"  {filename}\tt={default:0.6f} ({time.strftime('%Y-%m-%d %H:%M:%S.%f',time.localtime(default))})")
   except:
     pass
-  if opt.verbosity & V.TIME:
-    print(f"  {filename}\tt={default:0.6f} ({time.strftime('%Y-%m-%d %H:%M:%S.%f',time.localtime(default))})",file=sys.stderr) 
   return default
 
 def is_newer(src,dst,bias=-0.001):
@@ -80,7 +125,7 @@ def is_newer(src,dst,bias=-0.001):
   names (or if dst doesn't exist).
 
   For the sake of out_of_date()'s efficiency, the dst argument may be a
-  (string,float) typle rather than a string, in which case, the string
+  (string,float) tuple rather than a string, in which case, the string
   is the name of the file, and the float is its timestamp value.
 
   The bias argument is the number of seconds to add to the source time
@@ -93,9 +138,9 @@ def is_newer(src,dst,bias=-0.001):
     dst,td=dst
   else:
     td=filetime(dst)
-  if opt.verbosity & V.TIME:
+  if opt.verb & V.TIME:
     rel='newer' if ts>td else 'older'
-    print(f"  {src} is {rel} than {dst}",file=sys.stderr)
+    log.info(f"  {src} is {rel} than {dst}")
   return opt.force or (ts>td)
 
 def out_of_date(target,*deps):
@@ -106,11 +151,11 @@ def out_of_date(target,*deps):
   if not opt.force and os.path.exists(target):
     t=filetime(target)
   else:
-    if opt.verbosity & V.DEPS:
+    if opt.verb & V.DEPS:
       if opt.force:
-        print(f"  {target} is being forced out of date.",file=sys.stderr)
+        log.info(f"  {target} is being forced out of date.")
       else:
-        print(f"  {target} is out of date because it's missing.",file=sys.stderr)
+        log.info(f"  {target} is out of date because it's missing.")
     return True
   for d in deps:
     if isinstance(d,(list,tuple)):
@@ -119,12 +164,12 @@ def out_of_date(target,*deps):
     elif not os.path.exists(d):
       # Return True for non-existant dependency in order to provoke an
       # error when the dependency is not found.
-      if opt.verbosity & V_DEPS:
-        print(f"  {target} depends on {d}, which doesn't exist.",file=sys.stderr)
+      if opt.verb & V_DEPS:
+        log.info(f"  {target} depends on {d}, which doesn't exist.")
       return True
     elif is_newer(d,(target,t)):
-      if opt.verbosity & V_DEPS:
-        print(f"  {target} depends on {d}, which is newer.",file=sys.stderr)
+      if opt.verb & V_DEPS:
+        log.info(f"  {target} depends on {d}, which is newer.")
       return True
   return False
 
@@ -139,7 +184,7 @@ def expand_wildcards(filespec):
 
 def dir_mode(file_mode):
   """Given a file mode (of the shell variety), return a mode value
-  appropriate for creating a directry to hold such a file. For instance,
+  appropriate for creating a directory to hold such a file. For instance,
   dir_mode(0o640) will return 0x750. The idea is to enable directory
   searching for every group with read or write access.
   """
@@ -387,13 +432,13 @@ class Copy(TargetHandler):
     if self.symlink:
       # Simply create a symlink from our target to our source.
       if opt.dry_run:
-        print(f"Suppressing: {self.source} --> {self.target}")
+        log.info(f"Suppressing: {self.source} --> {self.target}")
       else:
         os.symlink(self.source,self.target)
     else:
       # Copy source to target, keeping as much metadata as possible.
       if opt.dry_run:
-        print(f"Suppressing: {self.source} ==> {self.target}")
+        log.info(f"Suppressing: {self.source} ==> {self.target}")
       else:
         self.target=shutil.copy2(self.source,self.target)
         # Set the user and or group ownership if this instance is so configured.
@@ -417,48 +462,65 @@ class Command(object):
     "Run the command the caller has set up. Return the exit status."
 
     if opt.dry_run:
-      print(f"Suppressing: {cmd}")
+      log.info(f"Suppressing command in dry-run mode: {cmd}")
       self.result=CompletedProcess(shlex.split(cmd),0) # Assume success.
     else:
       r=self.result=run(self.cmd,text=True,stdin=self.stdin,stdout=self.stdout,stderr=self.stderr)
       if r.returncode:
         if r.stdout:
-          print(r.stdout.read())
+          log.info(r.stdout.read())
         if r.stderr:
-          print(r.stderr.read(),file=sys.stderr)
+          log.error(r.stderr.read())
         raise Error(f"Non-zero return code ({r.returncode}) from \"{self.cmd}\".")
 
     return self
 
 
 if __name__=='__main__':
-  import doctest
+  import argparse
 
-  def test_mode_conversion():
-    """
-    >>> stat_mode(0o700)==stat.S_IRUSR|stat.S_IWUSR|stat.S_IXUSR
-    True
-    >>> stat_mode(0o070)==stat.S_IRGRP|stat.S_IWGRP|stat.S_IXGRP
-    True
-    >>> stat_mode(0o007)==stat.S_IROTH|stat.S_IWOTH|stat.S_IXOTH
-    True
-    >>> shell_mode(stat.S_IRUSR|stat.S_IWUSR|stat.S_IXUSR)==0o700
-    True
-    >>> shell_mode(stat.S_IRGRP|stat.S_IWGRP|stat.S_IXGRP)==0o070
-    True
-    >>> shell_mode(stat.S_IROTH|stat.S_IWOTH|stat.S_IXOTH)==0o007
-    True
-    >>> dir_mode(0o640)==0o750
-    True
-    >>> dir_mode(0o400)==0o500
-    True
-    """
+  ap=argparse.ArgumentParser(
+    description=f"Install the given files to the given (with --target-dir) or default ({opt.tdir}) directory base."
+  )
+  ap.add_argument('--target-dir',dest='tdir',action='store',type=expand_all,help="Set the base of the target directory structure. Subdirectories like bin, doc, etc, include, lib, man, and sbin will be created here if and when needed.")
+  ap.add_argument('--force',action='store_true',help="Rather than comparing the timestamps of source and target files, copy the former to the latter unconditionally.")
+  ap.add_argument('--debug-deps',action='store_true',help="Output debug messages about file dependency logic.")
+  ap.add_argument('--debug-time',action='store_true',help="Output debug messages about time comparison logic.")
+  ap.add_argument('--debuger',action='store_true',help="Start pdb when this program is run. This is NOT for the uninitiated.")
+  ap.add_argument('--test',action='store_true',help="Run internal test, report the results, and terminate.")
+  ap.add_argument('files',metavar='FILE',action='store',nargs='*',help="This is one of more files to be installed.")
+  o=ap.parse_args()
+  if o.debug_deps: opt.verb|=V.DEPS
+  if o.debug_time: opt.verb|=V.TIME
 
-    pass
+  if o.test:
+    import doctest
 
-  failed,total=doctest.testmod()
-  if failed:
-    print(f"Failed {failed} of {total} tests.")
-    sys.exit(1)
+    def test_mode_conversion():
+      """
+      >>> stat_mode(0o700)==stat.S_IRUSR|stat.S_IWUSR|stat.S_IXUSR
+      True
+      >>> stat_mode(0o070)==stat.S_IRGRP|stat.S_IWGRP|stat.S_IXGRP
+      True
+      >>> stat_mode(0o007)==stat.S_IROTH|stat.S_IWOTH|stat.S_IXOTH
+      True
+      >>> shell_mode(stat.S_IRUSR|stat.S_IWUSR|stat.S_IXUSR)==0o700
+      True
+      >>> shell_mode(stat.S_IRGRP|stat.S_IWGRP|stat.S_IXGRP)==0o070
+      True
+      >>> shell_mode(stat.S_IROTH|stat.S_IWOTH|stat.S_IXOTH)==0o007
+      True
+      >>> dir_mode(0o640)==0o750
+      True
+      >>> dir_mode(0o400)==0o500
+      True
+      """
 
-  print(f"Passed all {total} tests!")
+      pass
+
+    failed,total=doctest.testmod()
+    if failed:
+      print(f"Failed {failed} of {total} tests.")
+      sys.exit(1)
+    print(f"Passed all {total} tests!")
+    sys.exit(0)
