@@ -260,23 +260,19 @@ irregular_noun_plurals=dict(
   cranium='craniums',
   deer='deer',
   die='dice',
-  fireman='firemen',
   fish='fish',
   focus='foci',
   foot='feet',
   fungus='fungi',
   goose='geese',
   index='indices',
-  journeyman='journeymen',
   louse='lice',
-  man='men',
   moose='moose',
   mouse='mice',
   nucleus='nuclei',
   octopus='octopi',
   ox='oxen',
   person='people',
-  policeman='policemen',
   quail='quail',
   radius='radii',
   sheep='sheep',
@@ -288,8 +284,6 @@ irregular_noun_plurals=dict(
   vacuum='vacuums',
   vertex='vertices',
   vortex='vortices',
-  woman='women',
-  workman='workmen',
 )
 
 class IrregularNounSuffixer(NounSuffixer):
@@ -344,6 +338,9 @@ class IrregularNounSuffixer(NounSuffixer):
 noun_suffixing_rules=[
   # Check for irregular cases first. The rules below don't apply to these.
   IrregularNounSuffixer(),
+
+  # Words ending with "man" are often pluralized by replacing that with "men".
+  NounSuffixer('man','men'),
 
   # Words ending with "is" are often pluralised by replacing that with "es".
   NounSuffixer('is','es',-2),
@@ -438,7 +435,7 @@ def nounf(root,count,pos=False,fmt=None,formatter=None):
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Other, english-related functions that don't fit elsewhere.
 
-def join(seq,con='and',sep=None):
+def join(seq,con=None,sep=None):
   """Return the string values in the given sequence as an English
   sequence-phrase, employing the given conjunction and seaparator when
   called for by the rules of standard English. If seq is not a sequence,
@@ -488,13 +485,14 @@ def join(seq,con='and',sep=None):
   BRACKETING SEPARATORS
   You can actually force the use of (parentheses), {braces}, [square] or
   <angle> brackets, or single (') or double (") quotes around each
-  sequence item by giving the opening character as the separator. The
+  sequence item by giving the opening character as the separator. This
   join() function will understand that each item should begin with that
-  characterr and then end with its mate.
+  character and then end with its mate.
 
-  The first thing to know about bracketing separators is that they come
-  into play when there are two or more items in the sequence, as opposed
-  to three or mor in the case of non-bracketing separators.
+  A fairly subtle differences between bracketing and non-bracketing
+  separators is the former are used with sequences of two or more items
+  while the latter come into play only when there are three or more
+  items.
 
     > english.join(('a and b',),sep='(')
     'a and b'
@@ -522,9 +520,9 @@ def join(seq,con='and',sep=None):
     > print(english.join(list(',;(){}[]<>')))
     ",", ";," "(," ")," "{," "}," "[," "]," "<," and ">"
 
-  Notice that the separator defaulted to the double quote because that
-  was next in line after the '<' default separator, which one of the
-  sequence items contained."""
+  Notice the separator defaulted to the double quote because that's the
+  next separator in line after the '<' default separator, which one of
+  the sequence items contained."""
 
   # Values of sep and require openning and closing characters.
   pairs={
@@ -545,6 +543,8 @@ def join(seq,con='and',sep=None):
       raise TypeError(f"{__name__}.join() requires a sequnece or something with a split() method.")
   if len(seq)==0: return ''
   if len(seq)==1: return str(seq[0])
+  if con==None:
+    con='and'
   if sep==None:
     if any([',' in item for item in seq]):
       if any([';' in item for item in seq]):
@@ -580,7 +580,7 @@ def join(seq,con='and',sep=None):
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #
 # Human beings need only so many significant digits. The SigDig class extends
-# float with a __str__() method respects that.
+# float with a __str__() method that respects that.
 #
 
 from math import log10
@@ -1164,21 +1164,43 @@ if __name__=='__main__':
     '460 GB'
     """
 
-  #from debug import DebugChannel
-  #from loggy import LogStream
-  #debug=DebugChannel(True,LogStream(facility='local0',level='debug'))
-  #debug.setFormat('{line}: {indent}{message}')
+  import argparse
 
-  #print(noun_rule_summary())
-  #print('')
+  ap=argparse.ArgumentParser(description="Test the english.py module in some way.")
+  ap.add_argument('--con',action='store',help="The conjunction to use with --join.")
+  ap.add_argument('--count',action='store',default=1,help="Use this number when deciding whether a word should be singular or plural.")
+  ap.add_argument('--join',action='store_true',help="Join our WORDs into an english list.")
+  ap.add_argument('--noun',action='store_true',help="One or more (separated by spaces or commas) nouns to test.")
+  ap.add_argument('--noun-phrase',action='store_true',help="Use --count and (optionally) --obj to output the corresponding noun phrase for every WORD argument on the command line.")
+  ap.add_argument('--noun-rules',action='store_true',help="List the rules for making plural nouns.")
+  ap.add_argument('--obj',action='store',help="The object to be used with nouner() and nounf().")
+  ap.add_argument('--sep',action='store',help="The separator to use with --join.")
+  ap.add_argument('--test',action='store_true',help="Run all internal tests.")
+  ap.add_argument('words',metavar='WORD',action='store',nargs='*',help="List of terms to act upon.")
+  opt=ap.parse_args()
 
-  #debug('-------- Starting --------')
-
-  f,t=doctest.testmod(report=False)
-  if f>0:
-    print('*********************************************************************\n')
-  print("Passed %d of %s."%(t-f,nounf('test',t)))
-
-  #debug('-------- Stopping --------')
-
-  sys.exit((1,0)[f==0])
+  # Handle any options that require no WORD arguments.
+  if opt.noun_rules:
+    print(noun_rule_summary())
+  elif opt.test:
+    f,t=doctest.testmod(report=False)
+    if f>0:
+      print('*********************************************************************\n')
+    print("Passed %d of %s."%(t-f,nounf('test',t)))
+    sys.exit((1,0)[f==0])
+  else:
+    if not opt.words:
+      print("At lease one WORD arguemnt must be given.")
+      ap.print_help()
+      sys.exit(1)
+    # Options requiring one or more WORD arguments are handled below.
+    if opt.join:
+      print(join(opt.words,con=opt.con,sep=opt.sep))
+    elif opt.noun:
+      for w in opt.words:
+        print(f"{w}:\n    {nounf(w,1,opt.obj)}\n    {nounf(w,2,opt.obj)}")
+    elif opt.noun_phrase:
+      for w in opt.words:
+        print(nounf(w,opt.count,opt.obj))
+    else:
+      ap.print_help()
