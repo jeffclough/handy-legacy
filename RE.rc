@@ -1,31 +1,30 @@
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-#
-#          Use this file to set up your own RE extension patterns.
-#
-# An RE extension looks like this when used in a regular expression:
-#
-#   "client: (?E:ipv4)"
-#
-# That RE is exactly the same as:
-#
-#   "client: (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
-#
-# It will match things like:
-#
-#   "client: 74.125.136.113"
-#
-# New (or replacement) RE extensions can be defined as
-#
-#   name=pattern
-#
-# lines. Whitespace will be removed before and after the name, but all
-# characters between the = and the end of the line are part of the pattern. If
-# you have leading or trailing whitespace characters, they are part of the RE
-# extension's pattern.
-#
-# Empty lines and lines whose first non-space content begins with #, ;, or //
-# are ignored.
-#
+//
+//          Use this file to set up your own RE extension patterns.
+//
+// An RE extension looks like this when used in a regular expression:
+//
+//   "client: (?E:ipv4)"
+//
+// That RE is exactly the same as:
+//
+//   "client: (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+//
+// It will match things like:
+//
+//   "client: 74.125.136.113"
+//
+// New (or replacement) RE extensions can be defined as
+//
+//   name=pattern
+//
+// lines. Whitespace will be removed before and after the name, but all
+// characters between the = and the end of the line are part of the pattern. If
+// you have leading or trailing whitespace characters, they are part of the RE
+// extension's pattern.
+//
+// Empty lines and lines whose first non-space content begins with #, ;, or //
+// are ignored.
+//
 
 // Account names.
 id=[-_0-9A-Za-z]+
