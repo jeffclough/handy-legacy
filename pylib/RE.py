@@ -12,7 +12,7 @@ extensions by calling
 
 Doing so means that "(?E:name)" in regular expressions used with *this*
 module will be replaced with "(pattern)", and "(?E:label=name)" will be
-replaced with "(?P<name>pattern)", in any regular expressions you use
+replaced with "(?P<label>pattern)", in any regular expressions you use
 with this module. To keep things compatible with the common usage of
 Python's standard re module, it's a good idea to import RE like this:
 
@@ -20,7 +20,7 @@ Python's standard re module, it's a good idea to import RE like this:
 
 This keeps your code from calling the standard re functions directly
 (which will report things like "(?E:anything)" as errors, of course),
-it lets you then create whatever custom extension you'd like in this
+and it lets you then create whatever custom extension you'd like in this
 way:
 
     re.extend('last_first',r'([!,]+)\s*,\s*(.*)')
@@ -57,7 +57,7 @@ This module comes with several pre-loaded regepx extensions that I've
 come to appreciate:
 
 General:
-  id      - This matches login account names, programming language
+  id      - This matches login account names and programming language
             identifiers (for Python, Java, C, etc., but not SQL or other
             more special-purpose languages). Still '(?E:id)' is a nifty
             way to match account names.
@@ -74,11 +74,11 @@ Network:
   hostname - A DNS name.
   host     - Matches either hostname or ipaddr.
   service  - Matches host:port.
-  email    - Any valid email address. (Well above average, but not
-             quite perfect.) There's also an email_localpart extensior,
-             which is used inside both "email" and "url" (below), but
-             it's really just for internal use. Take a look if you're
-             curious.
+  email    - Any valid email address. This RE is well above average, but
+             not quite perfect. There's also an email_localpart
+             extension, which is used inside both "email" and "url"
+             (below), but it's really just for internal use. Take a look
+             if you're curious.
   url      - Any URL consisting of:
                protocol - req (e.g. "http" or "presto:http:")
                designator - req (either "email_localpart@" or "//")
@@ -91,7 +91,7 @@ Time and Date:
   day      - Day of week, Sunday through Saturday, or any unambiguous
              prefix thereof.
   day3     - Firt three letters of any month.
-  DAY      - Full name of month.
+  DAY      - Full name of day of week.
   month    - January through December, or any unambiguous prefix
              thereof.
   month3   - First three letters of any month.
@@ -146,7 +146,7 @@ __all__=[
 #class Error(Exception):
 #  pass
 
-# This dictionary holds all extension, keyed by name.
+# This dictionary holds all extensions, keyed by name.
 _extensions={}
 
 # This RE matches an RE extension, possibly in a larger string.
@@ -258,7 +258,8 @@ def read_extensions(filename='~/.RE.rc'):
           continue;
         m=_extdef.match(line)
         if not m:
-          raise error('%s: Bad extension in line %d: "%s"'%(filename,count,line.rstrip()))
+          #raise error('%s: Bad extension in line %d: "%s"'%(filename,count,line.rstrip()))
+          raise error(f"{filename}: Bad extension in line {count}: {line.rstrip()!r}")
         name,op,pat=m.groups()
         extend(name,pat,expand=op=='<')
 
@@ -334,7 +335,7 @@ def subn(pattern, repl, string, count=0, flags=0):
 
 # Day, date, and time matching are furtile ground for improvement.
 # day = SUNDAY|MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY
-#       Case doesn't matter, and any distince beginning of those day names is
+#       Case doesn't matter, and any distinct beginning of those day names is
 #       sufficient to match.
 dnames=[date(2001,1,x+7).strftime('%A').lower() for x in range(7)]
 extend('day',r'(([Ss][Uu]|[Mm]|[Tt][Uu]|[Ww]|[Tt][Hh]|[Ff]|[Ss][Aa])[AEDIONSRUTYaedionsruty]*)')
@@ -395,7 +396,7 @@ if False: # These are defined in ~/.RE.rc now.
     r'((?E:email_localpart)|(//))' # Allows both 'mailto:addr' and 'http://host'.
     r'(?E:hostport)?'              # Host (required) and port (optional).
     r'(?E:abspath)?'               # Any path that MIGHT follow all that.
-    r'(\?'                          # Any parameters that MIGHT be present.
+    r'(\?'                         # Any parameters that MIGHT be present.
       r'((.+?)=([^&]*))'
       r'(&((.+?)=([^&]*)))*'
     r')?'
