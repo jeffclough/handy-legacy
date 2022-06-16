@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import argparse,csv,os,sys
 
@@ -20,11 +20,10 @@ from loggy import LogStream
 def show_extensions():
   "List all RE extensions."
 
-  names=re._extensions.keys()
+  names=list(re._extensions.keys())
   names.sort()
   for name in names:
-    print("%s=%s"%(name,re._extensions[name]))
-
+    print(f"{name}={re._extensions[name]}")
   sys.exit(0)
 
 def show_syntax():
@@ -87,7 +86,7 @@ matching group. The second method captures it in a group named "client".
 This type of RE extension syntax is available for any of the extensions listed
 when you run
 
-    re --extensions
+    re show extensions
 
 That will list all extensions that are defined internally in this code, in
 /etc/RE.rc, in ~/.RE.rc, or passed to the -x option of this command, where
@@ -183,9 +182,9 @@ def find(opt):
       if matches:
         if opt.count:
           if show_filename:
-            print('%s: %d'%(fn,matches))
+            print(('%s: %d'%(fn,matches)))
           else:
-            print('%d'%matches)
+            print(('%d'%matches))
         elif opt.list:
           print(fn)
       all_matches+=matches
@@ -234,7 +233,7 @@ ap_find.add_argument('args',action='store',nargs='+',help="A regular expression,
 
 ap_mark=sp.add_parser('mark',description="Color matching text from a single input source against one or more patterns.")
 ap_mark.set_defaults(func=mark)
-ap_mark.add_argument('-b','--background',dest='background',choices=ansi.background.keys(),default='black',help='''Sets the assumed background color, which defaults to %(default)s. ASNI codes to effect the background color that's aready assumed will not be output.''')
+ap_mark.add_argument('-b','--background',dest='background',choices=list(ansi.background.keys()),default='black',help='''Sets the assumed background color, which defaults to %(default)s. ASNI codes to effect the background color that's aready assumed will not be output.''')
 ap_mark.add_argument('-C',dest='comment_mode',action='store_true',default=False,help='''Turns on comment mode, which inserts the comment pattern (see --comment-format) at the start of the pattern list. This marks any line whose first non-space character is '#', which is very commonly a comment line. Use the --comment option to change the pattern used to idententify comments.''')
 ap_mark.add_argument('--columns',dest='columns',action='store',default=None,help='''This option turns on fixed-column mode and accepts a comma-separated list of column numbers as its argument. Each given column number identifies the beginning of a column in each line of the input data. This option cannot be used with other highlighting modes. The first column is numbered 1.''')
 ap_mark.add_argument('--comment-format',dest='comment_format',action='store',default='^\s*(#|;|--|//).*',help='''Specifies the pattern used to identify comment lines, which is '%(default)s' by default.''')
