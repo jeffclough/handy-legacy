@@ -89,44 +89,50 @@ class IndexedNames(object):
     every other name, an no full name may match the beginning of another
     name. Otherwise, a KeyError will be raised."""
 
-    # Remember our list of name and in what order they were given.
+    # Remember our list of names and in what order they were given.
     self.name_list=tuple(name_list)
     self.start=int(start)
     try:
       self.step=int(step)
-      if self.step==0:
-        raise
+      1/self.step # Raise an exception if step is 0.
     except:
       raise ValueError('Illegal step value: %r'%(step,))
-    self.num_dict=dict([
-      (self.name_list[i].lower(),(i,self.start+self.step*i)) for i in range(len(self.name_list))
-    ])
-    # num_dict[key]=(i,start+step*i)
+    #self.num_dict=dict([
+    #  (self.name_list[i].lower(),(i,self.start+self.step*i)) for i in range(len(self.name_list))
+    #])
+    self.num_dict={
+      self.name_list[i].lower():(i,self.start+self.step*i)
+        for i in range(len(self.name_list))
+    }
 
     # Verify that no two names match and that no name is an abbreviation for any
     # other name.
-    klist=list(self.num_dict.keys())
+    keys=list(self.num_dict.keys())
     for i in range(len(self.name_list)):
       for j in range(len(self.name_list)):
         if i!=j:
           if self.name_list[i].lower()==self.name_list[j].lower():
-            raise KeyError('Duplicate items in list: %r'%(self.name_list[i].lower()))
-    for i in range(len(klist)):
-      for j in range(len(klist)):
+            raise KeyError(f"Duplicate items in list: {self.name_list[i]!r}")
+    for i in range(len(keys)):
+      for j in range(len(keys)):
         if i!=j:
-          if klist[i].startswith(klist[j]):
-            raise KeyError('%r is an abbreviation of %r'%(klist[j],klist[i]))
+          if keys[i].startswith(keys[j]):
+            raise KeyError(f"{keys[j]!r} is an abbreviation of {keys[i]!r}")
 
     # Add decreasingly minimal forms of all keys to dictionary.
-    for name in klist:
+    for name in keys:
       for i in range(1,len(name)):
         partial=name[:i]
-        possibles=[s for s in klist if s.startswith(partial)]
+        possibles=[s for s in keys if s.startswith(partial)]
         if len(possibles)==1:
           val=self.num_dict[name]
-          self.num_dict.update(dict([
-            (name[:j],val) for j in range(i,len(name))
-          ]))
+          #self.num_dict.update(dict([
+          #  (name[:j],val) for j in range(i,len(name))
+          #]))
+          self.num_dict.update({
+            name[:j]:val
+              for j in range(i,len(name))
+          })
           break
 
   def __repr__(self):
