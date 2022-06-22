@@ -154,15 +154,15 @@ opt=ap.parse_args()
 
 if opt.debug:
   print(f"""Options:
-  {opt.color=}
-  {opt.format=}
-  {opt.warn=}
-  {opt.summary=}
-  {opt.light=}
-  {opt.log_facility=}
-  {opt.log_level=}
-  {opt.timeout=}
-  {opt.services=}""",file=sys.stderr)
+  opt.color={opt.color}
+  opt.format={opt.format}
+  opt.warn={opt.warn}
+  opt.summary={opt.summary}
+  opt.light={opt.light}
+  opt.log_facility={opt.log_facility}
+  opt.log_level={opt.log_level}
+  opt.timeout={opt.timeout}
+  opt.services={opt.services}""",file=sys.stderr)
 
 # Set up our logger and debug channel instances.
 log=loggy.get_logger(facility=opt.log_facility,level=opt.log_level)
@@ -231,7 +231,7 @@ def add_cert(service):
   log.info("Queuinig %s:%d for SSL cert retrieval"%service)
   c=Certificate(service,timeout=opt.timeout)
   certs[service]=c
-  dc(f"{c=}")
+  dc(f"c={c}")
   if certs[service].error:
     log.error("Error (%s) from %s:%d after %0.3f seconds"%(c.error,service[0],service[1],c.query_seconds))
   else:
@@ -316,10 +316,10 @@ if opt.warn!=None:
 else:
   # "Normal" output, which outputs everything we know about these certs.
   if opt.format=='text':
-    dc(f"{certs=}")
-    dc(f"{opt.services=}").indent()
+    dc(f"certs={certs}")
+    dc(f"opt.services={opt.services}").indent()
     for service in opt.services:
-      dc(f"{service=}")
+      dc(f"service={service}")
       c=certs[service]
       print(norm_text('%s'%(c.service,)))
       if isinstance(c.names,list):
