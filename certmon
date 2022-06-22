@@ -70,6 +70,7 @@ class Certificate(object):
     self.values={}
     # Retrieve the certificate, and put it into a file.
     t0=time.time()
+    cert=''
     try:
       cert=get_server_certificate_with_to(service,ssl_version=2,timeout=timeout)
     except (socket.gaierror,socket.error) as e:
@@ -83,20 +84,16 @@ class Certificate(object):
       t1=time.time()
       self.error=None
     self.query_seconds=t1-t0
-    if self.error:
-      return
-    fn=os.path.join(prog.tempdir,'%s.%d.cert'%(self.host,self.port))
+    fn=os.path.join(prog.tempdir,f"{self.host}.{self.port}.cert")
     f=open(fn,'w')
     f.write(cert)
     f.close()
+    if self.error:
+      return
     # Let openssl do the x509 parsing.
     cmd=("openssl x509 -in %s -noout -text -serial -subject -issuer -email -dates"%(fn,)).split()
-    proc=subprocess.Popen(cmd,stdout=subprocess.PIPE)
+    proc=subprocess.Popen(cmd,stdout=subprocess.PIPE,encoding='utf-8')
     output,error=proc.communicate()
-    if isinstance(output,bytes):
-      output=output.decode()
-    if isinstance(error,bytes):
-      error=error.decode()
     os.unlink(fn)
     for line in output.split('\n'):
       #print 'D: line=%r'%(line,)
@@ -142,16 +139,30 @@ def_log_file=f"~/.{prog.name}.log"
 
 # Deal with command line arguments.
 ap=argparse.ArgumentParser(description="Get certificate expiration data. The HOST:PORT command line arguments may also be supplied, one per line, on standard input.")
-ap.add_argument('-c','--color',dest='color',action='store_true',default=False,help="Turn on colored output.")
+ap.add_argument('-c','--color',action='store_true',help="Turn on colored output.")
 ap.add_argument('--json',dest='format',action='store_const',const='json',default='text',help="Use JSON as output format.")
-ap.add_argument('-w','--warn',dest='warn',default=None,type=int,help="Output only warnings about certs expiring within the given number of days.")
-ap.add_argument('--summary',dest='summary',action='store_true',default=False,help="""Only summarize each host:port argument's certificant's "valid from ___ to ___" information.""")
-ap.add_argument('--light',dest='light',action='store_true',default=False,help="Use colors suitable for a light background.")
-ap.add_argument('--log-facility',dest='log_facility',metavar='FACILITY',action='store',default=def_log_file,help="Log to the given file or syslog facility. (default: %(default)s)")
-ap.add_argument('--log-level',dest='log_level',metavar='LEVEL',action='store',default='info',help="Log at the given level. (default: %(default)s)")
-ap.add_argument('--timeout',dest='timeout',metavar='SECS',action='store',type=int,default=20,help="Number of seconds to wait for any given certificate. (default: %(default)s)")
+ap.add_argument('-w','--warn',action='store',type=int,help="Output only warnings about certs expiring within the given number of days.")
+ap.add_argument('--summary',action='store_true',help="""Only summarize each host:port argument's certificant's "valid from ___ to ___" information.""")
+ap.add_argument('--light',action='store_true',help="Use colors suitable for a light background.")
+ap.add_argument('--log-facility',metavar='FACILITY',action='store',default=def_log_file,help="Log to the given file or syslog facility. (default: %(default)s)")
+ap.add_argument('--log-level',metavar='LEVEL',action='store',default='info',help="Log at the given level. (default: %(default)s)")
+ap.add_argument('--timeout',metavar='SECS',action='store',type=int,default=20,help="Number of seconds to wait for any given certificate. (default: %(default)s)")
+ap.add_argument('--synchronous',action='store_true',help="Don't use threading. Retrieve certificates one at a time (which takes longer).")
+ap.add_argument('--debug',action='store_true',help="Turn on debug output.")
 ap.add_argument('services',metavar='HOST:PORT',nargs='*',help="One or more HOST:PORT arguments.")
 opt=ap.parse_args()
+
+if opt.debug:
+  print(f"""Options:
+  {opt.color=}
+  {opt.format=}
+  {opt.warn=}
+  {opt.summary=}
+  {opt.light=}
+  {opt.log_facility=}
+  {opt.log_level=}
+  {opt.timeout=}
+  {opt.services=}""",file=sys.stderr)
 
 # Set up our logger and debug channel instances.
 log=loggy.get_logger(facility=opt.log_facility,level=opt.log_level)
@@ -164,14 +175,20 @@ dc=DebugChannel(
 # Get our saved config data if it's available.
 opt.data_file=os.path.expanduser("~/.%s.json"%(prog.name,))
 if os.path.exists(opt.data_file):
+  if opt.debug:
+    print(f"Reading from {opt.data_file!r} ...",file=sys.stdout)
   with open(opt.data_file) as f:
     try:
       opt.data=json.load(f)
     except Exception as e:
-      sys.stderr.write("%s: Error reading %s: %s\n"%(prog.name,opt.data_file,e))
+      print("f{prog.name}: Error reading {opt.data_file}: {e}",filename=sys.stderr)
       sys.exit(1)
 else:
+  if opt.debug:
+    print(f"{opt.data_file!r} not found. (This is not an error.)",file=sys.stderr)
   opt.data=dict(options={},services=[])
+if opt.debug:
+  print(f"opt.data:\n{json.dumps(opt.data,indent=2,sort_keys=True)}",file=sys.stderr)
 
 # Adjust our colors for a light-background palette if needed.
 if opt.light:
@@ -181,7 +198,7 @@ if opt.light:
 # Cook some of our other command line options a bit.
 ansi.enabled=(opt.color or sys.stdout.isatty()) and opt.format=='text'
 if not sys.stdin.isatty():
-  opt.services.extend([line.strip() for line in sys.stdin])
+  opt.services.extend([line for line in [l.strip() for l in sys.stdin] if line and line[0]!='#'])
 if not opt.services:
   if opt.data["services"]:
     opt.services=[
@@ -190,6 +207,15 @@ if not opt.services:
   else:
     ap.print_help()
     sys.exit(1)
+# Make sure there are no duplicates in our list of services. (Keep the first occurrance.)
+i=0
+while i<len(opt.services):
+  found=[j for j in range(i,len(opt.services)) if opt.services[i]==opt.services[j]]
+  if len(found)>1:
+    for j in found[1:]:
+      del opt.services[j]
+  i+=1
+# Parse our "host:port" service strings into (host,port) tuples.
 for i in range(len(opt.services)):
   try:
     host,port=opt.services[i].split(':')
@@ -215,19 +241,24 @@ def add_cert(service):
 # Retrieve all our certs in a dict keyed by (host,port) tuples.
 certs={}
 connections=threading.Semaphore(32) # Allow only up to 32 concurrent cert retrievals.
-
-# Create and start our threads.
 log.info("Starting retrieval of %s"%nounf('certificate',len(opt.services)))
-for service in opt.services:
-  threading.Thread(name='%s:%s'%service,target=add_cert,args=(service,)).start()
+if opt.synchronous:
+  for service in opt.services:
+    log.info(f"Getting SSL certificate for {service[0]}:{service[1]} ...")
+    certs[service]=Certificate(service,timeout=opt.timeout)
+else:
+  # Create and start our threads.
+  for service in opt.services:
+    threading.Thread(name='%s:%s'%service,target=add_cert,args=(service,)).start()
 
-# Wait for all our threads (except the main thread) to finish.
-spinner=Spinner(Spinner.cylon,True)
-while threading.activeCount()>1:
-  sys.stderr.write('Waiting for %s to finish [%s] \r'%(nounf('thread',threading.activeCount()-1),spinner()))
-  time.sleep(0.1)
-sys.stderr.write((' '*(prog.term_width-1))+'\r')
+  # Wait for all our threads (except the main thread) to finish.
+  spinner=Spinner(Spinner.cylon,True)
+  while threading.activeCount()>1:
+    print(f"Waiting for %s to finish [{spinner()}] \r"%nounf('thread',threading.activeCount()-1),file=sys.stderr,end='')
+    time.sleep(0.1)
+  print((' '*(prog.term_width-1))+'\r',file=sys.stderr)
 log.info("Finished retrieval of %s"%nounf('certificate',len(opt.services)))
+
 # Now that we've retrieved our certs in the order given to us, we'll sort
 # them alphabetically by hostname and numerically by port number.
 opt.services.sort()
@@ -254,15 +285,20 @@ if opt.summary:
   sys.exit(0)
 
 if opt.warn!=None:
-  warnings=dict([
-    ((c.host,c.port),c.toDict())
-    #('%s%s%s'%(host_text(c.host),port_text(c.port)),c.toDict())
-      for c in list(certs.values())
+  # Express and remove any errors first.
+  for srv in list(certs.keys()):
+    if certs[srv].error:
+      print(f"{srv[0]}:{srv[1]} ERROR: {certs[srv].error}",file=sys.stderr)
+      del certs[srv]
+  # All remaining certs should contain usable data.
+  warnings={
+    (c.host,c.port):c.toDict()
+      for c in certs.values()
         if c.daysRemaining<opt.warn
-  ])
+  }
   if opt.format=='text':
     services=list(warnings.keys())
-    services.sort(key=lambda s:warnings[s]['daysRemaining'])
+    services.sort(key=lambda s:(warnings[s]['daysRemaining'],s))
     print('Certificates expiring in the next %s:'%nounf('day',opt.warn))
     for s in services:
       h,p=s # Extract host and port from service s.
@@ -275,7 +311,8 @@ if opt.warn!=None:
       ansi.paint(host_text,h,':',port_text,p,norm_text,' ',info)
       #print '%s: %s'%(s,info)
   elif opt.format=='json':
-    print(json.dumps(warnings,indent=2,sort_keys=True,default=str))
+    # JSON doesn't support tuples as key values, so we'll convert our keys to strings.
+    print(json.dumps({f"{h}:{p}":warnings[(h,p)] for h,p in warnings.keys()},indent=2,sort_keys=True,default=str))
 else:
   # "Normal" output, which outputs everything we know about these certs.
   if opt.format=='text':
