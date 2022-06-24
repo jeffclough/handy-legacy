@@ -43,6 +43,8 @@ well be simpler to understand than the English text that documents it.
 Don't be shy about looking at the code. :-)
 """
 
+from typing import Callable
+
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -52,24 +54,23 @@ class Suffixer(object):
 
   Think of Suffixer instances, and those of its derivatives, as rules
   that know 1) how to reconize when a given word is suitable for the
-  rule, and 2) how and when to apply either the singular or plural
-  suffix to that word, depending on a given count. For example, here's a
-  very simple rule set that will work on a surprising range of english
-  nouns:
+  rule, and 2) how to apply either the singular or plural suffix to that
+  word, depending on a given count. For example, here's a very simple
+  rule set that will work on a surprising range of english nouns:
 
     rules=[
       Suffixer('','es',
         test=(lambda s: any([
           s.endswith(e) for e in ('s','sh','ch','x')
         ])),
-        text=('A word ending with "s", "sh", "ch", or "x" '
+        desc=('A word ending with "s", "sh", "ch", or "x" '
               'becomes plural by ending with "es" instead.')
       ),
       Suffixer('y','ies',replace=-1,
         test=(lambda s:
           len(s)>2 and s[-1]=='y' and s[-2] not in 'aeiou'
         ),
-        text=('A word ending with y becomes plural by ending with ies '
+        desc=('A word ending with y becomes plural by ending with ies '
               'instead, unless preceded by a vowel.')
       ),
       Suffixer('','s'),
@@ -124,7 +125,23 @@ class Suffixer(object):
   NounSuffixer, lets the caller say whether the suffixed root should be
   expressed possessively. (See NounSuffixer for details.)"""
 
-  def __init__(self,singular,plural,replace=None,test=None,text=None):
+  def __init__(self,singular:str,plural:str,replace:int=None,test:Callable=None,desc:str=None):
+    """Initialize this suffixing rule with the singular and plural
+    suffixes and some other helper parameters.
+
+    If only singular and plural are given, any singular ending is
+    replaced with plural. Otherwise ...
+
+    replace: This optional integer is the number of characters at the
+    end of the root to be removed before the plural suffix is appended.
+
+    test: This optional function takes the root as its argument and
+    returns true if this suffixing rule applies to that root.
+
+    desc: This optional string is the english description of this
+    suffixing rule. If not given, the Suffixer instance will do its best
+    to compose its own description."""
+
     self.singular=singular
     self.plural=plural
     if replace==None:
@@ -132,15 +149,6 @@ class Suffixer(object):
       if replace==0:
         replace='append'
     self.replace=replace
-    if text:
-      self.text=text
-    else:
-      singular='Any word' if singular=='' else f'A word ending with "{singular}"'
-      plural=f'"{plural}"'
-      if replace=='append':
-        self.text=f"{singular} becomes plural by appending {plural}."
-      else:
-        self.text=f"{singular} becomes plural by ending with {plural} instead."
     # Ignore the caller's test function if we already have a test() method.
     if not hasattr(self,'test'):
       if test:
@@ -150,6 +158,15 @@ class Suffixer(object):
           self.test=lambda s:s.endswith(self.singular)
         else:
           self.test=lambda s:True
+    if desc:
+      self.desc=desc
+    else:
+      singular='Any word' if singular=='' else f'A word ending with "{singular}"'
+      plural=f'"{plural}"'
+      if replace=='append':
+        self.desc=f"{singular} becomes plural by appending {plural}."
+      else:
+        self.desc=f"{singular} becomes plural by ending with {plural} instead."
 
   def __call__(self,root,count):
     "Return our root word suffixed appropriately for count's value."
@@ -166,7 +183,7 @@ class Suffixer(object):
         
     # Use count to determine which suffix to use.
     if count==1:
-      suffix=self.singular
+      suffix='' if self.replace=='append' else self.singular
     else:
       suffix=self.plural
     # Apply the suffix to our root.
@@ -182,18 +199,18 @@ class Suffixer(object):
   def __repr__(self):
     """Return a string representing how this object was created."""
 
-    #return "%s(%r,%r,replace=%r,test=%r,text=%r)"%(
-    #  self.__class__.__name__,self.singular,self.plural,self.replace,self.test,self.text
+    #return "%s(%r,%r,replace=%r,test=%r,desc=%r)"%(
+    #  self.__class__.__name__,self.singular,self.plural,self.replace,self.test,self.desc
     #)
 
     return
-    f"{self.__class__.__name__}({self.singular!r},{self.plural!r},{self.replace=},{self.test=},{self.text=})"
+    f"{self.__class__.__name__}({self.singular!r},{self.plural!r},replace={self.replace},test={self.test},desc={self.desc})"
 
   def __str__(self):
-    """Return this object's text value, the one it was created with or,
+    """Return this object's desc value, the one it was created with or,
     if none was given, the one it composed for itself."""
 
-    return self.text
+    return self.desc
 
   def matchCapitalization(self,root,word):
     if root[0].isupper() and not word[0].isupper():
@@ -208,17 +225,17 @@ class NounSuffixer(Suffixer):
   nouns. It implements the rules laid out in "Chicago Manual of Style,
   17th edition."'''
 
-  def __init__(self,singular,plural,replace=None,test=None,text=None):
+  def __init__(self,singular,plural,replace=None,test=None,desc=None):
     """This consructor is just like Suffixer's constructor, but if the
-    "text" argument is not given (or None), any Suffixer-provided text
+    "desc" argument is not given (or None), any Suffixer-provided desc
     value is changed from "A word ..." to "A noun ..."."""
 
-    super(NounSuffixer,self).__init__(singular,plural,replace,test,text)
-    if not text:
-      if self.text.startswith('A word'):
-        self.text='A noun'+self.text[6:]
-      elif self.text.startswith('Any word'):
-        self.text='Any noun'+self.text[8:]
+    super(NounSuffixer,self).__init__(singular,plural,replace,test,desc)
+    if not desc:
+      if self.desc.startswith('A word'):
+        self.desc='A noun'+self.desc[6:]
+      elif self.desc.startswith('Any word'):
+        self.desc='Any noun'+self.desc[8:]
 
   def __call__(self,root,count,pos=False):
     """Return our root noun suffixed appropriatly for count's value and,
@@ -312,10 +329,10 @@ class IrregularNounSuffixer(NounSuffixer):
 
   def __init__(self):
     # "replace=0" tells Suffixer to replace the whole word with the chosen
-    # suffix, which for these irregular plurals, will be the whole singlular
+    # suffix, which for these irregular plurals, will be the whole singular
     # or plural form of the noun.
     super(IrregularNounSuffixer,self).__init__('','',replace=0)
-    self.text='Repalce an irregularly pluralized noun with its special plural form.'
+    self.desc='Repalce an irregularly pluralized noun with its special plural form.'
 
   def __repr__(self):
     return "%s()"%self.__class__.__name__
@@ -345,6 +362,9 @@ noun_suffixing_rules=[
   # Words ending with "is" are often pluralised by replacing that with "es".
   NounSuffixer('is','es',-2),
 
+  # Words ending with "o" are often pluralized by adding "es".
+  NounSuffixer('o','es','append'),
+
   # There are a few word-endings that call for "es" plural suffixes.
   NounSuffixer('','es','append',lambda s: any([s.endswith(ending) for ending in ('s','sh','ch','x')]),
     'A noun ending in "s", "sh", "ch", or "x" becomes plural by appending "es".'
@@ -360,7 +380,7 @@ noun_suffixing_rules=[
   NounSuffixer('fe','ves',-2,lambda s: s.endswith('fe')),
 
   # Words ending with "craft" do not change when plural.
-  NounSuffixer('craft','','append',text="Words ending with \"craft\" do not change when plural."),
+  NounSuffixer('craft','','append',desc="A nouns ending with \"craft\" doesn't change when plural."),
 
   # Words ending with "um" are often pluralised by replacing that with "a".
   NounSuffixer('um','a',-2,lambda s: s.endswith('um')),
@@ -957,6 +977,8 @@ if __name__=='__main__':
     'dog'
     >>> nouner('dog',2)
     'dogs'
+    >>> nouner('potato',58)
+    'potatoes'
     >>> #
     >>> # Testing nounf()
     >>> #
@@ -986,6 +1008,8 @@ if __name__=='__main__':
     "I stepped on 3 people's feet."
     >>> "I made %s today."%nounf('fireman',3,'hat')
     "I made 3 firemen's hats today."
+    >>> "There were %s in the garden this year."%nounf('potato',58)
+    'There were 58 potatoes in the garden this year.'
     >>> #
     >>> # Testing english.join()
     >>> #
@@ -1169,6 +1193,7 @@ if __name__=='__main__':
   ap=argparse.ArgumentParser(description="Test the english.py module in some way.")
   ap.add_argument('--con',action='store',help="The conjunction to use with --join.")
   ap.add_argument('--count',action='store',default=1,help="Use this number when deciding whether a word should be singular or plural.")
+  ap.add_argument('--debugger',action='store_true',help="Engage pdb within this script once we get through the setup. This is not for the uninitiated. See https://docs.python.org/3/library/pdb.html#debugger-commands for a command summary.")
   ap.add_argument('--join',action='store_true',help="Join our WORDs into an english list.")
   ap.add_argument('--noun',action='store_true',help="One or more (separated by spaces or commas) nouns to test.")
   ap.add_argument('--noun-phrase',action='store_true',help="Use --count and (optionally) --obj to output the corresponding noun phrase for every WORD argument on the command line.")
@@ -1178,6 +1203,11 @@ if __name__=='__main__':
   ap.add_argument('--test',action='store_true',help="Run all internal tests.")
   ap.add_argument('words',metavar='WORD',action='store',nargs='*',help="List of terms to act upon.")
   opt=ap.parse_args()
+
+  if opt.debugger:
+    # Start Python's debugger.
+    import pdb
+    pdb.set_trace()
 
   # Handle any options that require no WORD arguments.
   if opt.noun_rules:
