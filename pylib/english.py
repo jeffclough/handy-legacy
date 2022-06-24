@@ -269,19 +269,29 @@ irregular_noun_plurals=dict(
   alumnus='alumni',
   appendix='appendices',
   atrium='atriums',
+  belief='beliefs',
   buffalo='buffalo',
   cactus='cacti',
+  canto='cantos',
+  cello='cellos',
+  chef='chefs',
+  chief='chiefs',
   child='children',
   chum='chums',
   cod='cod',
   cranium='craniums',
+  criterion='criteria',
   deer='deer',
   die='dice',
+  fez='fezzes',
   fish='fish',
   focus='foci',
   foot='feet',
   fungus='fungi',
+  gas='gasses',
   goose='geese',
+  halo='halos',
+  hippopotamus='hippopotami',
   index='indices',
   louse='lice',
   moose='moose',
@@ -290,10 +300,17 @@ irregular_noun_plurals=dict(
   octopus='octopi',
   ox='oxen',
   person='people',
+  phenomenon='phenomena',
+  photo='photos',
+  piano='pianos',
+  proof='proofs',
   quail='quail',
   radius='radii',
+  roof='roofs',
+  series='series',
   sheep='sheep',
   shrimp='shrimp',
+  species='species',
   stadium='stadiums',
   swine='swine',
   tooth='teeth',
@@ -301,6 +318,7 @@ irregular_noun_plurals=dict(
   vacuum='vacuums',
   vertex='vertices',
   vortex='vortices',
+  zero='zeros',
 )
 
 class IrregularNounSuffixer(NounSuffixer):
@@ -366,7 +384,7 @@ noun_suffixing_rules=[
   NounSuffixer('o','es','append'),
 
   # There are a few word-endings that call for "es" plural suffixes.
-  NounSuffixer('','es','append',lambda s: any([s.endswith(ending) for ending in ('s','sh','ch','x')]),
+  NounSuffixer('','es','append',lambda s: any([s.endswith(ending) for ending in ('s','sh','ch','x','z')]),
     'A noun ending in "s", "sh", "ch", or "x" becomes plural by appending "es".'
   ),
 
@@ -945,40 +963,176 @@ if __name__=='__main__':
     'alumni'
     >>> nouner('Alumnus',5)
     'Alumni'
-    >>> nouner('index',5)
-    'indices'
-    >>> nouner('Index',5)
-    'Indices'
-    >>> nouner('watch',1)
-    'watch'
-    >>> nouner('watch',2)
-    'watches'
-    >>> nouner('penny',1)
-    'penny'
-    >>> nouner('penny',2)
-    'pennies'
-    >>> nouner('elf',1)
-    'elf'
-    >>> nouner('elf',2)
-    'elves'
-    >>> nouner('life',1)
-    'life'
-    >>> nouner('life',2)
-    'lives'
-    >>> nouner('axis',1)
-    'axis'
+    >>> nouner('aircraft',2)
+    'aircraft'
+    >>> nouner('alumnus',2)
+    'alumni'
+    >>> nouner('analysis',2)
+    'analyses'
+    >>> nouner('appendix',2)
+    'appendices'
     >>> nouner('axis',2)
     'axes'
-    >>> nouner('curiculum',1)
-    'curiculum'
-    >>> nouner('curiculum',2)
-    'curicula'
-    >>> nouner('dog',1)
-    'dog'
-    >>> nouner('dog',2)
-    'dogs'
-    >>> nouner('potato',58)
+    >>> nouner('bacterium',2)
+    'bacteria'
+    >>> nouner('belief',2)
+    'beliefs'
+    >>> nouner('blitz',2)
+    'blitzes'
+    >>> nouner('boy',2)
+    'boys'
+    >>> nouner('buffalo',2)
+    'buffalo'
+    >>> nouner('bus',2)
+    'buses'
+    >>> nouner('cactus',2)
+    'cacti'
+    >>> nouner('calf',2)
+    'calves'
+    >>> nouner('canoe',2)
+    'canoes'
+    >>> nouner('canto',2)
+    'cantos'
+    >>> nouner('cat',2)
+    'cats'
+    >>> nouner('chef',2)
+    'chefs'
+    >>> nouner('chief',2)
+    'chiefs'
+    >>> nouner('child',2)
+    'children'
+    >>> nouner('city',2)
+    'cities'
+    >>> nouner('crisis',2)
+    'crises'
+    >>> nouner('criterion',2)
+    'criteria'
+    >>> nouner('curriculum',2)
+    'curricula'
+    >>> nouner('datum',2)
+    'data'
+    >>> nouner('deer',2)
+    'deer'
+    >>> nouner('die',2)
+    'dice'
+    >>> nouner('ellipsis',2)
+    'ellipses'
+    >>> nouner('fish',2)
+    'fish'
+    >>> nouner('focus',2)
+    'foci'
+    >>> nouner('foot',2)
+    'feet'
+    >>> nouner('fungus',2)
+    'fungi'
+    >>> nouner('goose',2)
+    'geese'
+    >>> nouner('halo',2)
+    'halos'
+    >>> nouner('hero',2)
+    'heroes'
+    >>> nouner('hippopotamus',2)
+    'hippopotami'
+    >>> nouner('house',2)
+    'houses'
+    >>> nouner('hovercraft',2)
+    'hovercraft'
+    >>> nouner('index',2)
+    'indices'
+    >>> nouner('knife',2)
+    'knives'
+    >>> nouner('leaf',2)
+    'leaves'
+    >>> nouner('life',2)
+    'lives'
+    >>> nouner('lunch',2)
+    'lunches'
+    >>> nouner('man',2)
+    'men'
+    >>> nouner('marsh',2)
+    'marshes'
+    >>> nouner('memorandum',2)
+    'memoranda'
+    >>> nouner('moose',2)
+    'moose'
+    >>> nouner('mouse',2)
+    'mice'
+    >>> nouner('nucleus',2)
+    'nuclei'
+    >>> nouner('octopus',2)
+    'octopi'
+    >>> nouner('ox',2)
+    'oxen'
+    >>> nouner('penny',2)
+    'pennies'
+    >>> nouner('person',2)
+    'people'
+    >>> nouner('phenomenon',2)
+    'phenomena'
+    >>> nouner('photo',2)
+    'photos'
+    >>> nouner('piano',2)
+    'pianos'
+    >>> nouner('potato',2)
     'potatoes'
+    >>> nouner('proof',2)
+    'proofs'
+    >>> nouner('puppy',2)
+    'puppies'
+    >>> nouner('radius',2)
+    'radii'
+    >>> nouner('ray',2)
+    'rays'
+    >>> nouner('roof',2)
+    'roofs'
+    >>> nouner('roof',2)
+    'roofs'
+    >>> nouner('series',2)
+    'series'
+    >>> nouner('sheep',2)
+    'sheep'
+    >>> nouner('shrimp',2)
+    'shrimp'
+    >>> nouner('spacecraft',2)
+    'spacecraft'
+    >>> nouner('species',2)
+    'species'
+    >>> nouner('stratum',2)
+    'strata'
+    >>> nouner('swine',2)
+    'swine'
+    >>> nouner('tax',2)
+    'taxes'
+    >>> nouner('thesis',2)
+    'theses'
+    >>> nouner('tomato',2)
+    'tomatoes'
+    >>> nouner('tooth',2)
+    'teeth'
+    >>> nouner('torpedo',2)
+    'torpedoes'
+    >>> nouner('trout',2)
+    'trout'
+    >>> nouner('truss',2)
+    'trusses'
+    >>> nouner('veto',2)
+    'vetoes'
+    >>> nouner('volcano',2)
+    'volcanoes'
+    >>> nouner('vortex',2)
+    'vortices'
+    >>> nouner('watercraft',2)
+    'watercraft'
+    >>> nouner('wife',2)
+    'wives'
+    >>> nouner('wife',2)
+    'wives'
+    >>> nouner('wolf',2)
+    'wolves'
+    >>> nouner('woman',2)
+    'women'
+    >>> nouner('zero',2)
+    'zeros'
     >>> #
     >>> # Testing nounf()
     >>> #
@@ -1228,7 +1382,7 @@ if __name__=='__main__':
       print(join(opt.words,con=opt.con,sep=opt.sep))
     elif opt.noun:
       for w in opt.words:
-        print(f"{w}:\n    {nounf(w,1,opt.obj)}\n    {nounf(w,2,opt.obj)}")
+        print(f"{nounf(w,1,opt.obj)}, {nounf(w,2,opt.obj)}")
     elif opt.noun_phrase:
       for w in opt.words:
         print(nounf(w,opt.count,opt.obj))
