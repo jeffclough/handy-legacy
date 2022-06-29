@@ -254,9 +254,9 @@ else:
   # Wait for all our threads (except the main thread) to finish.
   spinner=Spinner(Spinner.cylon,True)
   while threading.activeCount()>1:
-    print(f"Waiting for %s to finish [{spinner()}] \r"%nounf('thread',threading.activeCount()-1),file=sys.stderr,end='')
+    print(f"Waiting for %s to finish [{spinner()}]  \r"%nounf('thread',threading.activeCount()-1),file=sys.stderr,end='')
     time.sleep(0.1)
-  print((' '*(prog.term_width-1))+'\r',file=sys.stderr)
+  print((' '*(prog.term_width-1))+'\r',file=sys.stderr,end='')
 log.info("Finished retrieval of %s"%nounf('certificate',len(opt.services)))
 
 # Now that we've retrieved our certs in the order given to us, we'll sort
