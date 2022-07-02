@@ -150,6 +150,12 @@ class DebugChannel(object):
     self.enabled=bool(state)
     return prev_state
 
+  def disable(self):
+    """Inhibit output from this DebugChannel object, and return its
+    previous "enabled" state."""
+
+    return self.enable(False)
+
   def ignoreModule(self,name,*args):
     """Given the name of a module, e.g. "debug"), ignore any entries in
     our call stack from that module. Any subsequent arguments must be
@@ -320,8 +326,7 @@ class DebugChannel(object):
 
       # If our caller provided a callback function, call that now.
       if self.callback:
-        x=self.callback(**locals())
-        if not x:
+        if not self.callback(**locals()):
           return self
 
       # Format our message and write it to the debug stream.
@@ -390,15 +395,15 @@ if __name__=='__main__':
     is just a simple example of what might be done with a callback
     function."""
 
-    sleep(.05)
+    sleep(.1)
     return True
 
   assert '__loader__' in globals(),"To run this module stand-along, use 'python -m debug'."
   # Create our DebugChannel object that is switched on.
   d=DebugChannel(True,stream=sys.stdout,callback=delay)
   # Since this test is running from the debug module itself, we need to ignore a couple of functions.
-  d.ignoreModule(inspect.stack()[0][1],'write','__call__')
-  d.ignoreModule('/usr/local/Cellar/python@2/2.7.17/Frameworks/Python.framework/Versions/2.7/lib/python2.7/runpy.py')
+  #d.ignoreModule(inspect.stack()[0][1],'write','__call__')
+  #d.ignoreModule('/usr/local/Cellar/python@2/2.7.17/Frameworks/Python.framework/Versions/2.7/lib/python2.7/runpy.py')
   # Now run our test.
   d("About to call testing() ...").indent()
   testing()
