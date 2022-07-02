@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-The DateParser class is for parsing relative times. For example:
+The DateParser class is for parsing relative dates. For example:
 
     sunday
     thursday
@@ -24,9 +24,6 @@ The DateParser class is for parsing relative times. For example:
     1 fortnight hence
     1 month ago
     1 year hence
-
-
-
 """
 
 import re,time
