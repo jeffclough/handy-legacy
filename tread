@@ -1,21 +1,27 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 # Turn on "true" division, the default in 3.0+, for /. Use the // operator
 # to force "floor" divsion, which is classical integer division. But be
 # aware that 1.0//2 == 0.0 under "true" division.
-from __future__ import division
 
-import copy,optparse,os,re,stat,sys,time
+
+import copy,optparse,os,re,stat,sys,time,traceback
 from OptionParserFormatters import IndentedHelpFormatterWithNL
+from collections import namedtuple
 from datetime import datetime,timedelta,tzinfo
+from pprint import pformat
+from debug import DebugChannel
 
 def die(msg,rc=1):
   sys.stderr.write(os.path.basename(sys.argv[0])+': '+msg+'\n')
   sys.exit(rc)
 
-def debug(msg):
-  if opt.debug:
-    sys.stderr.write(os.path.basename(sys.argv[0])+' D: '+msg+'\n')
+#def debug(msg):
+#  if opt.debug:
+#    sys.stderr.write(os.path.basename(sys.argv[0])+' D: '+msg+'\n')
+
+debug=DebugChannel(line_fmt='{label:.1s}: {basename}:{function}:{line}: {indent}{message}\n')
+#debug(f"debug.fmt={debug.fmt!r}")
 
 if sys.version_info>=(2,6):
   # Use the built-in str.format() method for formatting.
@@ -73,33 +79,38 @@ def get_month_by_name(month_name):
   life easier, any string containing a number from 1 to 12 is also
   returned as the corresponding integer."""
 
-  debug('month_name=%r'%month_name)
+  d=debug.enable(False)
+  debug(f"month_name={month_name}").indent()
   try:
     n=int(month_name)
-    debug('n=%r'%n)
+    debug(f"converting as integer to {n}")
     if n>=1 and n<=12:
-      return n
+      mnum=n
     else:
-      return none
-  except:
-    pass
-  n=len(month_name)
-  if n<3:
-    return None
-  m=month_name.lower()
-  debug('m=%r'%m)
+      debug(f"{n} is out of range")
+      mnum=None
+  except ValueError as e:
+    n=len(month_name)
+    if n<3:
+      debug("{month_name!r} is too short to be a month name")
+      mnum=None
+    else:
+      m=month_name.lower()
+      debug(f"m={m!r}")
 
-  for i in range(len(months)):
-    debug('comparing %r to %r'%(m,months[i][:n]))
-    if m==months[i][:n]:
-      debug('returning %r'%(i+1))
-      return i+1
-  debug('returning None')
-  return None
+      for i in range(len(months)):
+        if m==months[i][:n]:
+          mnum=i+1
+          break
+      else:
+        mnum=None
+  debug.undent()(f"returning {mnum}")
+  debug.enable(d)
+  return mnum
 
 def get_month_by_name_strict(month_name):
   """This is exactly the same as get_month_by_name(), bit it raises a
-  ValueError exception"""
+  ValueError exception if given a bad month name."""
 
   month=get_month_by_name(month_name)
   if month==None:
@@ -123,14 +134,16 @@ def formatted_relative_time(delta):
   output+='%02d:%02d:%02d'%(delta//3600,(delta%3600)//60,delta%60)
   return output
 
-def unique(seq,key=None,shallowcopy=False,deepcopy=False):
+def unique(seq,key=None,copy_depth=None):
   """Return a copy of seq where consecutive, identical values are folded
   into a single value. If present the key argument works like that of
   the standard sorted() function."""
 
-  if deepcopy: c=copy.deepcopy
-  elif shallowcopy: c=copy.copy
-  else: c=lambda x:x
+  # Set c() as our local copy function.
+  if copy_depth is None: c=lambda x:x
+  elif copy_depth=='deep': c=copy.deepcopy
+  elif copy_depth=='shallow': c=copy.copy
+  else: raise ValueError("unique()'s copy_depth must be either None (the default), 'deep', or 'shallow'.")
 
   ret=[]
   prev=None
@@ -140,10 +153,11 @@ def unique(seq,key=None,shallowcopy=False,deepcopy=False):
     if v==prev: continue
     ret.append(c(val))
     prev=v
+
+  # Match our return type to seq's type if possible.
   if isinstance(seq,tuple): ret=tuple(ret)
-  if isinstance(seq,str): ret=''.join(ret)
-  if isinstance(seq,unicode): ret=u''.join(ret)
-  if sys.version>=(2,6) and isinstance(seq,bytearray): ret=bytearray(ret)
+  elif isinstance(seq,str): ret=''.join(ret)
+  elif isinstance(seq,bytearray): ret=bytearray(ret)
   return ret
 
 # Make sure we can get total_seconds() for a timedelta object, even if we're
@@ -327,7 +341,7 @@ EXAMPLES
 op.add_option('--age',metavar='UNITS',dest='age',choices=('seconds','minutes','hours','days','time'),help="Request the age of the given date and time, and give the desired units (days, hours, minutes, or seconds). The 'time' units value gives an output format of '[-][DAYSd ]%HH:%MM:%SS'. Only integer values are returned, and there is no rounding. Future times return a negative age.")
 op.add_option('--epoch',dest='epoch',choices=epoch_names,help="Output the number of seconds elapsed from the beginning of given epoch to the given time. Negative values are given for times that predate the epoch. Epoch choices: %s"%(', '.join(epoch_names)))
 op.add_option('-f',dest='format',action='store',default='%Y-%m-%d %H:%M:%S %Z',help="Set format for turning times into strings. See 'man strptime' for the format syntax. (default: %default)")
-op.add_option('-F',metavar='format',dest='output',action='store',default='{time}',help="""Set the format for outputting the parsed time, which might include parts of the string from which the time was not parsed. The parts of any parsed string are "before", "time", and "after". (default: %default")""")
+op.add_option('-F',metavar='format',dest='output',action='store',default='{time}',help="""Set the format for outputting the parsed time, which might include parts of the string from which the time was not parsed. The parts of any parsed string are "before", "matched", "after", and "time" (the parsed and formatted version of "matched"). (default: %default")""")
 op.add_option('--furture',dest='assume_past',action='store_false',default=True,help="Assume dates with missing years refer to the future. The default is to assume they refer to a past date.")
 op.add_option('-t',metavar='TZ',dest='transpose',action='store',default=None,help="Transpose the parsed time to a new time zone. \"local\" may be used to identify the local time zone. This option does NOT transpose between standard time and DST, only between time zones. Note also and UTC is ALWAYS on standard time.")
 op.add_option('--tzlist',dest='tzlist',action='store_true',default=False,help="Show a list of time zones this program knows about and quit.")
@@ -338,11 +352,7 @@ opt,args=op.parse_args()
 
 # Handle --debug.
 if opt.debug:
-  import traceback
-  from pprint import pprint
-
-  def debug(msg):
-    print 'D: '+msg
+  debug.enable()
 
   for n in sorted(zones_by_name.keys()):
     debug('%s: %r'%(n,zones_by_name[n]))
@@ -352,10 +362,10 @@ if opt.tzlist:
     sorted(time_zones,key=lambda z:(z.std_offset,z.std_name)),
     key=lambda z:z.std_name
   ):
-    print '%s/%s: %s/%s'%(
+    print('%s/%s: %s/%s'%(
       z.std_name,z.dst_name,
       formatted_relative_time(z.std_offset),formatted_relative_time(z.dst_offset)
-    )
+    ))
   sys.exit(0)
 
 if opt.epoch!=None:
@@ -367,6 +377,9 @@ if opt.epoch!=None:
 if opt.transpose:
   opt.transpose=get_tz_by_name(opt.transpose)
 
+# Parsers return ParsedTime values.
+ParsedTime=namedtuple('ParsedTime','before matched after dt')
+
 class ParserBase(object):
   """This is the base class of all other time parsers. Treat it as an
   abstract base class."""
@@ -376,8 +389,8 @@ class ParserBase(object):
 
   # This is a sequence of compiled REs. This parser can parse only strings
   # that match one of these REs in their entirety.
-  patterns=(
-  )
+  patterns=[
+  ]
 
   # Parse the given string and return an object representing that time. If
   # the string cannot be parsed, return None.
@@ -385,25 +398,36 @@ class ParserBase(object):
     """Return a (BEFORE,DT,AFTER) tuple from the string containing a
     time value.
 
-    BEFORE: The portion of time_string before the time was found.
-    DT:     The datetime.datetime value of the time parsed from the
-            string.
-    AFTER:  The portion of time_string after the time was found.
+    BEFORE:  The portion of time_string before the time was found.
+    MATCHED: The portion of time_string containing the time.
+    AFTER:   The portion of time_string after the time was found.
+    DT:      The datetime.datetime value of the time parsed from the
+             string.
             
-    If no time is found in time_string, a value of ('',None,'') is
-    returned."""
+    If no time is found in time_string, a value of
+    ParsedTime('','','',None) is returned."""
 
-    return ('',None,'')
+    return ParsedTime('','','',None)
 
 class DateTimeParser(ParserBase):
 
   name="Full Date and Time"
-  patterns=(
+  patterns=[
   # mm-dd-YY HH:MM:SS
     r'\b'
     r'(?P<month>\d{1,2})[-/]'
     r'(?P<day>\d{1,2})[-/]'
     r'((?P<year>\d{2}))\s+'
+    r'(?P<hour>\d+):'
+    r'(?P<minute>\d+):'
+    r'(?P<second>\d+)'
+    r'(\s+(?P<tz>'+tz_pattern+r'))?'
+    r'\b',
+  # YYYY-mon-dd HH:MM:SS
+    r'\b'
+    r'((?P<year>\d{4})[-/])'
+    r'(?P<month>[A-Za-z]{3,9})[-/]'
+    r'(?P<day>\d{1,2})\s+'
     r'(?P<hour>\d+):'
     r'(?P<minute>\d+):'
     r'(?P<second>\d+)'
@@ -431,7 +455,7 @@ class DateTimeParser(ParserBase):
     r'(\s+(?P<tz>'+tz_pattern+r'))?'
     r'(\s+(?P<year>\d+))?'
     r'\b',
-  )
+  ]
   # Cook and compile these patterns according to command line options.
   if opt.where in ('whole','end'):
     patterns=[p+'$' for p in patterns]
@@ -444,8 +468,9 @@ class DateTimeParser(ParserBase):
     if the matched values are valid date and time values. Otherwise,
     return None."""
 
+    debug(f"named groups: {match.groupdict()}").indent()
+
     # Create an object with the named groups in this match object as attributes.
-    debug('  named groups: %(year)r-%(month)r-%(day)r %(hour)r:%(minute)r:%(second)r %(tz)r'%match.groupdict())
     d=type('',(),match.groupdict())
 
     try:
@@ -457,22 +482,22 @@ class DateTimeParser(ParserBase):
       d.minute=int(d.minute) if d.minute else 0
       d.second=int(d.second) if d.second else 0
       d.tz=zones_by_name[d.tz.upper()] if d.tz else time_zones[0]
-      debug('  time values: %(year)r-%(month)r-%(day)r %(hour)r:%(minute)r:%(second)r %(tz)r'%d.__dict__)
+      debug('values: %(year)r-%(month)r-%(day)r %(hour)r:%(minute)r:%(second)r %(tz)r'%d.__dict__)
       dt=datetime(
         d.year,d.month,d.day,
         d.hour,d.minute,d.second,0,d.tz
       )
-      debug('    dt=%s'%dt)
+      debug(f"dt={dt}")
       if dt.year<100:
-        # Allow the time assumed from missing century information to go
-        # only 80 years into the past. Otherwise, assume the century
-        # following that. And yes, I'm aware that I bent over backward to
-        # ensure that this logic will continue to be correct beyond the 3rd
-        # millennium AD. (If you're reading this in the year 2999, your
-        # welcome, but *WHY* are you still dealing with years expressed as
-        # 2 digits!? Isn't everyone cybernetically merged into a collective
-        # consciousness by now, thus obviating this type of logic entirely?
-        # If not, you should definitely get on that.)
+        # Allow the time assumed from missing century information to go only 80
+        # years into the past. Otherwise, assume the century following that. And
+        # yes, I'm aware I've bent over backward to ensure this logic will
+        # continue to be correct beyond the 3rd millennium AD. (If you're
+        # reading this in the year 2999, your welcome, but *WHY* are you still
+        # dealing with years expressed as 2 digits!? Isn't everyone
+        # cybernetically merged into a collective consciousness by now, thus
+        # obviating this type of logic entirely? If not, you should definitely
+        # get on that.)
         divider=datetime(
           now.year-80,now.month,now.day,now.hour,now.minute,now.second,
           now.microsecond,now.tzinfo
@@ -488,32 +513,24 @@ class DateTimeParser(ParserBase):
           )
       if no_year and opt.assume_past and dt>datetime.now(d.tz):
         # Re-interpret of Feb 29 validation.
-        debug('    subtracting one year ...')
+        debug('subtracting one year ...')
         dt=datetime(
           d.year-1,d.month,d.day,
           d.hour,d.minute,d.second,0,d.tz
         )
-        debug('    dt=%s'%dt)
+      debug.undent()(f"returning {dt!r}")
       return dt
-    except TypeError,e:
-      if opt.debug:
-        for line in traceback.format_exc().split('\n'):
-          debug('    %s'%line)
-        debug(str(e))
-      return None
-    except ValueError,e:
-      if opt.debug:
-        for line in traceback.format_exc().split('\n'):
-          debug('    %s'%line)
-        debug(str(e))
+    except (TypeError,ValueError) as e:
+      debug(traceback.format_exc())
+      debug.undent()("returning None")
       return None
 
   def parse(self,time_string):
-    """Return a (possibly empty) list of plausible interpretations of the
-    value in time_string. Each item in the list is a (before,time,after)
-    tuple."""
+    """Return a (possibly empty) list of plausible interpretations of
+    the value in time_string. Each item in the list is a
+    (before,matched,after,time) tuple."""
 
-    debug("time_string=%r"%time_string)
+    debug("time_string=%r"%time_string).indent()
     matches=[]
     for p in self.patterns:
       debug("pattern='%s'"%p.pattern)
@@ -524,38 +541,183 @@ class DateTimeParser(ParserBase):
         if dt:
           # Add this datetime to our matchs.
           matches.append(
-            (time_string[:m.start()],
-            dt,
-            time_string[m.end():])
+            ParsedTime(
+              time_string[:m.start()],        # Before the match.
+              time_string[m.start():m.end()], # The matched text.
+              time_string[m.end():],          # After the match.
+              dt                              # The datetime value.
+            )
           )
+
+    debug.undent()(f"returning {pformat(matches,width=50)}")
+    return matches
+
+class DateParser(ParserBase):
+
+  name="Just the Date"
+  patterns=[
+  # mm-dd-YY
+    r'\b'
+    r'(?P<month>\d{1,2})[-/]'
+    r'(?P<day>\d{1,2})[-/]'
+    r'((?P<year>\d{2}))'
+    r'\b',
+  # YYYY-mon-dd
+    r'\b'
+    r'((?P<year>\d{4})[-/])'
+    r'(?P<month>[A-Za-z]{3,9})[-/]'
+    r'(?P<day>\d{1,2})'
+    r'\b',
+  # YYYY-mm-dd
+    r'\b'
+    r'((?P<year>\d{4})[-/])'
+    r'(?P<month>\d{1,2})[-/]'
+    r'(?P<day>\d{1,2})'
+    r'\b',
+  # [dow] mmm dd [tz] yyyy
+    r'\b'
+    r'((?P<dow>(sun|mon|tue|wed|thu|fri|sat)\w*)\s+)?'
+    #r'(?P<month>'+month_pattern+')\s+'
+    r'(?P<month>\w+)\s+'
+    r'(?P<day>\d+)\s+'
+    r'(\s+(?P<year>\d+))?'
+    r'\b',
+  ]
+  # Cook and compile these patterns according to command line options.
+  if opt.where in ('whole','end'):
+    patterns=[p+'$' for p in patterns]
+  if opt.where in ('beginning','start','whole'):
+    patterns=['^'+p for p in patterns]
+  patterns=[re.compile(p,re.IGNORECASE) for p in patterns]
+
+  def validate(self,match):
+    """Given a regular expression match object, return a datetime object
+    if the matched values are valid date and time values. Otherwise,
+    return None."""
+
+    # Create an object with the named groups in this match object as attributes.
+    debug(f"named groups: {match.groupdict()}").indent()
+    d=type('',(),match.groupdict())
+
+    try:
+      no_year=not d.year 
+      d.year=int(d.year) if d.year else now.year
+      d.month=get_month_by_name_strict(d.month)
+      d.day=int(d.day) if d.day else None
+      d.hour=0
+      d.minute=0
+      d.second=0
+      d.tz=time_zones[0]
+      debug('time values: %(year)r-%(month)r-%(day)r %(hour)r:%(minute)r:%(second)r %(tz)r'%d.__dict__)
+      dt=datetime(
+        d.year,d.month,d.day,
+        d.hour,d.minute,d.second,0,d.tz
+      )
+      debug(f"dt={dt}")
+      if dt.year<100:
+        # Allow the time assumed from missing century information to go only 80
+        # years into the past. Otherwise, assume the century following that. And
+        # yes, I'm aware I've bent over backward to ensure this logic will
+        # continue to be correct beyond the 3rd millennium AD. (If you're
+        # reading this in the year 2999, your welcome, but *WHY* are you still
+        # dealing with years expressed as 2 digits!? Isn't everyone
+        # cybernetically merged into a collective consciousness by now, thus
+        # obviating this type of logic entirely? If not, you should definitely
+        # get on that.)
+        divider=datetime(
+          now.year-80,now.month,now.day,now.hour,now.minute,now.second,
+          now.microsecond,now.tzinfo
+        )
+        dt=datetime(
+          dt.year+((now.year//1000)*1000)-100,dt.month,dt.day,dt.hour,dt.minute,dt.second,
+          dt.microsecond,dt.tzinfo
+        )
+        if dt<divider:
+          dt=datetime(
+            dt.year+100,dt.month,dt.day,dt.hour,dt.minute,dt.second,
+            dt.microsecond,dt.tzinfo
+          )
+      if no_year and opt.assume_past and dt>datetime.now(d.tz):
+        # Re-interpret of Feb 29 validation.
+        debug('subtracting one year ...')
+        dt=datetime(
+          d.year-1,d.month,d.day,
+          d.hour,d.minute,d.second,0,d.tz
+        )
+      debug.undent()(f"returning {dt}")
+      return dt
+    except (TypeError,ValueError) as e:
+      debug(traceback.format_exc())
+      debug.undent()("returning None")
+      return None
+
+  def parse(self,time_string):
+    """Return a (possibly empty) list of plausible interpretations of
+    the value in time_string. Each item in the list is a
+    (before,matched,after,time) tuple."""
+
+    debug(f"time_string={time_string}").indent()
+    matches=[]
+    for p in self.patterns:
+      debug(f"pattern={p.pattern}")
+      m=p.search(time_string)
+      if m:
+        debug(f"match={m.groupdict()}")
+        dt=self.validate(m)
+        if dt:
+          # Add this datetime to our matchs.
+          matches.append(
+            ParsedTime(
+              time_string[:m.start()],        # Before the match.
+              time_string[m.start():m.end()], # The matched text.
+              time_string[m.end():],          # After the match.
+              dt                              # The datetime value.
+            )
+          )
+    debug.undent()(f"returning {pformat(matches,width=50)}")
     return matches
 
 parsers=(
   DateTimeParser(),
+  DateParser(),
 )
 
 def parse_time(time_string):
   """Parse the time string in every plausible way. If more than one
   solution presents itself, choose the best one and return it."""
 
+  d=debug.enable(False)
+  debug(f"time_string={time_string!r}").indent()
   possibles=[]
   for p in parsers:
     l=p.parse(time_string)
     if len(l)>0:
       possibles.extend(l)
+  if len(possibles)>1:
+    # Discard possibles with matching time strings shorter than the
+    # longest one.
+    debug(f"possibles={pformat(possibles,width=50)}")
+    possibles.sort(key=(lambda pt:len(pt.matched)),reverse=True)
+    l=len(possibles[0].matched)
+    possibles=[pt for pt in possibles if len(pt.matched)==l]
+    debug(f"keeping {pformat(possibles,width=50)}")
   if len(possibles)==1:
-    return possibles[0]
-  if len(possibles)==0:
-    if opt.allow_bad_data==False:
+    debug("Found exactly one match.")
+    m=possibles[0]
+  elif len(possibles)==0:
+    debug("Found zero matches.")
+    # Bear in mind opt.allow_bad_data can be None, True, or False.
+    if not opt.allow_bad_data==False:
       die("Couldn't parse time: %r"%time_string)
     if opt.allow_bad_data==True:
-      return (time_string,None,'')
-    return ('',None,'')
-  if opt.debug:
-    debug('Possible interpretations of %r:'%time_string)
-    for before,dt,after in possibles:
-      debug('    %s'%dt)
-  die('Too many possibilities.')
+      m=ParsedTime('',time_string,'',None)
+    else:
+      m=ParsedTime('','','',None)
+  if len(possibles)>1:
+    die('Too many possibilities.')
+  else:
+    debug(f"returning {m!r}").enable(d)
+    return m
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -588,26 +750,27 @@ def get_input():
 
 debug('Starting main loop ...')
 for time_string in get_input():
-  before,dt,after=parse_time(time_string)
-  if dt:
+  pt=parse_time(time_string)
+  debug(f"pt={pt}")
+  if pt.dt:
     if opt.epoch==None:
       delta=None
     else:
       ##
       ## Handle --epoch, which is really just some pre-processing for --age.
       ##
-      delta=int(total_seconds(dt-opt.epoch))
+      delta=int(total_seconds(pt.dt-opt.epoch))
     debug('opt.age=%r'%(opt.age,))
     if opt.age!=None:
       ##
       ## Handle --age.
       ##
       if delta==None:
-        debug('Computing delta as %s - %s'%(datetime.now(dt.tzinfo),dt))
-        delta=int(total_seconds(datetime.now(dt.tzinfo)-dt))
-      debug('now:\t%r'%datetime.now(dt.tzinfo))
-      debug('dt:\t%r'%dt)
-      debug('delta:\t%r'%delta)
+        debug('Computing delta as %s - %s'%(datetime.now(pt.dt.tzinfo),pt.dt))
+        delta=int(total_seconds(datetime.now(pt.dt.tzinfo)-pt.dt))
+      debug(f"  now:   {datetime.now(pt.dt.tzinfo)}")
+      debug(f"  dt:    {pt.dt}")
+      debug(f"  delta: {delta}")
       if delta<0:
         output='-'
         delta=-delta
@@ -618,32 +781,33 @@ for time_string in get_input():
       elif opt.age=='hours': output+=str(delta//3600)
       elif opt.age=='days': output+=str(delta//86400)
       else: output+=formatted_relative_time(delta)
-      print output
+      print(output)
     else:
       ##
       ## Output the reformated time that we've parsed.
       ##
       if opt.transpose:
-        #debug('dt=%r'%(dt,))
+        #debug('pt.dt=%r'%(pt.dt,))
         #debug('opt.transpose=%r'%(opt.transpose,))
         nt=datetime(
-          dt.year,dt.month,dt.day,dt.hour,dt.minute,dt.second,
-          dt.microsecond,opt.transpose
+          pt.dt.year,pt.dt.month,pt.dt.day,pt.dt.hour,pt.dt.minute,pt.dt.second,
+          pt.dt.microsecond,opt.transpose
         )
         #debug('nt=%r'%(nt,))
         offset=dt-nt
         #debug('offset=%r'%(offset,))
-        dt+=offset
-        dt=datetime(
-          dt.year,dt.month,dt.day,dt.hour,dt.minute,dt.second,
-          dt.microsecond,opt.transpose
+        pt.dt+=offset
+        pt.dt=datetime(
+          pt.dt.year,pt.dt.month,pt.dt.day,pt.dt.hour,pt.dt.minute,pt.dt.second,
+          pt.dt.microsecond,opt.transpose
         )
-      print format(opt.output,**dict(
-        before=before,
-        time=dt.strftime(opt.format),
-        after=after
-      ))
+      print(format(opt.output,**dict(
+        before=pt.before,
+        matched=pt.matched,
+        after=pt.after,
+        time=pt.dt.strftime(opt.format)
+      )))
   elif opt.allow_bad_data==True:
-    print before
+    print(pt.before)
   else:
-    print 'Unrecognized date/time: %r'%time_string
+    print('Unrecognized date/time: %r'%time_string)
