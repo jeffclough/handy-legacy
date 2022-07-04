@@ -25,14 +25,8 @@ def numeric(x):
   """
 
   y=str(x)
-  try:
-    return int(y)
-  except:
-    pass
-  try:
-    return float(y)
-  except:
-    pass
+  with contextlib.suppress(ValueError): return int(y)
+  with contextlib.suppress(ValueError): return float(y)
   return x
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
