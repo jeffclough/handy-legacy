@@ -1,17 +1,14 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
-try:
-  import argparse
-except:
-  import argparse27 as argparse
-import os,sys
+import argparse,os,sys
 from math import *
 from datetime import date,datetime,time,timedelta,tzinfo
+from functools import reduce
 
 progname=os.path.basename(sys.argv[0])
 
 def die(msg,rc=1):
-  print '%s: %s'%(progname,msg)
+  print('%s: %s'%(progname,msg))
   sys.exit(rc)
 
 # Return the value of the given Python expression, or gracefully die trying.
@@ -19,7 +16,7 @@ def die(msg,rc=1):
 def evaluate(expr):
   try:
     return eval(expr)
-  except Exception,e:
+  except Exception as e:
     die('%s: %r\n'%(str(e),expr))
 
 # Handy functions to use with --map:
@@ -29,13 +26,17 @@ def sqr(a): return a**2
 # Handy functions to use with --func:
 def add(a,b): return a+b # <-- default for --func.
 
+default_format="{result}"
+
 ap=argparse.ArgumentParser(
   formatter_class=argparse.RawDescriptionHelpFormatter,
-  description="""This command works much like Python's reduce() function. It is, in fact, a
+  description="""\
+This command works much like Python's reduce() function. It is, in fact, a
 fairly simple wrapper for that function. It basically applies a function of
 two variables cumulatively to a list of values. Values are computed from
 Python expressions given as command line arguments and/or on standard input
-(one value per line).""",
+(one value per line). The command line options precede the standard input
+value if both are given.""",
   epilog="""
 All the functions in Python's math module (ceil, floor, exp, factorial, etc.)
 are imported so you'll have access to them. The %(prog)s command also imports
@@ -44,7 +45,7 @@ addition, %(prog)s also provides a few handy functions for adding things
 together and for squaring numbers:
 
   add(a,b) - Returns a+b. This is the default FUNC function.
-  noop(a)  - Returns a. This is the default PREP function.
+  noop(a)  - Returns a. This is the default MAP function.
   sqr(a)   - Returns a**2.
   
 Examples:
@@ -76,7 +77,7 @@ Examples:
     $ %(prog)s 10-2 6-4 6-20 5-8
     -7
 
-4) %(prog)s runs the PRE function on each list item before cumulatively
+4) %(prog)s runs the MAP function on each list item before cumulatively
    calling FUNC on list items. This lets us, for instance, replace the list's
    items with their absolute values, so we can do the same thing as above, but
    now we're summing the absolute values of those differences.
@@ -162,14 +163,15 @@ Examples:
    from example 8.
 """
 )
-ap.add_argument('-e','--eval',dest='eval',action='store',default='evaluate',help="""A Python function that accepts one argument from the command line or standard input and returns the desired value to be processed. (default: %(default)s)""")
-ap.add_argument('--map',dest='map',action='store',default='noop',help="""A Python function of one argument that preprocesses each list item and returns a value that replaces it in the list. These preprocessed values are what get fed to FUNC. The default (%(default)s) is a function that performs no operation at all, simply returning the value it was given. Since squaring numeric input is sometimes desirable, there's also a an sqr function that will do this (e.g. "--map sqr").""")
-ap.add_argument('--filter',dest='filter',action='store',default='None',help="""A Python function of one argument that returns True for each input value to be kept and False for any value that should be discarded. If given, the filter is applied immediately after preprocessing (with PRE), before FUNC is cumulatively applied to the list items. For example, "--filter 'lambda a:a>0'" allows only positive numeric values to participate in the reduce operation.""")
-ap.add_argument('-i','--init',dest='init',default='None',help="""If present, this value is placed before any other arguments in the calculation, and serves as a default when the there are no arguments. If not given and there is only one argument, that argument is simply returned. So, for example, "--init 0" is helpful when summing a list that might contain only one value.""")
-ap.add_argument('-f','--func',dest='func',action='store',default='add',help="""A python function that accepts two variables and returns a value of the same type. Two predefined functions, "add" and "mult", can be used for these common operations. (default: %(default)s)""")
+ap.add_argument('--eval','-e',dest='eval',action='store',default='evaluate',help="""A Python function of one argument, returning the actual value to be processed. EVAL is typically for regularizing the type of values (e.g. string to numeric) in the given data. (default: %(default)s)""")
+ap.add_argument('--map',dest='map',action='store',default='noop',help="""A Python function of one argument, returning some computed value from each given value, replacing each value in the given data. These preprocessed values are what get fed to FUNC (below). The default (%(default)s) is a function that performs no operation at all, simply returning the value it was given. Since squaring numeric input is sometimes desirable, there's also a an sqr function that will do this (e.g. "--map sqr").""")
+ap.add_argument('--filter',dest='filter',action='store',default='None',help="""A Python function of one argument that returns True for each input value to be kept and False for any other value. If given, the FILTER funciton is applied immediately after processing with MAP (above), before FUNC is cumulatively applied to the given values. For example, "--filter 'lambda a:a>0'" allows only positive numeric values to participate in the reduce operation.""")
+ap.add_argument('--intermediate',dest='intermediate',action='store_true',default=False,help="Output all arguments after running any EVAL, MAP, and/or FILTER functions on them. This is the list of values the reduce operation (FUNC) is performed on.")
+ap.add_argument('--init','-i',dest='init',default='None',help="""If present, this value is placed before any other arguments in the calculation, and serves as a default when the there are no arguments. If not given and there is only one argument, that argument is simply returned. For example, "--init 0" is helpful when summing a list that might be empty.""")
+ap.add_argument('--func','-f',dest='func',action='store',default='add',help="""A python function FUNC(a,b) that accepts two arguments and returns a value of the same type. The returned value is the first argument when FUNC(a,b) is called on the next data value. This funciton is applied iteratively to each data value in the order given. See examples below. Two predefined functions, "add" and "mult", can be used for these common operations. (default: %(default)s)""")
 ap.add_argument('--post',dest='post',default='None',help="""You can use this option to provide a "conditioning" function for the final, reduced value. You can do anything from type coercion (e.g. "--post int") to producing a hash value (e.g. "--post 'lambda x:int(x)%%24'") or even formatting (with a lambda function something like lambda x:"Answer=%%d"%%x).""")
-ap.add_argument('--intermediate',dest='intermediate',action='store_true',default=False,help="Output all arguments after running any EVAL, PRE, and/or FILTER functions on them. This is the list of values the reduce operation is performed on.")
-ap.add_argument('args',metavar='ARG',action='store',nargs=argparse.REMAINDER,help="Apply FUNC cumulatively to command line arguments (and/or standard input), from left to right, so as to reduce the items to a single value.")
+ap.add_argument('--format',default=None,help="""This is a python f-string to be used to output the result. (default=%rs)"""%(default_format,))
+ap.add_argument('args',metavar='ARG',action='store',nargs='*',help="Apply FUNC cumulatively to command line arguments (and/or standard input), from left to right, so as to reduce the items to a single value.")
 opt=ap.parse_args()
 opt.eval=evaluate(opt.eval)
 opt.map=evaluate(opt.map)
@@ -177,28 +179,39 @@ opt.filter=evaluate(opt.filter)
 opt.init=evaluate(opt.init)
 opt.func=evaluate(opt.func)
 opt.post=evaluate(opt.post)
+if opt.format==None:
+  opt.format=default_format
 
-# Add standard input, if available, to args.
+# Add standard input (if available) to args (if given).
 if not sys.stdin.isatty():
   opt.args.extend(sys.stdin.readlines())
-# Prepare whatever Python expressions we've been given.
+n=len(opt.args)
+
+# Pre-process (EVAL) and adjust (MAP) whatever Python expressions we've been given.
 opt.args=[opt.map(opt.eval(arg)) for arg in opt.args]
-# If we have a filter function, apply that here.
+
+# Apply any FILTER function to our list of values.
 if opt.filter!=None:
   opt.args=filter(opt.filter,opt.args)
-if opt.intermediate:
-  print '\n'.join([str(x) for x in opt.args])
 n=len(opt.args)
+if opt.intermediate:
+  print('\n'.join([str(x) for x in opt.args]))
 
 if n==0 and opt.init==None:
   ap.print_usage()
   die('No expressions found on command line or standard input.')
 
-# Finally, run the reduce operation.
+# Run the reduce operation (FUNC).
 if opt.init==None:
   result=reduce(opt.func,opt.args)
 else:
-  result=reduce(opt.func,opt.args,opt.map(opt.init))
+  result=reduce(opt.func,opt.args,opt.init)
+
+# Post-process our data using the POST function.
 if opt.post!=None:
   result=opt.post(result)
-print result
+
+# Format our result.
+result=eval(f'f"{opt.format}"')
+
+print(result)
