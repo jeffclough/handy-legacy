@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 try:
   import argparse
@@ -12,7 +12,7 @@ def die(msg='',rc=1):
   'Print the message and terminate this process with the given return code.'
 
   if msg:
-    print >>sys.stderr,progname+': '+msg
+    print(progname+': '+msg, file=sys.stderr)
   sys.exit(rc)
 
 def re_help():
@@ -23,16 +23,16 @@ def re_help():
     if started:
       if 'This module exports' in line:
         break
-      print line
+      print(line)
     else:
       if 'Regular expressions can contain both' in line:
-        print line
+        print(line)
         started=True
-  print '''
+  print('''
 You can read an expanded treatment of Python's RE syntax at the
 following URL:
     http://docs.python.org/library/re.html#regular-expression-syntax
-'''
+''')
 
 import textwrap
 class FittedHelpFormatter(argparse.HelpFormatter):
@@ -140,7 +140,7 @@ else:
     description=description+'\n'+epilog
   )
 
-p.add_argument('-b','--background',dest='background',choices=ansi.background.keys(),default='black',
+p.add_argument('-b','--background',dest='background',choices=list(ansi.background.keys()),default='black',
   help='''Sets the assumed background color, which defaults to %(default)s. ASNI codes to effect the background color that's aready assumed will not be output.''')
 p.add_argument('-C',dest='comment_mode',action='store_true',default=False,
   help='''Turns on comment mode, which inserts the comment pattern (see --comment-format) at the start of the pattern list. This marks any line whose first non-space character is '#', which is very commonly a comment line. Use the --comment option to change the pattern used to idententify comments.''')
@@ -216,7 +216,7 @@ re_number=re.compile(r'\d+')
 
 try:
   opt=p.parse_args()
-except IOError,e:
+except IOError as e:
   errno,errmsg=e.args
   if errmsg=='Broken pipe':
     sys.exit(1)
@@ -225,7 +225,7 @@ ansi.current_background=opt.background
 if opt.file:
   try:
     opt.file=open(opt.file)
-  except IOError,e:
+  except IOError as e:
     die(str(e))
 else:
   opt.file=sys.stdin
@@ -317,39 +317,39 @@ if opt.whole_line:
   opt.patterns=['.*%s.*'%p for p in opt.patterns]
 
 if opt.debug:
-  print 'opt.after=%r'%(opt.after,)
-  print 'opt.background=%r'%(opt.background,)
-  print 'opt.before=%r'%(opt.before,)
-  print 'opt.columns=%r'%(opt.columns,)
-  print 'opt.comment_format=%r'%(opt.comment_format,)
-  print 'opt.comment_mode=%r'%(opt.comment_mode,)
-  print 'opt.context=%r'%(opt.context,)
-  print 'opt.csv=%r'%(opt.csv,)
-  print 'opt.delim=%r'%(opt.delim,)
-  print 'opt.diff=%r'%(opt.diff,)
-  print 'opt.discard=%r'%(opt.discard,)
-  print 'opt.fields=%r'%(opt.fields,)
-  print 'opt.file=%r'%(opt.file,)
-  print 'opt.grep=%r'%(opt.grep,)
-  print 'opt.ignore_case=%r'%(opt.ignore_case,)
-  print 'opt.input_from=%r'%(opt.input_from,)
-  print 'opt.keep=%r'%(opt.keep,)
-  print 'opt.log_format=%r'%(opt.log_format,)
-  print 'opt.log_mode=%r'%(opt.log_mode,)
-  print 'opt.palette=%r'%(opt.palette,)
-  print 'opt.re_help=%r'%(opt.re_help,)
-  print 'opt.reverse=%r'%(opt.reverse,)
-  print 'opt.stanzas=%r'%(opt.stanzas,)
-  print 'opt.traffic=%r'%(opt.traffic,)
-  print 'opt.whole_line=%r'%(opt.whole_line,)
-  print 'opt.wrap=%r'%(opt.wrap,)
-  print 'opt.patterns=[%s\n]'%(''.join(["\n  '%s',"%(p,) for p in opt.patterns]),)
+  print('opt.after=%r'%(opt.after,))
+  print('opt.background=%r'%(opt.background,))
+  print('opt.before=%r'%(opt.before,))
+  print('opt.columns=%r'%(opt.columns,))
+  print('opt.comment_format=%r'%(opt.comment_format,))
+  print('opt.comment_mode=%r'%(opt.comment_mode,))
+  print('opt.context=%r'%(opt.context,))
+  print('opt.csv=%r'%(opt.csv,))
+  print('opt.delim=%r'%(opt.delim,))
+  print('opt.diff=%r'%(opt.diff,))
+  print('opt.discard=%r'%(opt.discard,))
+  print('opt.fields=%r'%(opt.fields,))
+  print('opt.file=%r'%(opt.file,))
+  print('opt.grep=%r'%(opt.grep,))
+  print('opt.ignore_case=%r'%(opt.ignore_case,))
+  print('opt.input_from=%r'%(opt.input_from,))
+  print('opt.keep=%r'%(opt.keep,))
+  print('opt.log_format=%r'%(opt.log_format,))
+  print('opt.log_mode=%r'%(opt.log_mode,))
+  print('opt.palette=%r'%(opt.palette,))
+  print('opt.re_help=%r'%(opt.re_help,))
+  print('opt.reverse=%r'%(opt.reverse,))
+  print('opt.stanzas=%r'%(opt.stanzas,))
+  print('opt.traffic=%r'%(opt.traffic,))
+  print('opt.whole_line=%r'%(opt.whole_line,))
+  print('opt.wrap=%r'%(opt.wrap,))
+  print('opt.patterns=[%s\n]'%(''.join(["\n  '%s',"%(p,) for p in opt.patterns]),))
 
 if opt.patterns:
   for p in opt.patterns:
     try:
       x=re.compile(p)
-    except re.error,e:
+    except re.error as e:
       die('RE error (%s): %r'%(' '.join(e.args),p))
 elif not (opt.columns or opt.fields or opt.stripe or opt.log_mode):
   die('No RE arguments given. Nothing to do.')
@@ -389,7 +389,7 @@ class DelimitedDataReader(object):
   def __iter__(self):
     return self
 
-  def next(self):
+  def __next__(self):
     '''Return a list of (field,deliter) pairs for each field and
     terminating delimiter in the next line of input.'''
 
@@ -443,13 +443,13 @@ if opt.columns:
   for s in get_input_lines(opt.file):
     try:
       s=(''.join([colorOf(i)+s[opt.columns[i]:opt.columns[i+1]] for i in r])).replace('\n',str(ansi.norm))
-      print s
+      print(s)
       sys.stdout.flush()
     except:
-      print 'l=%r'%l
-      print 'opt.columns=%r'%opt.columns
-      print 's=%r'%s
-      print 'i=%r'%i
+      print('l=%r'%l)
+      print('opt.columns=%r'%opt.columns)
+      print('s=%r'%s)
+      print('i=%r'%i)
       raise
 elif opt.stanzas:
   # Compile our regular expressions.
@@ -487,7 +487,7 @@ elif opt.stripe:
   # Color each group of opt.stripe lines a new color from our palette.
   color=n=0
   for s in get_input_lines(opt.file):
-    print colorOf(color)+s.rstrip()+str(ansi.norm)
+    print(colorOf(color)+s.rstrip()+str(ansi.norm))
     n+=1
     if n%opt.stripe==0:
       color+=1
@@ -505,7 +505,7 @@ elif opt.fields:
         for f in range(j,[k,len(flist)][k==None]):
           if f<len(flist):
             flist[f][0]=colorOf(i)+flist[f][0]+str(ansi.norm)
-      print ''.join([f+d for f,d in flist])
+      print(''.join([f+d for f,d in flist]))
       sys.stdout.flush()
   else:
     # Handle CSV data.
@@ -529,14 +529,14 @@ elif opt.log_mode:
       d=m.groupdict('')
       for i in range(len(fields)):
         d[fields[i]]=opt.palette[i](d[fields[i]])
-      print output_format.safe_substitute(d)
+      print(output_format.safe_substitute(d))
 else:
   # Highlight based on RE matching.
   if opt.patterns: # Combine and compile our patterns into a single regular expression.
     opt.patterns='|'.join(['(%s)'%x.replace('(','(?:') for x in opt.patterns])
     try:
       opt.patterns=re.compile(opt.patterns,opt.re_flags)
-    except re.error,e:
+    except re.error as e:
       die('Internal RE error (%s): %r'%(' '.join(e.args),opt.patterns))
 
   for s in get_input_lines(opt.file):
