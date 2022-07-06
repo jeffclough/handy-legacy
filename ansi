@@ -1,16 +1,16 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 import ansi,sys
 
 # Set up whatever ANSI attribute-foreground-background combo the user wants.
 if len(sys.argv)>1:
   c=ansi.Color(' '.join(sys.argv[1:]))
-  sys.stdout.write(str(c))
+  print(str(c),end='')
 
 # Write stdin to stdout if stdin a file or a pipe.
 if not sys.stdin.isatty():
   for line in sys.stdin:
-    sys.stdout.write(line)
+    print(line,end='')
 
 # Be sure to normalize the terminal if we messed with it at the start.
 if len(sys.argv)>1:
-  sys.stdout.write(str(ansi.norm))
+  print(str(ansi.norm),end='')

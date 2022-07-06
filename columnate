@@ -1,31 +1,31 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import os,sys
-from optparse import OptionParser
+from argparse import ArgumentParser
 from pprint import pprint
 
-op=OptionParser(usage='''
+ap=ArgumentParser(usage='''
 Read single-column text from standard input. Output multi-column text to
 standard output. The default number of columns (2) and lines (50) can be
-overridden.
+overridden, and well as the direction (default is --down).
 
-usage: $prog [options]
+usage: %(prog)s [options]
 ''')
-op.add_option('-a','--across',dest='dir',action='store_const',const='across',default='down',
+ap.add_argument('-a','--across',dest='dir',action='store_const',const='across',default='down',
   help='Input data will be output across columns and then down the page.')
-op.add_option('-d','--down',dest='dir',action='store_const',const='down',default='down',
+ap.add_argument('-d','--down',dest='dir',action='store_const',const='down',default='down',
   help='Input data will be output down the page and then across columns.')
-op.add_option('-f','--float',dest='bFloat',default=False,action='store_true',
+ap.add_argument('-f','--float',dest='bFloat',default=False,action='store_true',
   help='Allow columns to float, as opposed to all being the same width.')
-op.add_option('-c','--columns',dest='cols',type='int',default=2,
-  help='Number of columns per page.')
-op.add_option('-l','--lines',dest='lines',type='int',default=50,
-  help='Number of lines per page.')
-op.add_option('-s','--seperation',dest='sep',type='int',default=2,
-  help='Number of space characters between columns.')
-op.add_option('-w','--width',dest='width',default=79,
-  help='Number of characters per line on the page.')
-opt,args=op.parse_args()
+ap.add_argument('-c','--columns',dest='cols',type=int,default=2,
+  help='Number of columns per page. (default: %(default)r)')
+ap.add_argument('-l','--lines',dest='lines',type=int,default=50,
+  help='Number of lines per page. (default: %(default)r)')
+ap.add_argument('-s','--seperation',dest='sep',type=int,default=2,
+  help='Number of space characters between columns. (default: %(default)r)')
+ap.add_argument('-w','--width',dest='width',type=int,default=79,
+  help='Number of characters per line on the page. (default: %(default)r)')
+opt=ap.parse_args()
 
 class Page(object):
   def __init__(self,rows=50,cols=2,sep=2,dir='down',bFloat=False):
@@ -55,7 +55,7 @@ class Page(object):
         fmt=(' '*self.sep).join(['%%-%ds'%max(width) for w in width])
       for l in range(len(self.page[0])):
         #print '%s %r'%(fmt,tuple([self.page[c][l] for c in range(len(self.page))]))
-        print fmt%tuple([self.page[c][l] for c in range(len(self.page))])
+        print(fmt%tuple([self.page[c][l] for c in range(len(self.page))]))
       self.clear()
 
   def add_item(self,s):
