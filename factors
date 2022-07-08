@@ -1,9 +1,9 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import math,sys
 
 def usage():
-  print 'usage: %s n ...\nwhere n is an integer whose factors are to be found.'%sys.argv[0]
+  print('usage: %s n ...\nwhere n is an integer whose factors are to be found.'%sys.argv[0])
   sys.exit(1)
 
 # Get the integer value(s) whose factors we are to find.
@@ -25,4 +25,4 @@ for n in sys.argv[1:]:
     if f==0.0:
       factors.add(int(x))
       factors.add(int(i))
-  print '%d: %s'%(n,' '.join(['%s'%i for i in sorted(list(factors))]))
+  print('%d: %s'%(n,' '.join(['%s'%i for i in sorted(list(factors))])))
