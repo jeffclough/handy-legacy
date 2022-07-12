@@ -188,11 +188,11 @@ if args:
             if not opt.quiet:
               print("'%s' %s> '%s'"%(f,'-='[opt.copy],filename))
             try:
-              src=file(f,'rb')
+              src=open(f,'rb')
               if opt.zip:
                 dst=gzip.GzipFile(filename,'wb')
               else:
-                dst=file(filename,'wb')
+                dst=open(filename,'wb')
               shutil.copyfileobj(src,dst)
               dst.close()
               src.close()
