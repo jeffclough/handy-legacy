@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import optparse,os,re,sys
 from datetime import *
@@ -137,8 +137,12 @@ class TimeZone(tzinfo):
   def _is_dst(self,dt=None):
     if dt==None:
       dt=datetime.today()
+    if dt.year<1970:
+      # We don't compute DST before the Unix epoch.
+      return False
     #t=dt.timetuple()
     t=(dt.year,dt.month,dt.day,dt.hour,dt.minute,dt.second,0,0,-1)
+    debug(f"t={t!r}")
     t=_time.mktime(t)
     t=_time.localtime(t)
     return t.tm_isdst==1
@@ -347,7 +351,7 @@ def undict(d,unstr=None):
     d=dict(d) # DON'T modify the caller's dictionary. Work on a copy.
     for var in d:
       val=d[var]
-      if isinstance(val,basestring):
+      if isinstance(val,str):
         for t in unstr:
           try:
             d[var]=t(val)
@@ -525,7 +529,7 @@ class TimeStampParser(ParserBase):
         try:
           dt=datetime(d.year,d.month,d.day,d.hour,d.minute,d.second,0,d.tz)
           break
-        except ValueError,e:
+        except ValueError as e:
           raise TimeError("""Error in "%s", parsed by "%s": %s"""%(time_string,p.pattern,str(e)))
     debug.indent(-1)('returning %r'%(dt,))
     return dt
@@ -554,9 +558,9 @@ if __name__=='__main__':
     # Run this modules unit tests.
     import doctest
     if False:
-      print 'Time Zones:'
+      print('Time Zones:')
       for tz in sorted(TimeZone.zones.keys()):
-        print TimeZone.zones[tz].tzname()
+        print(TimeZone.zones[tz].tzname())
     doctest.testmod()
     sys.exit(rc)
 
@@ -620,9 +624,9 @@ if __name__=='__main__':
       if prec:
         divisor=float(divisor)
       output='%.*f'%(prec,delta/divisor,)
-  except TimeError,e:
+  except TimeError as e:
     sys.stderr.write(os.path.basename(sys.argv[0])+': '+str(e)+'\n')
     rc=1
   else:
-    print output
+    print(output)
   sys.exit(rc)

@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 DEFAULT_TIMEOUT=10
 
@@ -71,10 +71,10 @@ try:
       shell=True
     )
     sys.exit(rc)
-except Timeout.Error,e:
+except Timeout.Error as e:
   msg=str(e)
   if msg:
     msg+=': '+cmd
   die(msg,opt.timeout_result)
-except Exception,e:
+except Exception as e:
   raise

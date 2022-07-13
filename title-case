@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -9,10 +9,7 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-try:
-  import argparse
-except:
-  import argparse27 as argparse
+import argparse
 import os,sys
 from english import TitleCase
 
@@ -31,11 +28,11 @@ opt=ap.parse_args()
 #
 if opt.words:
   # Title-case our command line.
-  print TitleCase(' '.join(opt.words))
+  print(TitleCase(' '.join(opt.words)))
 elif sys.stdin.isatty():
   ap.print_help()
   sys.exit(1)
 if not sys.stdin.isatty():
   # Title-case standard input.
   for line in sys.stdin:
-    print TitleCase(line)
+    print(TitleCase(line))

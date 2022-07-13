@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import csv,errno,optparse,os,re,sys
 import OptionParserFormatters
@@ -47,7 +47,7 @@ class LocalDialect(csv.Dialect):
 
   def __init__(self,**kwargs):
     """Let the user give keyword arguments for dialectic elements (with
-    reasonable default for those not given): delimiter (','), quotechar
+    reasonable defaults for those not given): delimiter (','), quotechar
     ('"'), quoting (csv.QUOTE_MINIMAL), doublequote (True), escapechar
     ('\\'), skipinitialspace (False), and lineterminator (the system
     default line terminator string)."""
@@ -144,18 +144,18 @@ op.add_option('--worksheet',dest='worksheet',action='store',default=0,
 help="""Set the number or name of the worksheet to read from the Excel spreadsheet, assuming we're reading and XLS file.""")
 
 op.add_option('--icond',dest='icond',action='store',default=None,
-help="""A Python expression evaluated just after each input record is read. That record will be processed only of the expression evaluates to a value Python regards as True.""") 
+help="""A Python expression evaluated just after each input record is read. That record will be processed only if the expression evaluates to a value Python regards as True.""") 
 
 op.add_option('--ocond',dest='ocond',action='store',default=None,
-help="""A Python expression evaluated just before each output record is written. That record will be written only of the expression evaluates to a value Python regards as True.""") 
+help="""A Python expression evaluated just before each output record is written. That record will be written only if the expression evaluates to a value Python regards as True.""") 
 
 #op.add_option('--debug',dest='debug',action='store_true',default=False,
 #help="You don't need this.")
 
 try:
   opt,args=op.parse_args()
-except Exception,e:
-  print >>sys.stderr,str(e)
+except Exception as e:
+  print(str(e), file=sys.stderr)
   sys.exit(2)
 
 #if opt.debug:
@@ -167,7 +167,7 @@ try:
   opt.reader=parse_dialect(opt.reader)
 #  if opt.debug:
 #    debug('opt.reader=%r'%(opt.reader,))
-except CsvDialectError,e:
+except CsvDialectError as e:
   die("Bad CSV reader dialect: %r"%e.dialect_spec)
 except:
   raise
@@ -176,7 +176,7 @@ try:
   opt.writer=parse_dialect(opt.writer)
 #  if opt.debug:
 #    debug('opt.reader=%r'%(opt.reader,))
-except CsvDialectError,e:
+except CsvDialectError as e:
   die("Bad CSV writer dialect: %r"%e.dialect_spec)
 except:
   raise
@@ -187,7 +187,7 @@ if opt.icond:
 # Validate our field stripping specification.
 for ch in opt.strip:
   if ch not in 'lr':
-    print >>sys.stderr,'arguments to -s may include only l and r'
+    print('arguments to -s may include only l and r', file=sys.stderr)
     sys.exit(2)
 
 # Turn any list of shell variables we have into a list of variable names.
@@ -249,13 +249,13 @@ def xlsreader(filename,worksheet=0):
     try:
       sheet=book.sheet_by_index(worksheet)
     except IndexError:
-      print >>sys.stderr,'%s: worksheet %d not found in %s.'%(progname,worksheet,filename)
+      print('%s: worksheet %d not found in %s.'%(progname,worksheet,filename), file=sys.stderr)
       sys.exit(1)
   else:
     try:
       sheet=book.sheet_by_name(str(worksheet))
     except xlrd.biffh.XLRDError:
-      print >>sys.stderr,'%s: worksheet %r not found in %s.'%(progname,str(worksheet),filename)
+      print('%s: worksheet %r not found in %s.'%(progname,str(worksheet),filename), file=sys.stderr)
       sys.exit(1)
   r=0
   while r<sheet.nrows:
@@ -268,7 +268,7 @@ def stripfield(s,sides):
   '''Return s stripped of left and/or right white space depending on
   whether sides includes l and/or r.'''
 
-  if isinstance(s,basestring):
+  if isinstance(s,str):
     l='l' in sides
     r='r' in sides
     if l and r:
@@ -293,7 +293,8 @@ re_escape=re.compile(r'''([\\"`$])''')
 re_excel_filename=re.compile(r'\.xls[^.]*$')
 
 # Prepare for CSV output.
-writer=csv.writer(open('/dev/stdout','wb'),dialect=opt.writer)
+#writer=csv.writer(open('/dev/stdout','w',newline='',encoding='utf-8'),dialect=opt.writer)
+writer=csv.writer(sys.stdout,dialect=opt.writer)
 
 ORN=0 # Output line number
 IRN=0 # Input line number
@@ -309,11 +310,11 @@ try:
       if XLRD:
         reader=xlsreader(filename,opt.worksheet)
       else:
-        print >>sys.stderr,'%s: Cannot process Excel files without the xlrd module.'%progname
+        print('%s: Cannot process Excel files without the xlrd module.'%progname,file=sys.stderr)
         sys.exit(1)
         
     else:
-      reader=csv.reader(open(filename,'rb'),dialect=opt.reader)
+      reader=csv.reader(open(filename,'r',newline='',encoding='utf-8'),dialect=opt.reader)
 
     #print 'opt.fields=%r'%opt.fields
     #print 'opt.joinfields=%r'%opt.joinfields
@@ -358,7 +359,7 @@ try:
         continue
       # Encode as utf-8 our resulting list of string field values.
       for i in range(len(OREC)):
-        if isinstance(OREC[i],basestring):
+        if isinstance(OREC[i],str):
           OREC[i]=OREC[i].encode('utf-8')
         elif isinstance(OREC[i],float) and OREC[i]==int(OREC[i]):
           OREC[i]=int(OREC[i])
@@ -366,22 +367,22 @@ try:
       # Figure out how we're supposed to output this record.
       if opt.fmt: # Output formatted field values.
         s=opt.fmt
-        field_indices=range(len(OREC))
+        field_indices=list(range(len(OREC)))
         field_indices.reverse()
         for i in field_indices:
           s=s.replace('%'+str(i+1),OREC[i])
-        print s
+        print(s)
       elif (opt.vars): # Output shell-executable variable assignments.
         OREC=[re_escape.sub(r'\\\1',f) for f in OREC]
         if (opt.vars)>len(OREC): # Protect against initialization issues.
           OREC.extend(['']*(len(opt.vars)-len(OREC)))
-        print ';'.join(['%s="%s"'%(v,f) for v,f in zip(opt.vars,OREC)])
+        print(';'.join(['%s="%s"'%(v,f) for v,f in zip(opt.vars,OREC)]))
       else: # Output CSV.
           writer.writerows([OREC])
-except IOError,e:
-  print >>sys.stderr,'%s: %s'%(sys.argv[0],e)
+except IOError as e:
+  print('%s: %s'%(sys.argv[0],e), file=sys.stderr)
   sys.exit(2)
 except:
-  print >>sys.stderr,'\n%s %d: %r'%(filename,IRN,IREC)
-  print >>sys.stderr,'OREC: %r'%(OREC)
+  print('\n%s %d: %r'%(filename,IRN,IREC), file=sys.stderr)
+  print('OREC: %r'%(OREC), file=sys.stderr)
   raise
