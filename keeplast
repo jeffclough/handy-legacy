@@ -1,36 +1,32 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
-import optparse,os,re,sys
-from OptionParserFormatters import IndentedHelpFormatterWithNL
+import argparse,os,re,sys
 
 progname=os.path.basename(sys.argv[0])
-op=optparse.OptionParser(
-  add_help_option=False, # Because I like the -h option to be listed last.
-  formatter=IndentedHelpFormatterWithNL(2,8),
-  usage="%prog [OPTIONS] [FILENAME]",
-  description="""Description: Read from the given FILENAME, or standard input if no FILENAME is given, and write only lines that do not occur later in the file. This has the effect of writing out only the last occurrance of each distinct line value. Output is written to standard output unless --in-place is used."""
+
+def die(msg='',rc=1):
+  if msg:
+    print(f"{progname}: {msg}",file=sys.stderr)
+  sys.exit(rc)
+
+ap=argparse.ArgumentParser(
+  description="""Read from the given FILENAME, or standard input if no FILENAME is given, and write only lines that do not occur later in the file. This has the effect of writing out only the last occurrance of each distinct line value. Output is written to standard output unless --in-place is used."""
 )
-op.add_option('-i',dest='ignore_case',action='store_true',default=False,help="""Ingore the case of the input when comparing lines. (This option doubles the amount of memory required.)""")
-op.add_option('--in-place',dest='in_place',action='store_true',default=False,help="""Edit the input file in place. This means that the input file will be replaced with the de-duplicated output, and nothing will be written to standard output. The FILENAME argument MUST be given if this option is used, and an error will occur if that file cannot be written to.""")
-op.add_option('-h','--help',action='store_true',default=False,help="""Show this help message.""")
+ap.add_argument('-i',dest='ignore_case',action='store_true',help="""Ingore the case of the input when comparing lines. (This option doubles the amount of memory required.)""")
+ap.add_argument('--in-place',dest='in_place',action='store_true',help="""Edit the input file in place. This means that the input file will be replaced with the de-duplicated output, and nothing will be written to standard output. The FILENAME argument MUST be given if this option is used, and an error will occur if that file cannot be written to.""")
+ap.add_argument('args',metavar='FILENAME',nargs='?',help="This file will be read rather than standard input.")
 try:
-  opt,args=op.parse_args()
-except Exception,e:
-  print >>sys.stderr,str(e)
-  sys.exit(2)
-if opt.help:
-  op.print_help()
-  sys.exit(0)
-if opt.in_place and not args:
-  print >>sys.stderr,"%s: --in-place option requires a filename be to be given."%(progname,)
-  sys.exit(2)
-if len(args)>1:
-  print >>sys.stderr,"%s: only 1 filename may be given on the command line."%(progname,)
-  sys.exit(2)
+  opt=ap.parse_args()
+except Exception as e:
+  die(str(e))
+if opt.in_place and not opt.args:
+  die("--in-place option requires a FILENAME argument to be given.")
+if opt.args and len(opt.args)>1:
+  die("only 1 FILENAME argument may be given")
 
 # Get our input from SOMEPLACE.
-if args:
-  filename=args[0]
+if opt.args:
+  filename=opt.args[0]
   if opt.in_place:
     f=open(filename,'rw+')
   else:

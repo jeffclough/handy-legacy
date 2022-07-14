@@ -1,27 +1,30 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
-import optparse,os,re,socket,sys
+import argparse,os,re,socket,sys
 
-op=optparse.OptionParser(
-  usage='usage: %prog [OPTIONS]',
-  description='Replace IP addresses in standard input with host names on the way to standard output.'
+ap=argparse.ArgumentParser(
+  usage='usage: %(prog)s [OPTIONS]',
+  description='Replace IP addresses in standard input with host names on its way to standard output.',
 )
-op.parse_args()
+opt=ap.parse_args()
 
 reAddr=re.compile(r'\d+\.\d+\.\d+\.\d+')
-hostMap={}
+host_cache={} # This cache grows without bound, so ... we might need to fix that.
+
+# Once Python 3.9 is reliably found in RHEL distributions, we can decorate the
+# host() function with @cache and remove the "manual" caching (using host_cache).
 
 def host(addr):
   '''Return the host name of the given IPv4 address.'''
 
-  if addr in hostMap:
-    h=hostMap[addr]
+  if addr in host_cache:
+    h=host_cache[addr]
   else:
     try:
       h=socket.gethostbyaddr(addr)
     except:
       h=('unknown '+addr,[],[addr])
-    hostMap[addr]=h # Store this result so we don't have to look it up again.
+    host_cache[addr]=h # Store this result so we don't have to look it up again.
   return h[0]
 
 for line in sys.stdin:
@@ -29,4 +32,4 @@ for line in sys.stdin:
   if line and line[-1]=='\n':
     line=line[:-1]
   line=reAddr.sub((lambda m:host(m.group())),line)
-  print line
+  print(line)
