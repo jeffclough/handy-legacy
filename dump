@@ -6,7 +6,7 @@ from math import ceil,log
 
 col_ctl=str(ansi.Color('yellow on black'))
 col_high=str(ansi.Color('bold red on black'))
-col_blank=str(ansi.Color('black on blue'))
+col_blank=str(ansi.Color('black on black'))
 col_norm=str(ansi.norm)
 
 text='.'
@@ -40,7 +40,7 @@ def write_byte(f,fmt,val,offset):
     f.write('  ')
   else:
     f.write(' ')
-  if val==None:
+  if val is None:
     s=' '*len(fmt%0)
     ch=' '
   else:
@@ -61,10 +61,12 @@ def write_byte(f,fmt,val,offset):
       text+=ch
   else:
     f.write(s)
-    if val<32 or val>126:
-      text+='.'
-    else:
+    if val==None:
       text+=ch
+    elif 32<val<126:
+      text+=ch
+    else:
+      text+='.'
 
 def dump(inf,base=16,outf=sys.stdout,start=None,stop=None,bpl=16):
   """Write dump information for this file."""
