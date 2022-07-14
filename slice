@@ -1,54 +1,34 @@
-#!/usr/bin/env python2
-import optparse,os,re,stat,sys
+#!/usr/bin/env python3
+import argparse,os,re,stat,sys
 from glob import glob
-import OptionParserFormatters
 
-# Ensure that we're running at least version 2.5 of Python.
-req=(2,5)
-vi=sys.version_info
-if vi<req:
-  # So we're running <2.5, but see if 2.6 or 2.7 is available.
-  v=7
-  rc=0
-  while v>=req[1]:
-    cmd='python2.%d'%v
-    rc=os.spawnv(os.P_WAIT,cmd,sys.argv)
-    #print 'os.spawnv(os.P_WAIT,%r,%r) returns %d'%(cmd,sys.argv,rc)
-    if rc!=127:
-      sys.exit(rc)
-    v-=1
-  print >>sys.stderr,'%s: Requires python version >= %d.%d, but found ownly %d.%d'%(
-    sys.argv[0],req[0],req[1],vi[0],vi[1]
-  )
-  sys.exit(rc)
-
-op=optparse.OptionParser(
+ap=argparse.ArgumentParser(
   usage="""
-Form 1: %prog FILESPEC[:[FIRSTLINE][:[LASTLINE]]]
-Form 2: %prog FILESPEC[:[STARTPAT][:[ENDPAT]]]""",
+Form 1: %(prog)s FILESPEC[:[FIRSTLINE][:[LASTLINE]]]
+Form 2: %(prog)s FILESPEC[:[STARTPAT][:[ENDPAT]]]""",
   description="""Description:
 FIRSTLINE is the number (starting from 1) of the first line to be output. LASTLINE is the number of the last line to be output. If LASTLINE has a plus sign (+) in front of it, it is the number of lines to be output, beginning with FIRSTLINE. If no FIRSTLINE is given, it defaults to 1. If no LASTLINE is given, output continues to the end of the input file.
 
 STARTPAT is a regular expression that, when matched in the input file, starts output. ENDPAT, when matched, ends output. By default, the line matching ENDPAT is included in the output.
 
 Forms 1 and 2 can be mixed, so FILESPEC[:[FIRSTLINE][:[ENDPAT]]] and FILESPEC[:[STARTPAT][:[LASTLINE]]] are also valid arguments. In the latter case, the user is advised to use relative numbering for LASTLINE by prefixing it with a plus sign (+), though this is not required.
-""",
-  formatter=OptionParserFormatters.IndentedHelpFormatterWithNL()
+"""
 )
-op.add_option('-d',dest='delimeter',action='store',default=':',help="Set the delimiter that separates the components of each command line argument. (default: colon (:))")
+ap.add_argument('-d',dest='delimeter',action='store',default=':',help="Set the delimiter that separates the components of each command line argument. (default: colon (:))")
 #TODO: Implement the -f option.
-op.add_option('-f','--follow',dest='follow',action='store_true',default=False,help="Monitor the input file for further content if the LASTLINE or ENDPAT is not found. This is similar to the -f option of tail. (NOT YET IMPLEMENTED!)")
-op.add_option('-i',dest='case',action='store_false',default=True,help="Ignore case when scanning for regular expressions.")
-op.add_option('-l',dest='filenames',action='store_false',default=True,help="Suppress normal output of filename before slices of that file when more than one file is given.")
+ap.add_argument('-f','--follow',dest='follow',action='store_true',default=False,help="Monitor the input file for further content if the LASTLINE or ENDPAT is not found. This is similar to the -f option of tail. (NOT YET IMPLEMENTED!)")
+ap.add_argument('-i',dest='case',action='store_false',default=True,help="Ignore case when scanning for regular expressions.")
+ap.add_argument('-l',dest='filenames',action='store_false',default=True,help="Suppress normal output of filename before slices of that file when more than one file is given.")
 # TODO: Add the --last option.
-op.add_option('--last',dest='last',action='store_true',default=False,help="Output only the last matching slice in each file. (NOT YET IMPLEMENTED!)")
-op.add_option('-n','--next',dest='next',action='store_true',default=False,help="Keeps ENDPAT from matching the same line STARTPAT matched. This also, and necessarily if you think about it, requires that the line matching ENDPAT not be output and remain available to be matched by STARTPAT. (This option has no effect if LASTLINE is use rather than ENDPAT, and it makes no sense if FIRSTLINE is used rather than STARTPAT.)")
-op.add_option('-m','--multi',dest='multi',action='store_true',default=False,help="Output more than one slice per file. Only the first slice is output by default. (This only makes sense if STARTPAT is used.")
-op.add_option('--test',dest='test',action='store_true',default=False,help="This runs a self-test and is intended for debugging this program. (No output means everything worked correctly.)")
-opt,args=op.parse_args()
+ap.add_argument('--last',dest='last',action='store_true',default=False,help="Output only the last matching slice in each file. (NOT YET IMPLEMENTED!)")
+ap.add_argument('-n','--next',dest='next',action='store_true',default=False,help="Keeps ENDPAT from matching the same line STARTPAT matched. This also, and necessarily if you think about it, requires that the line matching ENDPAT not be output and remain available to be matched by STARTPAT. (This option has no effect if LASTLINE is use rather than ENDPAT, and it makes no sense if FIRSTLINE is used rather than STARTPAT.)")
+ap.add_argument('-m','--multi',dest='multi',action='store_true',default=False,help="Output more than one slice per file. Only the first slice is output by default. (This only makes sense if STARTPAT is used.")
+ap.add_argument('--test',dest='test',action='store_true',default=False,help="This runs a self-test and is intended for debugging this program. (No output means everything worked correctly.)")
+ap.add_argument('args',nargs='*',help="See forms 1 and 2 above under usage.")
+opt=ap.parse_args()
 
 def die(msg,rc=0):
-  sys.stderr.write('%s: %s\n'%(sys.argv[0],msg))
+  print(f"{sys.argv[0]}: {msg}",file=sys.stderr)
   sys.exit(rc)
 
 opt.re_flags=0
@@ -113,11 +93,11 @@ def parse_arg(arg):
   >>> parse_arg('testing::+10')
   ('testing', 1, 10, True)
   >>> parse_arg('testing:alpha:+10')
-  ('testing', <_sre.SRE_Pattern object at 0x...>, 10, True)
+  ('testing', re.compile('alpha'), 10, True)
   >>> parse_arg('testing:alpha:beta')
-  ('testing', <_sre.SRE_Pattern object at 0x...>, <_sre.SRE_Pattern object at 0x...>, False)
+  ('testing', re.compile('alpha'), re.compile('beta'), False)
   >>> parse_arg('testing::beta')
-  ('testing', 1, <_sre.SRE_Pattern object at 0x...>, False)
+  ('testing', 1, re.compile('beta'), False)
   """
 
   # Parse the filespec, first, and last components from this argument.
@@ -151,54 +131,56 @@ def parse_arg(arg):
       die('Bad regular expression: %s'%last)
   return fs,first,last,relative
 
-class File(file):
-  """The File class is just like the native file class, but it adds a
-  readfrom instance value that holds the file location from which the
-  most recent data was read. This supports rewinding the file to read
-  the same line (or buffer or list of lines) again when necessary."""
+class FileReader(object):
+  """Use this file-like class for reading lines from files while keeping
+  track of the current line number and the position from which the
+  lastest line was read."""
 
-  def __init__(self,name,mode='r',buffering=-1):
-    super(File,self).__init__(name,mode,buffering)
-    self.seekable=stat.S_ISREG(os.fstat(self.fileno()).st_mode)
-    if self.seekable:
-      self.readfrom=self.tell()
+  def __init__(self,filename):
+    """Given the name of the file to read from, initialize this
+    FileReader instance."""
 
-  def seekable(self):
-    return stat.S_ISREG(self.mode)
+    self.file=open(filename)
+    self.line_number=0
+    self.position=0
+    self.eof=False
 
-  def next(self):
-    line=self.readline()
-    if not line:
-      raise StopIteration
+  def __enter__(self):
+    return self
+
+  def __exit__(self,exc_type,exc_value,exc_traceback):
+    if exc_value!=None:
+      print(exc_type,exc_value,exc_tb,sep="\n",file=sys.stderr)
+    return True
+
+  def __iter__(self):
+    """When used as an iterator, iterate line by line."""
+
+    while True:
+      line=self.readline()
+      if line:
+        yield line
+      else:
+        break
+
+  def readline(self):
+    """Read and return the next line from our file."""
+
+    self.pos=self.file.tell()
+    line=self.file.readline()
+    if line:
+      self.line_number+=1
     else:
-      return line
-
-  def read(self,size=-1):
-    if self.seekable:
-      self.readfrom=self.tell()
-    return super(File,self).read(size)
-
-  def readline(self,size=-1):
-    if self.seekable:
-      self.readfrom=self.tell()
-    return super(File,self).readline(size)
-
-  def readlines(self,size=None):
-    if self.seekable:
-      self.readfrom=self.tell()
-    return super(File,self).readlines(size)
-
-  def seek(self,offset,whence=0):
-    super(File,self).seek(offset,whence)
-    if self.seekable:
-      self.readfrom=self.tell()
+      self.eof=True
+    return line
 
   def rewind(self):
-    """Set the file location to where the most recent read operation was
-    performed."""
+    """Reposition this file to the beginning of the line most recently
+    read from it. Return this FileReader instance."""
 
-    super(File,self).seek(self.readfrom)
-
+    self.file.seek(self.pos)
+    self.line_number-=1
+    return self
 
 def slice(filename,first,last,relative=False):
   """Read the given file, and output the section from first to last.
@@ -212,64 +194,47 @@ def slice(filename,first,last,relative=False):
   """
 
   # Initialization and reality checking.
-  n=0
-  f=File(filename)
-  if opt.next and not f.seekable:
-    die("Cannot use -n (--next) option with %s because it can't be rewound."%(filename,))
-  eof=False
-  
-  while not eof: # In case opt.multi is True.
-    # Skip lines until the first line of the slice.
-    if isinstance(first,int):
-      for line in f:
-        n+=1
-        if n>=first:
-          break
-      else:
-        eof=True
-    else:
-      for line in f:
-        n+=1
-        if first.search(line):
-          break
-      else:
-        eof=True
-    if eof:
-      break
-
-    # Output lines until the end of the slice.
-    m=n
-    sys.stdout.write(line)
-    if isinstance(last,int):
-      stop=last
-      if relative:
-        stop+=n-1
-      for line in f:
-        m+=1
-        if last!=0 and m>stop:
-          break
-        sys.stdout.write(line)
-      else:
-        eof=True
-    else:
-      if opt.next:
-        found=None
-      else:
-        found=last.search(line)
-      while not found:
+  with FileReader(filename) as f:
+    if opt.next and not f.seekable:
+      die("Cannot use -n (--next) option with %s because it can't be rewound."%(filename,))
+    
+    while not f.eof: # In case opt.multi is True.
+      # Skip lines until the first line of the slice.
+      if isinstance(first,int):
         for line in f:
-          m+=1
-          found=last.search(line)
-          sys.stdout.write(line)
-          if found:
-            if opt.next:
-              f.rewind() # Set up to re-read this line.
+          if f.line_number>=first:
             break
+      else:
+        for line in f:
+          if first.search(line):
+            break
+      if not f.eof:
+        # Output lines until the end of the slice (or the file).
+        sys.stdout.write(line)
+        if isinstance(last,int):
+          stop=last
+          if relative:
+            stop+=f.line_number-1
+          for line in f:
+            if last!=0 and f.line_number>stop:
+              break
+            sys.stdout.write(line)
+            pos=f.tell()
         else:
-          eof=True
-    n=m
-    if not opt.multi:
-      break
+          if opt.next:
+            found=None
+          else:
+            found=last.search(line)
+          while not found:
+            for line in f:
+              found=last.search(line)
+              sys.stdout.write(line)
+              if found:
+                if opt.next:
+                  f.rewind() # Set up to re-read this line.
+                break
+        if not opt.multi:
+          break
 
 # If the --test option was given, run our internal tests and quit.
 if opt.test:
@@ -282,27 +247,27 @@ if opt.test:
   sys.exit(0)
 
 # Step through our command line arguments:
-for arg in args:
+for arg in opt.args:
   fs,first,last,relative=parse_arg(arg)
   if fs=='-':
     flist=['/dev/stdin']
   else:
     flist=glob(fs)
   for fn in flist:
-    if opt.filenames and (len(args)>1 or len(flist)>1):
-      print '\n%s:'%fn
+    if opt.filenames and (len(opt.args)>1 or len(flist)>1):
+      print('\n%s:'%fn)
     slice(fn,first,last,relative)
 
 """
 THIS IS TEST DATA, USED BY THE THIS FUNCTION'S DOCTESTS.
 
-aaa
-bbb
-ccc
-ddd
+aaa 1
+bbb 1
+ccc 1
+ddd 1
 
-aaa
-bbb
-ccc
-ddd
+aaa 2
+bbb 2
+ccc 2
+ddd 2
 """
