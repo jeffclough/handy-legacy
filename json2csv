@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import csv,json,optparse,os,sys
 
@@ -45,8 +45,8 @@ help="Strip white space from the left and/or right of each field. STRIP may be l
 
 try:
   opt,args=op.parse_args()
-except Exception,e:
-  print >>sys.stderr,str(e)
+except Exception as e:
+  print(str(e), file=sys.stderr)
   sys.exit(2)
 
 # Get our list of columns to output if one was given.
@@ -55,7 +55,7 @@ if opt.columns:
 
 # Get the JSON path to our data.
 if not args:
-  print >>sys.stderr,'%s: No ROOT path given on command line.'%progname
+  print('%s: No ROOT path given on command line.'%progname, file=sys.stderr)
   sys.exit(2)
 root=[x for x in args.pop(0).split('/') if x]
 
@@ -72,7 +72,7 @@ dialect.update(dict(
 # Validate our field stripping specification.
 for ch in opt.strip:
   if ch not in 'lr':
-    print >>sys.stderr,'%s: arguments to -s may include only l and r'%progname
+    print('%s: arguments to -s may include only l and r'%progname, file=sys.stderr)
     sys.exit(2)
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -81,7 +81,7 @@ def strip_field(s,sides):
   '''Return s stripped of left and/or right white space depending on
   whether sides includes l and/or r.'''
 
-  if type(s) in (str,unicode):
+  if type(s)==str:
     l='l' in sides
     r='r' in sides
     if l and r:
@@ -103,11 +103,11 @@ def type_description(value):
   t=type(value)
   if t==dict:
     c+='32' # Green
-    t='dictionary of %d keys'%len(d.keys())
+    t='dictionary of %d keys'%len(list(d.keys()))
   elif t==list:
     c+='36' # Cyan
     t='list of %d items'%len(value)
-  elif t in (str,unicode):
+  elif t==str:
     c+='33' # Yellow
     t='string of %d characters'%len(value)
   elif t==int:
@@ -132,7 +132,7 @@ def show_structure(d,indent=0):
 
   if indent==0:
     c,t=type_description(d)
-    print '%s/%s (%s)'%(c,norm_color,t)
+    print('%s/%s (%s)'%(c,norm_color,t))
     indent+=2
 
   if not (isinstance(d,dict) or isinstance(d,list)):
@@ -141,7 +141,7 @@ def show_structure(d,indent=0):
   if type(d)==dict:
     for k in sorted(d.keys()):
       c,t=type_description(d[k])
-      print '%*s%s%s%s (%s)'%(indent,'',c,k,norm_color,t)
+      print('%*s%s%s%s (%s)'%(indent,'',c,k,norm_color,t))
       show_structure(d[k],indent+2)
   elif isinstance(d,list):
     if len(d):
@@ -173,14 +173,14 @@ for filename in args:
     if k in d:
       d=d[k]
     else:
-      print >>sys.stderr,'%s: %s: data path not found: %s'%(progname,filename,built_root)
+      print('%s: %s: data path not found: %s'%(progname,filename,built_root), file=sys.stderr)
       sys.exit(1)
 
   if opt.structure:
     show_structure(d)
   else:
     if type(d)!=list:
-      print >>sys.stderr,'%s: %s: data at %s is not a list'%(progname,filename,built_root)
+      print('%s: %s: data at %s is not a list'%(progname,filename,built_root), file=sys.stderr)
       sys.exit(1)
 
     # Get a list of column headings if needed (and possible).
@@ -194,8 +194,8 @@ for filename in args:
       if type(row)==dict:
         try:
           row=[row[k] for k in opt.columns]
-        except KeyError,e:
-          print >>sys.stderr,'Column %s not found.\nTry running this against the same data to find valid column names:\n    %s --show-structure %s'%(e,progname,built_root)
+        except KeyError as e:
+          print('Column %s not found.\nTry running this against the same data to find valid column names:\n    %s --show-structure %s'%(e,progname,built_root), file=sys.stderr)
           sys.exit(1)
       else:
         row=[row]
