@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import os,re,socket,sys,textwrap
 import optparse
@@ -58,17 +58,21 @@ class IPRange(object):
     "1.2.3.0/24" and represents the range from 1.2.3.1 to 1.2.3.254.
     A range_spec value of "1.2.3.0" would have the same result.
 
-    Slash notation: For example "4.5.0.0/16".'''
+    CIDR notation: For example "4.5.0.0/16".'''
 
     m=self.re_iprange.match(range_spec)
     if not m:
       raise self.Error('Invalid IP address or subnet format: %r'%range_spec)
-    # Convert these values from strings to integers, and store them in the local
-    # value a, b, c, d, and mask (names taken from re_iprange).
-    for var,val in m.groupdict().items():
-      if val!=None:
-        val=int(val)
-      exec('%s=%r'%(var,val))
+    # Convert these values from strings to integers, and store them in the
+    # local value a, b, c, d, and mask (names taken from re_iprange). This is a
+    # really kludgy way of doing this, but Python 3 seems less willing to
+    # update locals than 2 was.
+    addr=type('',(),{k:eval(str(v)) for k,v in m.groupdict().items()})
+    a=addr.a
+    b=addr.b
+    c=addr.c
+    d=addr.d
+    mask=addr.mask
     if b==None:
       b=c=d=0
       if mask==None:
@@ -109,7 +113,7 @@ class IPRange(object):
     self.addr=-1
     return self
 
-  def next(self):
+  def __next__(self):
     self.addr+=1
     if not self.allow_broadcast and self.addr==0:
       self.addr+=1
@@ -132,7 +136,7 @@ SUBNET may take one of two forms:
 
     o Partial dotted decimal: For example "1.2.3", is translated into "1.2.3.0/24" and represents the range from 1.2.3.1 to 1.2.3.254. A range_spec value of "1.2.3.0" would have the same result.
 
-    o Slash notation: For example "4.5.0.0/16 or 6.7.8.224/27".
+    o CIDR notation: For example "4.5.0.0/16 or 6.7.8.224/27".
 ''')
 op.add_option('-a','--aliases',dest='aliases',action='store_true',default=False,help='''Output DNS aliases as well as canonnical host names.''')
 op.add_option('-b','--broadcast',dest='broadcast',action='store_true',default=False,help='''Allow "broadcast addresses" to be used within the given IP ranges. Without this option, the host portion of the address valued 1 and netmask-1 will be ignored.''')
@@ -150,16 +154,16 @@ if len(args)<1:
   sys.exit(0)
 
 for arg in args:
-  print '%s:'%arg
+  print('%s:'%arg)
   for addr in IPRange(arg,broadcast=opt.broadcast):
     try:
       name,aliases,addresses=socket.gethostbyaddr(addr)
       if opt.aliases and aliases:
-        print '  %-15s %s (aka: %s)'%(addr,name,', '.join(aliases))
+        print('  %-15s %s (aka: %s)'%(addr,name,', '.join(aliases)))
       else:
-        print '  %-15s %s'%(addr,name)
-    except socket.herror,e:
+        print('  %-15s %s'%(addr,name))
+    except socket.herror as e:
       if opt.verbosity==1:
-        print '  %-15s'%addr
+        print('  %-15s'%addr)
       elif opt.verbosity>1:
-        print '  %-15s ERROR: %r'%(addr,e)
+        print('  %-15s ERROR: %r'%(addr,e))
