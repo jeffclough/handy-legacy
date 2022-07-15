@@ -3,7 +3,7 @@
 import argparse,csv,errno,os,re,sys
 from debug import DebugChannel
 
-dc=DebugChannel(False,line_fmt='{label:.1}: {basename}:{function}:{line}: {indent}{message}\n')
+dc=DebugChannel(False,stream=sys.stdout,line_fmt='{label:.1}: {basename}:{function}:{line}: {indent}{message}\n')
 
 def die(msg,rc=1):
   if msg:
@@ -209,6 +209,10 @@ writer=csv.writer(sys.stdout,dialect=opt.writer)
 def cut(reader):
   IRN=0
   for irec in reader:
+    dc(f"irec={irec!r}")
+    # Skip comment lines without counting them as input lines.
+    if irec and irec[0].lstrip().startswith(opt.reader.commentchar):
+      continue
     # Skip initial lines according to opt.skip.
     IRN+=1
     dc(f"input record {IRN}: {irec!r}")
