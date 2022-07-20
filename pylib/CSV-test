@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+
+"""
+This is the unittest script for CSV.py.
+"""
+
+import CSV as csv
+import unittest
+
+data1=[row+'\r\n' for row in """\
+h1,h2,h3,h4,h5
+a,b,c,d,e
+f,g,h,i,j
+k,l,m,n,o
+p,q,r,w,t
+u,v,w,x,y""".split('\n')]
+
+class TestDialects(unittest.TestCase):
+
+  def testListDialects(self):
+    dlist=csv.list_dialects()
+    self.assertTrue('excel' in dlist)
+    self.assertTrue('excel-tab' in dlist)
+    self.assertTrue('unix' in dlist)
+
+  def testGetDialect(self):
+    d=csv.get_dialect('excel')
+    with self.assertRaises(csv.Error,msg="unknown dialect: 'x'"):
+      csv.get_dialect('x')
+
+  def testExcel(self):
+    d=csv.get_dialect('excel')
+    self.assertEqual(d.delimiter,',')
+    self.assertEqual(d.quotechar,'"')
+    self.assertEqual(d.lineterminator,'\r\n')
+    self.assertEqual(d.quoting,csv.QUOTE_MINIMAL)
+    self.assertEqual(d.doublequote,True)
+    self.assertEqual(d.escapechar,None)
+    self.assertEqual(d.skipinitialspace,False)
+    self.assertEqual(d.strict,False)
+
+  def testCustom1(self):
+    csv.register_dialect('escapable',escapechar='\\')
+    d=csv.get_dialect('escapable')
+    self.assertEqual(d.delimiter,',')
+    self.assertEqual(d.quotechar,'"')
+    self.assertEqual(d.quoting,csv.QUOTE_MINIMAL)
+    self.assertEqual(d.lineterminator,'\r\n')
+    self.assertEqual(d.doublequote,True)
+    self.assertEqual(d.escapechar,'\\')
+    self.assertEqual(d.skipinitialspace,False)
+    self.assertEqual(d.strict,False)
+
+  def testCustom2(self):
+    d=csv.parse_dialect('gted','|"Ln')
+    self.assertEqual(d.delimiter,'|')
+    self.assertEqual(d.quotechar,'"')
+    self.assertEqual(d.quoting,csv.QUOTE_NONE)
+    self.assertEqual(d.lineterminator,'\n')
+    self.assertEqual(d.doublequote,True)
+    self.assertEqual(d.escapechar,'\\')
+    self.assertEqual(d.skipinitialspace,False)
+    self.assertEqual(d.strict,False)
+
+class Test1(object):
+
+  def testReader1(self):
+    reader=csv.reader(data1)
+    data=[row for row in reader]
+    self.assertEqual(data1,data)
+
+if __name__=='__main__':
+  unittest.main()
