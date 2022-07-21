@@ -5,15 +5,7 @@ This is the unittest script for CSV.py.
 """
 
 import CSV as csv
-import unittest
-
-data1=[row+'\r\n' for row in """\
-h1,h2,h3,h4,h5
-a,b,c,d,e
-f,g,h,i,j
-k,l,m,n,o
-p,q,r,w,t
-u,v,w,x,y""".split('\n')]
+import io,unittest
 
 class TestDialects(unittest.TestCase):
 
@@ -39,7 +31,8 @@ class TestDialects(unittest.TestCase):
     self.assertEqual(d.skipinitialspace,False)
     self.assertEqual(d.strict,False)
 
-  def testCustom1(self):
+  def testRegisterDialect(self):
+    # SEP[Q[END[QSTYLE[DQUOTE[ESC[SKIPWS[STRICT]]]]]]]
     csv.register_dialect('escapable',escapechar='\\')
     d=csv.get_dialect('escapable')
     self.assertEqual(d.delimiter,',')
@@ -51,23 +44,40 @@ class TestDialects(unittest.TestCase):
     self.assertEqual(d.skipinitialspace,False)
     self.assertEqual(d.strict,False)
 
-  def testCustom2(self):
-    d=csv.parse_dialect('gted','|"Ln')
+  def testGTED(self):
+    # SEP[Q[END[QSTYLE[DQUOTE[ESC[SKIPWS[STRICT]]]]]]]
+    d=csv.parse_dialect('gted','|"LnfNff')
     self.assertEqual(d.delimiter,'|')
     self.assertEqual(d.quotechar,'"')
     self.assertEqual(d.quoting,csv.QUOTE_NONE)
     self.assertEqual(d.lineterminator,'\n')
-    self.assertEqual(d.doublequote,True)
-    self.assertEqual(d.escapechar,'\\')
+    self.assertEqual(d.doublequote,False)
+    self.assertEqual(d.escapechar,None)
     self.assertEqual(d.skipinitialspace,False)
     self.assertEqual(d.strict,False)
 
-class Test1(object):
+class Test1(unittest.TestCase):
+
+  # Some simple CSV data in the "excel" dialect.
+  excel_input="""\
+  h1,h2,h3,h4,h5\r
+  a,b,c,d,e\r
+  f,g,h,i,j\r
+  k,l,m,n,o\r
+  p,q,r,w,t\r
+  u,v,w,x,y\r\n"""
 
   def testReader1(self):
-    reader=csv.reader(data1)
+    # Read out data into an list of rows.
+    input=io.StringIO(self.__class__.excel_input)
+    reader=csv.reader(input,'excel')
     data=[row for row in reader]
-    self.assertEqual(data1,data)
+    # Write these rows to a string.
+    output=io.StringIO()
+    writer=csv.writer(output,'excel')
+    writer.writerows(data)
+    # Compare the input data to the output string.
+    self.assertEqual(input.getvalue(),output.getvalue())
 
 if __name__=='__main__':
   unittest.main()

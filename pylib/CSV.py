@@ -18,8 +18,8 @@ parameters involved:
              'N' (non-numeric), or 'n' (none).
     DQUOTE:  Represent a literal quote as two consecutive quotes. Either
              't' (for True, the default) or 'f' (for False).
-    ESC:     The escape charater, which makes the next character a literal.
-             (default: \\)
+    ESC:     The escape charater, which makes the next character a literal
+             Use 'N' for no escaping. (default: None)
     SKIPWS:  Skip whitespace immediately following a field separator. Either
              't' (for True) or 'f' (for False, the default).
     STRICT:  Raise exceptions on any little problem with the data. Either 't'
@@ -136,6 +136,8 @@ def parse_dialect(dialect_name,dialect_spec):
     raise Error(f"Bad \"lineterminator\" value in dialect specification string: {dialect_spec!r}")
   if d['delimiter']=='n':
     d['delimiter']=None
+  if d['escapechar']=='N':
+    d['escapechar']=None
   d['doublequote']=d['doublequote']=='t'
   d['skipinitialspace']=d['skipinitialspace']=='t'
   d['lineterminator']=lineterminator_map.get(d['lineterminator'],d['lineterminator'])
