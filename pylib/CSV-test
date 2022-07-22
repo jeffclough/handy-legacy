@@ -6,6 +6,8 @@ This is the unittest script for CSV.py.
 
 import CSV as csv
 import io,unittest
+from collections import namedtuple
+from pprint import pprint
 
 class TestDialects(unittest.TestCase):
 
@@ -59,17 +61,31 @@ class TestDialects(unittest.TestCase):
 class Test1(unittest.TestCase):
 
   # Some simple CSV data in the "excel" dialect.
-  excel_input="""\
-  h1,h2,h3,h4,h5\r
-  a,b,c,d,e\r
-  f,g,h,i,j\r
-  k,l,m,n,o\r
-  p,q,r,w,t\r
-  u,v,w,x,y\r\n"""
+  excel_input1="""\
+h1,h2,h3,h4,h5\r
+a,b,c,d,e\r
+f,g,h,i,j\r
+k,l,m,n,o\r
+p,q,r,w,t\r
+u,v,w,x,y\r\n"""
+
+  excel_input2="""\
+first,last,saying\r
+Jeff,Clough,"Uh ... Is this thing on?"\r
+Cindy,Clough,"I've got to move-it, move-it!"\r
+Ben,Franklin,"A penny saved is a penny earned."\r
+Sam,Clemmons,Always do right. This will gratify some people and astonish the rest."""
+
+  gted_input="""\
+123456789|Clough|Jeff|jclough
+234567891|Burdell|George P.|gburdell8
+345678912|Flubendorf|Frida|fflubendorf3"""
+
+  GtedData=namedtuple('GtedData','gtid lname fname uid')
 
   def testReader1(self):
-    # Read out data into an list of rows.
-    input=io.StringIO(self.__class__.excel_input)
+    # Read our data into a list of rows.
+    input=io.StringIO(self.excel_input1)
     reader=csv.reader(input,'excel')
     data=[row for row in reader]
     # Write these rows to a string.
@@ -78,6 +94,27 @@ class Test1(unittest.TestCase):
     writer.writerows(data)
     # Compare the input data to the output string.
     self.assertEqual(input.getvalue(),output.getvalue())
+
+  def testReader2(self):
+    # Read some data.
+    input=io.StringIO(self.excel_input2)
+    reader=csv.DictReader(input)
+    data=[type('',(),d) for d in reader]
+    saying={f"{d.first} {d.last}":d.saying for d in data}
+    # Test some data.
+    self.assertEqual(saying['Jeff Clough'],'Uh ... Is this thing on?')
+    self.assertEqual(saying['Ben Franklin'],'A penny saved is a penny earned.')
+
+  def testGtedData(self):
+    # Read some data.
+    gted=csv.parse_dialect('gted','|"LnfNff')
+    data=[self.GtedData(*row) for row in csv.reader(io.StringIO(self.gted_input),dialect=gted)]
+    # Convert list data to dictionary (for easier testing).
+    data={r.uid:r for r in data}
+    # Check what we've read.
+    self.assertEqual(data['jclough'].gtid,'123456789')
+    self.assertEqual(data['gburdell8'].fname,'George P.')
+    self.assertEqual(data['fflubendorf3'].lname,'Flubendorf')
 
 if __name__=='__main__':
   unittest.main()
