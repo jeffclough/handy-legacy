@@ -9,10 +9,10 @@ parameters involved:
 
     SEP:     Field separator character. (default: ,)
     Q:       Quote character. (default: ")
-    END:     Line ending. This can be C for carraige return (\r), N for
-             newline (\n), or B for both (\r\n). L for linefeed is the same as
-             N for newline (\n). Any other character is taken litterally and
-             will be interpreted as end-of-line in an input file and will
+    END:     Line ending. This can be C for carraige return (\\r), N for
+             newline (\\n), or B for both (\\r\\n). L for linefeed is the same
+             as N for newline (\\n). Any other character is taken litterally
+             and will be interpreted as end-of-line in an input file and will
              terminate each row written to an output file.
     QSTYLE:  Quoting style. One of 'a' (all), 'm' (minimal, the default),
              'N' (non-numeric), or 'n' (none).
