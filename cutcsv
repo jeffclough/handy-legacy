@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-import argparse,csv,errno,os,re,sys
+import argparse,errno,os,re,sys
+import CSV as csv
 from debug import DebugChannel
 
 dc=DebugChannel(False,stream=sys.stdout,line_fmt='{label:.1}: {basename}:{function}:{line}: {indent}{message}\n')
@@ -15,83 +16,7 @@ class CsvDialectError(Exception):
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# Set up something to parse and hold CSV dialects.
-
-re_dialect=re.compile(
-  '^'
-  '(?P<delimiter>.)'
-  '(?P<quotechar>.)'
-  '(?P<quoting>[amNn])'
-  '(?P<doublequote>[ft])'
-  '(?P<escapechar>.)'
-  '(?P<skipinitialspace>[ft])'
-  '(?P<commentchar>.)'
-)
-
-quoting_map=dict(
-  a=csv.QUOTE_ALL,
-  m=csv.QUOTE_MINIMAL,
-  N=csv.QUOTE_NONNUMERIC,
-  n=csv.QUOTE_NONE
-)
-
-class LocalDialect(csv.Dialect):
-  """Make it a simple thing to concoct any silly CSV dialect we can
-  think of."""
-
-  def __init__(self,**kwargs):
-    """Let the user give keyword arguments for dialectic elements (with
-    reasonable defaults for those not given): delimiter (','), quotechar
-    ('"'), quoting (csv.QUOTE_MINIMAL), doublequote (True), escapechar
-    ('\\'), skipinitialspace (False), and lineterminator (the system
-    default line terminator string)."""
-
-    self.delimiter=kwargs.get('delimiter',',')
-    self.quotechar=kwargs.get('quotechar','"')
-    self.escapechar=kwargs.get('escapechar','\\')
-    self.doublequote=kwargs.get('doublequote',True)
-    self.skipinitialspace=kwargs.get('skipinitialspace',False)
-    self.lineterminator=kwargs.get('lineterminator',os.linesep)
-    self.quoting=kwargs.get('quoting',csv.QUOTE_MINIMAL)
-    self.commentchar=kwargs.get('commentchar','#')
-
-  def __str__(self):
-    return ''.join(['%s'%(getattr(self,v),'') for v in ('delimiter','quotechar','quoting','doublequote','escapechar','skipinitialspace','commentchar')])
-
-  def __repr__(self):
-    return 'LocalDialect(%s)'%','.join([
-      '%s=%r'%(v,getattr(self,v))
-        for v in ('delimiter','quotechar','quoting','doublequote','escapechar','skipinitialspace','commentchar')
-    ])
-
-def parse_dialect(dialect_spec):
-  """Parse a dialect string, and return a LocalDialect instance that is
-  configured accordingly."""
-
-  dc(f"dialect_spec={dialect_spec!r}")
-
-  # Supply defaults for any unspecified elements of the dialect string.
-  if len(dialect_spec)<len(default_dialect_spec):
-    dialect_spec+=default_dialect_spec[-(len(default_dialect_spec)-len(dialect_spec)):]
-
-  # Validate and parse the dialect string using a regular expression.
-  m=re_dialect.match(dialect_spec)
-  if m==None:
-    raise CsvDialectError(dialect_spec)
-
-  # Cook the non-literal values.
-  d=m.groupdict()
-  dc(f"d={d!r}")
-  try:
-    d['quoting']=quoting_map[d['quoting']]
-  except KeyError:
-    raise CsvDialectError(dialect_spec)
-  except:
-    raise
-  d['doublequote']=d['doublequote']=='t'
-  d['skipinitialspace']=d['skipinitialspace']=='t'
-  d['lineterminator']=os.linesep
-  return LocalDialect(**d)
+# Set up something to parse ranges and range lists.
 
 def parse_range(s):
   '''Convert string list of ranges into a list of (n,m) range tuples.'''
@@ -120,32 +45,14 @@ def parse_range(s):
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Wrangle the command line.
 
-default_dialect_spec=',"mt\\f#'
+default_dialect_spec=csv.DEFAULT_DIALECT_SPEC
 
 ap=argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,description="""\
 This program does for CSV data what the traditional "cut" command does for
 regular text files.
 
 CSV DIALECT SYNTAX
-CSV formatting is a loose standard with dialectic flexability. These are the
-parameters involved:
-
-    SEP:     Field separator character. (default: ,)
-    Q:       Quote character. (default: ")
-    QSTYLE:  Quoting style. One of 'a' (all), 'm' (minimal, the default),
-             'N' (non-numeric), or 'n' (none).
-    DQUOTE:  Represent a literal quote as two consecutive quotes. Either
-             't' (for True, the default) or 'f' (for False).
-    ESC:     The escape charater, which makes the next character a literal.
-             (default: \\)
-    SKIPWS:  Skip whitespace immediately following a field separator. Either
-             't' (for True) or 'f' (for False, the default).
-    COMMENT: The character, if any, that makes a CSV line a comment IF it is
-             the first character on that line. (default: '#')
-
-All this put together looks like SEP[Q[QSTYLE[DQUOTE[ESC[SKIPWS]]]]] and is a
-single string of up to seven characters.
-""")
+"""+csv.CSV_DIALECT_DESCRIPTION)
 
 ap.add_argument('-j',dest='joinfields',action='store',help="""Join the given field range into a sinigle field separated by a single character. The first character of the JOINFIELDS value is the firld separator. The remainder of JOINFIELDS is the same field range syntax described below for -f. Also, -j renumbers fields as they are joined. So if "-j ' 1-2'" is given, fields 1 and 2 are joined as field 1, and any subsequent fields are renumbered beginning with 2. This is important to remember if you're also using the -f option because -f is evaluated after -j.""")
 ap.add_argument('-f',dest='fields',action='store',help="""Output only these fields. FIELDS is made up of one range or two or more ranges separated by commas. Each range is one of "N" (the Nth field), "N-" (from the Nth to the last field), "N-M" (from the Nth to the Mth field). Fields are counted beginning with 1, and all ranges are inclusive. By default, all fields are available for output.""")
@@ -181,8 +88,8 @@ else:
 if opt.fields:
   opt.fields=parse_range(opt.fields)
 # Parse reader and writer dialects.
-opt.reader=parse_dialect(opt.reader)
-opt.writer=parse_dialect(opt.writer)
+opt.reader=csv.parse_dialect('custom_reader',opt.reader)
+opt.writer=csv.parse_dialect('custom_writer',opt.writer)
 # Set up for stripping leading and/or trailing whitespace from each output field.
 if 'l' in opt.strip and 'r' in opt.strip:
   opt.strip=lambda s:s.strip()
@@ -211,8 +118,8 @@ def cut(reader):
   for irec in reader:
     dc(f"irec={irec!r}")
     # Skip comment lines without counting them as input lines.
-    if irec and irec[0].lstrip().startswith(opt.reader.commentchar):
-      continue
+    #if irec and irec[0].lstrip().startswith(opt.reader.commentchar):
+    #  continue
     # Skip initial lines according to opt.skip.
     IRN+=1
     dc(f"input record {IRN}: {irec!r}")
