@@ -62,7 +62,7 @@ class DebugChannel(object):
       stream=sys.stderr,
       label='DEBUG',
       indent_with='  ',
-      line_fmt='{date} {time} {label}: {basename}:{function}:{line}: {indent}{message}\n',
+      line_fmt='{label}: {basename}[{pid}]:{function}:{line}: {indent}{message}\n',
       date_fmt='%Y-%m-%d',
       time_fmt='%H:%M:%S',
       callback=None
@@ -137,7 +137,7 @@ class DebugChannel(object):
         if d:
           d("Getting diagnostics ...")
           diagnostics=some_expensive_data()
-          d.writelines(diagnostics)
+          d(diagnostics)
     """
 
     return bool(self.enabled)
@@ -159,7 +159,7 @@ class DebugChannel(object):
   def ignoreModule(self,name,*args):
     """Given the name of a module, e.g. "debug"), ignore any entries in
     our call stack from that module. Any subsequent arguments must be
-    the name of a function to be ignored withing that module. If no such
+    the name of a function to be ignored within that module. If no such
     functions are named, all calls from that module will be ignored."""
 
     if name in sys.modules:
@@ -202,10 +202,12 @@ class DebugChannel(object):
       {date}     current date (see setDateFormat())
       {time}     current time (see setTimeFormat())
       {label}    what type of thing is getting logged (default: 'DEBUG')
+      {pid}      numeric ID of the current process
       {pathname} full path of the calling source file
       {basename} base name of the calling source file
       {function} name of function debug.write() was called from
       {line}     number of the calling line of code in its source file
+      {code}     the Python code at the given line of the given file
       {indent}   indention string multiplied by the indention level
       {message}  the message to be written
 
@@ -286,6 +288,7 @@ class DebugChannel(object):
     to its own log line. The keys are sorted in ascending order."""
 
     if self.enabled:
+      pid=os.getpid()
       # Update our formatted date and time if necessary.
       t=int(get_time()) # Let's truncate at whole seconds.
       if self._t!=t:
@@ -293,7 +296,7 @@ class DebugChannel(object):
         self._t=t
         self.date=strftime(self.date_fmt,t)
         self.time=strftime(self.time_fmt,t)
-      # Set local variables for date and time so there available for output.
+      # Set local variables for date and time so they're available for output.
       date=self.date
       time=self.time
       # Figure out where the caller called us from.
@@ -327,7 +330,7 @@ class DebugChannel(object):
       # If our caller provided a callback function, call that now.
       if self.callback:
         if not self.callback(**locals()):
-          return self
+          return self # Return without writing any output.
 
       # Format our message and write it to the debug stream.
       if isinstance(message,(list,tuple)):
@@ -336,8 +339,8 @@ class DebugChannel(object):
           self.stream.write(self.fmt.format(**locals()))
       elif isinstance(message,dict):
         messages=message
-        for k in sorted(messages.keys()):
-          message='%s: %s'%(k,messages[k])
+        for k in messages.keys():
+          message=f"{k}: {messages[k]}"
           self.stream.write(self.fmt.format(**locals()))
       elif isinstance(message,str) and os.linesep in message:
         messages=message
@@ -387,7 +390,7 @@ if __name__=='__main__':
     d.undent()('TUPLE OUTPUT ...').indent()
     d(tuple('TUPLE OUTPUT ...'.split()))
     d.undent()('DICTIONARY OUTPUT ...').indent()
-    d(dict(a='dictionary',c='...',b='output'))
+    d(dict(a='dictionary',c='output',b='...'))
     d.undent()('DONE!')
 
   def delay(**kwargs):
