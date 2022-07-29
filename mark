@@ -4,8 +4,12 @@ try:
   import argparse
 except:
   import argparse27 as argparse
-import csv,os,re,shlex,string,sys
+import csv,os,shlex,string,sys
+import RE as re
 import ansi
+
+from debug import DebugChannel
+dc=DebugChannel(label='D')
 
 progname=os.path.basename(sys.argv[0])
 def die(msg='',rc=1):
@@ -125,20 +129,12 @@ epilog+='''
 NOTE: The context options have not yet been implemented!
 '''
 
-if sys.version_info>=(2,5):
-  p=argparse.ArgumentParser(
-    formatter_class=FittedHelpFormatter,
-    usage=usage,
-    description=description,
-    epilog=epilog
-  )
-else:
-  # Don't give OptionParser() an epilog argument if we know it can't handle it.
-  p=argparse.ArgumentParser(
-    formatter_class=FittedHelpFormatter,
-    usage=usage,
-    description=description+'\n'+epilog
-  )
+p=argparse.ArgumentParser(
+  formatter_class=FittedHelpFormatter,
+  usage=usage,
+  description=description,
+  epilog=epilog
+)
 
 p.add_argument('-b','--background',dest='background',choices=list(ansi.background.keys()),default='black',
   help='''Sets the assumed background color, which defaults to %(default)s. ASNI codes to effect the background color that's aready assumed will not be output.''')
@@ -178,20 +174,20 @@ p.add_argument('-l',dest='whole_line',action='store_true',default=False,
   help='''The first pattern matching any portion of a line will mark the whole line as a match.''')
 p.add_argument('-L',dest='log_mode',action='store_true',default=False,
   help='''Turns on log mode, which marks error, warning, info, and debug output in addition to the time, host, and process conent. Also see --log-format. NOT YET FULLY IMPLEMENTED.''')
-p.add_argument('--log-format',dest='log_format',action='store',default=r'''
-(?P<time>\w+\s+\d+\s\d+:\d+:\d+)
-\s+
-(?P<host>\S+)
-\s+
-(?P<proc>
-  (?P<prog>[^[ ]+)
-  (\[(?P<pid>\d+(?P<sub>-\d+)?)\])?
-)
-\s*
-(?P<level>\S+)?
-:\s*
-(?P<message>.*)
-'''.replace(' ','').replace('\n',''),
+p.add_argument('--log-format',dest='log_format',action='store',default=(
+  "(?P<time>\w+\s+\d+\s\d+:\d+:\d+)"
+  "\s+"
+  "(?P<host>\S+)"
+  "\s+"
+  "(?P<proc>"
+    "(?P<prog>[^[ ]+)"
+    "(\[(?P<pid>\d+(?P<sub>-\d+)?)\])?"
+  ")"
+  "\s*"
+  "(?P<level>\S+)?"
+  ":\s*"
+  "(?P<message>.*)"
+),
   help="""Set the format to expect for log text, which is a regular expression that matches and names the various parts of each line of log data when the -L option is used. (default="%(default)s") NOT YET FULLY IMPLEMENTED.""")
 p.add_argument('--palette',dest='palette',action='store',default='dark',
   help='''Comma-delimited list of color specifications to use to highlight matches for patterns. Each spec is of the form "[ATTR] FG [on BG]" where ATTR is any of bold, italics, underscore, or strikethrough, and FG and BG may be any of black, red, green, yellow, blue, magenta, cyan, or white. Two other possible values for a colorspec can be "normal" and "reverse", which don't make sence with other ATTR, FB, or BG values. You should also know that ATTR, FG, and BG values are persistent from one spec to the next, so, for example "red on black,green,yellow" specifies that matches for the first pattern should be red, second pattern are green, third are yellow, and that all have black backgrounds. Since the palette syntax tends to be verbose, you can also use --palette=dark or --palette=light to use colors generally suitable for dark or light terminal backgrounds, respectively. Since only red, blue, and magenta are used on light backgrounds, using -w is often a good idea with --palette=light. The default setting is "%(default)s".''')
@@ -221,6 +217,7 @@ except IOError as e:
   if errmsg=='Broken pipe':
     sys.exit(1)
   raise
+dc.enable(opt.debug)
 ansi.current_background=opt.background
 if opt.file:
   try:
@@ -316,34 +313,36 @@ if opt.log_mode:
 if opt.whole_line:
   opt.patterns=['.*%s.*'%p for p in opt.patterns]
 
-if opt.debug:
-  print('opt.after=%r'%(opt.after,))
-  print('opt.background=%r'%(opt.background,))
-  print('opt.before=%r'%(opt.before,))
-  print('opt.columns=%r'%(opt.columns,))
-  print('opt.comment_format=%r'%(opt.comment_format,))
-  print('opt.comment_mode=%r'%(opt.comment_mode,))
-  print('opt.context=%r'%(opt.context,))
-  print('opt.csv=%r'%(opt.csv,))
-  print('opt.delim=%r'%(opt.delim,))
-  print('opt.diff=%r'%(opt.diff,))
-  print('opt.discard=%r'%(opt.discard,))
-  print('opt.fields=%r'%(opt.fields,))
-  print('opt.file=%r'%(opt.file,))
-  print('opt.grep=%r'%(opt.grep,))
-  print('opt.ignore_case=%r'%(opt.ignore_case,))
-  print('opt.input_from=%r'%(opt.input_from,))
-  print('opt.keep=%r'%(opt.keep,))
-  print('opt.log_format=%r'%(opt.log_format,))
-  print('opt.log_mode=%r'%(opt.log_mode,))
-  print('opt.palette=%r'%(opt.palette,))
-  print('opt.re_help=%r'%(opt.re_help,))
-  print('opt.reverse=%r'%(opt.reverse,))
-  print('opt.stanzas=%r'%(opt.stanzas,))
-  print('opt.traffic=%r'%(opt.traffic,))
-  print('opt.whole_line=%r'%(opt.whole_line,))
-  print('opt.wrap=%r'%(opt.wrap,))
-  print('opt.patterns=[%s\n]'%(''.join(["\n  '%s',"%(p,) for p in opt.patterns]),))
+if dc:
+  dc("Options:").indent()
+  dc('opt.after=%r'%(opt.after,))
+  dc('opt.background=%r'%(opt.background,))
+  dc('opt.before=%r'%(opt.before,))
+  dc('opt.columns=%r'%(opt.columns,))
+  dc('opt.comment_format=%r'%(opt.comment_format,))
+  dc('opt.comment_mode=%r'%(opt.comment_mode,))
+  dc('opt.context=%r'%(opt.context,))
+  dc('opt.csv=%r'%(opt.csv,))
+  dc('opt.delim=%r'%(opt.delim,))
+  dc('opt.diff=%r'%(opt.diff,))
+  dc('opt.discard=%r'%(opt.discard,))
+  dc('opt.fields=%r'%(opt.fields,))
+  dc('opt.file=%r'%(opt.file,))
+  dc('opt.grep=%r'%(opt.grep,))
+  dc('opt.ignore_case=%r'%(opt.ignore_case,))
+  dc('opt.input_from=%r'%(opt.input_from,))
+  dc('opt.keep=%r'%(opt.keep,))
+  dc('opt.log_format=%r'%(opt.log_format,))
+  dc('opt.log_mode=%r'%(opt.log_mode,))
+  dc('opt.palette=%r'%(opt.palette,))
+  dc('opt.re_help=%r'%(opt.re_help,))
+  dc('opt.reverse=%r'%(opt.reverse,))
+  dc('opt.stanzas=%r'%(opt.stanzas,))
+  dc('opt.traffic=%r'%(opt.traffic,))
+  dc('opt.whole_line=%r'%(opt.whole_line,))
+  dc('opt.wrap=%r'%(opt.wrap,))
+  dc('opt.patterns=[%s\n]'%(''.join(["\n  '%s',"%(p,) for p in opt.patterns]),))
+  dc.undent()
 
 if opt.patterns:
   for p in opt.patterns:
