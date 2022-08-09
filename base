@@ -9,11 +9,7 @@ except:
   sys.path.insert(1,os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])),'lib','python'))
   from handy import die,prog
 
-try:
-  import argparse
-except:
-  import argparse27 as argparse
-import base64,math,os,re,sys
+import argparse,base64,math,os,re,sys
 
 class BaseError(Exception):
   def __init__(self,msg):

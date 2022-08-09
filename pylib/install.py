@@ -2,7 +2,7 @@
 
 """
 
-Facilitate installing building (if necessary) and installing
+Facilitate installing, building (if necessary), and installing
 executables.
 
 """
