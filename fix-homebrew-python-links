@@ -1,0 +1,29 @@
+#!/bin/zsh
+
+# Create a symlink for all Homebrew's latest Python version's binaries in
+# /opt/homebrew/bin.
+
+# Our Target DIRectory is the most recently installed version of Python 3.
+HB=/opt/homebrew
+CELLAR=$HB/Cellar
+LDIR=$HB/bin
+d="$(/bin/ls -drt $CELLAR/python@3* | tail -1)"
+TDIR="$d/$(/bin/ls -rt $d | tail -1)/bin"
+
+cd "$LDIR"
+
+#echo "HB:     '$HB'"
+#echo "CELLAR: '$CELLAR'"
+#echo "LDIR:   '$LDIR'"
+#echo "TDIR:   '$TDIR'"
+#echo "PWD:    '$PWD'"
+
+for f in $TDIR/*; do 
+  #echo "------------------"
+  t="..${f#$HB}"
+  #echo "t: '$t'"
+  f="$(basename $f)"
+  #echo "f: '$f'"
+  echo "ln -sf $t $f"
+  ln -sf $t $f
+done
