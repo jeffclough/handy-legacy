@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 ##
 ## If you make this file a Python module by renaming it to have a .py
@@ -30,7 +30,7 @@ class Entry(object):
   def __str__(self):
     "Return a multi-line string expressing the values in this entry."
 
-    fields=self.d.keys()
+    fields=list(self.d.keys())
     fields.sort()
     w=max([len(x) for x in fields])
     return '\n'.join(['%*s: %s'%(w,f,self.d[f]) for f in fields])
@@ -69,7 +69,7 @@ class Search(object):
     self.timeout=timeout
     self.sock=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
     self.sock.connect((self.host,self.port))
-    self.sock.send(self.query+'\n')
+    self.sock.send((self.query+'\n').encode())
     self.sock.settimeout(self.timeout)
     self.file=self.sock.makefile('r')
     self.result=None
@@ -162,10 +162,10 @@ if __name__=='__main__':
       i=0
       for ent in q.responses():
         i+=1
-        print '-----------------------------'
-        print ent
+        print('-----------------------------')
+        print(ent)
       if i>0:
-        print '-----------------------------'
+        print('-----------------------------')
     elif arg.format.startswith('json'):
       try:
         import json
@@ -177,7 +177,7 @@ if __name__=='__main__':
         result=q.result # <--- Meaningful ONLY after q.responses() iterator finishes!
       )
       json.dump(data,sys.stdout,indent=(None,4)[arg.format=='json-pretty'])
-      print ''
+      print('')
     elif arg.format.startswith('csv'):
       # Read ALL the entries.
       entries=[ent.d for ent in q.responses()]
@@ -194,11 +194,11 @@ if __name__=='__main__':
       csv.writer(sys.stdout).writerows(entries)
     elif arg.format=='python':
       for ent in q.responses():
-        print repr(ent.d)
+        print(repr(ent.d))
     elif arg.format=='raw':
       for line in q.rawResponses():
         sys.stdout.write(line)
-  except Exception,e:
+  except Exception as e:
     if isinstance(e,SystemExit):
       # Respect the deeper code's exit status.
       sys.exit(e.code)

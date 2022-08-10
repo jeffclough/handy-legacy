@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 try:
   import argparse
 except:
@@ -19,19 +19,19 @@ if not args.codes:
   codes=''
   while True:
     try:
-      s=raw_input("Codes: ").strip()
+      s=input("Codes: ").strip()
       if s=='':
         break
       codes+=' '+s
     except(EOFError):
       break
-  print
+  print()
   args.codes=codes.split()
 
 # Compute the rows.
 if len(args.codes)%2:
   args.codes.append('')
-column_offset=len(args.codes)/2
+column_offset=len(args.codes)//2
 rows=[]
 for i in range(column_offset):
   rows.append((args.codes[i],args.codes[i+column_offset]))
@@ -39,9 +39,9 @@ for i in range(column_offset):
 # Output the rows.
 if args.format=='text':
   for r in rows:
-    print '[_] %s   [_] %s'%(r[0],r[1])
+    print('[_] %s   [_] %s'%(r[0],r[1]))
 elif args.format=='html':
-  print "<html><body>"
+  print("<html><body>")
   for r in rows:
-    print '&#x25a2; %s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#x25a2; %s<br />'%(r[0],r[1])
-  print "</body></html>"
+    print('&#x25a2; %s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#x25a2; %s<br />'%(r[0],r[1]))
+  print("</body></html>")

@@ -1,7 +1,6 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import optparse,os,re,sys,time
-import pprint
 
 # Components of the current date and time and TZ details are needed in lots of
 # places in this code, so I'm just making them globally available. So there.
@@ -175,7 +174,6 @@ if args:
   ts=args[0]  # Get the time string from the argument list.
 
   # Match one of our timestamp input formats.
-  #pprint.pprint(tf)
   tstruct=None
   for desc,pat,functions in tf:
     #print 'D: trying %r'%(pat.pattern,)
@@ -184,7 +182,7 @@ if args:
       #print 'D: RE matched!'
       # Parse time component by RE, converting strings to integers where possible.
       td=type('',(),m.groupdict(''))
-      for var,val in td.__dict__.items():
+      for var,val in list(td.__dict__.items()):
         if var[0]!='_':
           if var in defaults and val in (None,''):
             val=defaults[var]
@@ -202,7 +200,7 @@ if args:
       if tstruct!=None:
         break
   if tstruct==None:
-    print >>sys.stderr,'Unrecognized time format in argument: %r'%ts
+    print('Unrecognized time format in argument: %r'%ts, file=sys.stderr)
     sys.exit(1)
   # Convert our parset time.time_struct object to a Unix Epoch time value.
   t=int(time.mktime(tstruct))
@@ -225,12 +223,12 @@ if opt.age:
   if s:
     output+='%02d:%02d:%02d'%(s/3600,(s%3600)/60,s%60)
   if output:
-    print output
+    print(output)
   else:
-    print 0
+    print(0)
 elif opt.epoch:
-  print t
+  print(t)
 elif opt.utc_output:
-  print time.strftime(opt.ofmt,time.gmtime(t))
+  print(time.strftime(opt.ofmt,time.gmtime(t)))
 else:
-  print time.strftime(opt.ofmt,time.localtime(t))
+  print(time.strftime(opt.ofmt,time.localtime(t)))
