@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import argparse,sys
 import xml.etree.ElementTree as ET
@@ -22,7 +22,7 @@ root=tree.getroot()
 
 # Iterate over BeyondPod groups.
 if opt.html:
-  print '<ul>'
+  print('<ul>')
 for group in root[1]:
   children=sorted([
     (g.get('text').encode('utf8'),g.get('xmlUrl').encode('utf8'))
@@ -35,30 +35,30 @@ for group in root[1]:
   debug("Children: %d"%len(children))
 
   if opt.html:
-    print '  <li style="margin-top: 1em">%s'%gname
+    print('  <li style="margin-top: 1em">%s'%gname)
   else:
-    print gname
+    print(gname)
 
   # Iterate through this group's children.
   if opt.html:
-    print '    <ol style="margin-top: 0px">'
+    print('    <ol style="margin-top: 0px">')
   for name,url in children:
     #print p.items()
     #name=p.get('text').encode('utf8')
     #url=p.get('xmlUrl').encode('utf8')
     if opt.html:
-      print '      <li><a href="%s">%s</a></li>'%(url,name)
+      print('      <li><a href="%s">%s</a></li>'%(url,name))
     else:
-      print '    '+name
+      print('    '+name)
       #print >>sys.stderr,'      %r'%(p.items(),)
   if opt.html:
-    print '    </ol>'
+    print('    </ol>')
 
   if opt.html:
-    print '  </li>'
+    print('  </li>')
   else:
-    print
+    print()
 if opt.html:
-  print '</ul>'
+  print('</ul>')
 
 

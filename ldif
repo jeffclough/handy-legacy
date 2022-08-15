@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 try:
   import argparse
 except:
@@ -79,7 +79,7 @@ class LdapFilter(object):
     def __init__(self,condition,matched):
       self.condition=condition
       self.matched=matched
-      for k,v in self.matched.groupdict().items():
+      for k,v in list(self.matched.groupdict().items()):
         setattr(self,k,v)
 
     def test(rec):
@@ -98,7 +98,7 @@ class LdapFilter(object):
     def __init__(self,condition,matched):
       self.condition=condition
       self.matched=matched
-      for k,v in self.matched.groupdict().items():
+      for k,v in list(self.matched.groupdict().items()):
         setattr(self,k,v)
 
     def test(rec):
@@ -120,7 +120,7 @@ class LdapFilter(object):
     def __init__(self,condition,matched):
       self.condition=condition
       self.matched=matched
-      for k,v in self.matched.groupdict().items():
+      for k,v in list(self.matched.groupdict().items()):
         setattr(self,k,v)
 
     def test(rec):
@@ -146,7 +146,7 @@ class LdapFilter(object):
     def __init__(self,condition,matched):
       self.condition=condition
       self.matched=matched
-      for k,v in self.matched.groupdict().items():
+      for k,v in list(self.matched.groupdict().items()):
         setattr(self,k,v)
 
     def test(rec):
@@ -160,7 +160,7 @@ class LdapFilter(object):
     def __init__(self,condition,matched):
       self.condition=condition
       self.matched=matched
-      for k,v in self.matched.groupdict().items():
+      for k,v in list(self.matched.groupdict().items()):
         setattr(self,k,v)
 
     def test(rec):
@@ -174,7 +174,7 @@ class LdapFilter(object):
     def __init__(self,condition,matched):
       self.condition=condition
       self.matched=matched
-      for k,v in self.matched.groupdict().items():
+      for k,v in list(self.matched.groupdict().items()):
         setattr(self,k,v)
 
     def test(rec):
@@ -194,7 +194,7 @@ class LdapFilter(object):
     def __init__(self,condition,matched):
       self.condition=condition
       self.matched=matched
-      for k,v in self.matched.groupdict().items():
+      for k,v in list(self.matched.groupdict().items()):
         setattr(self,k,v)
 
       # Parse and store our interior conditions.
@@ -240,7 +240,7 @@ class LdapRecord(object):
     self.dn=self.entry=None
     if isinstance(data,tuple):
       dn,entry=data
-    elif isinstance(data,basestring):
+    elif isinstance(data,str):
       self._from_string(data)
     elif isinstance(data,list):
       self._from_list(data)
@@ -248,7 +248,7 @@ class LdapRecord(object):
       # data had better be readable like a file.
       self._from_file(data)
 
-  def __nonzero__(self):
+  def __bool__(self):
     "Return True if this LdapRecord contains data."
 
     return bool(self.dn and self.entry)
@@ -259,7 +259,7 @@ class LdapRecord(object):
     if len(stanza)==0:
       raise LdapError("Empty stanza cannot create LdapRecord.")
     #print 'D: stansa=%r'%(stanza,)
-    if isinstance(stanza[0],basestring):
+    if isinstance(stanza[0],str):
       # Parse this list of strings.
       self.entry={}
       for line in stanza:
@@ -316,7 +316,7 @@ class LdapRecord(object):
 
     if self.dn:
       s='dn: '+self.dn+os.linesep
-      attrs=self.entry.keys()
+      attrs=list(self.entry.keys())
       attrs.sort()
       for attr in attrs:
         s+=''.join(['%s: %s%s'%(attr,val,os.linesep) for val in self.entry[attr]])
