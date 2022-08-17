@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import argparse,os,sys
 from datetime import date,timedelta
@@ -62,17 +62,17 @@ def show_patch_groups(year,month):
   days.update(dict([(d,'  ') for d in range(0,-6,-1)]))
 
   # Write the heading for this month's calendar.
-  print first.strftime('%B').center(21)
+  print(first.strftime('%B').center(21))
   first_sunday=counted_week_day(year,month,1,6)
-  print ' '.join([d.strftime('%A')[:2] for d in [first_sunday+timedelta(dd) for dd in range(7)]])
+  print(' '.join([d.strftime('%A')[:2] for d in [first_sunday+timedelta(dd) for dd in range(7)]]))
 
   # Write the body of the this month's calendar.
   skip_days=(first.weekday()+1)%7-1
   day_list=[days[d] for d in range(-skip_days,last.day+1)]
   while day_list:
-    print ' '.join(day_list[:7])
+    print(' '.join(day_list[:7]))
     del day_list[:7]
-  print
+  print()
 
 
 for month in range(12):

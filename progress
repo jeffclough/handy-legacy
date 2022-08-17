@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 import os
 
 # Get the character size of this terminal when this module is loaded.
@@ -142,7 +142,7 @@ class Progress(object):
         pos=self.position
       try:
         s=self.fmt%(pos,)
-      except TypeError,e:
+      except TypeError as e:
         if str(e).startswith('not all arguments'):
           s=self.fmt
         else:
@@ -208,7 +208,7 @@ class ByteSizeProgress(Progress):
 
       try:
         s=self.fmt%(pos,u)
-      except TypeError,e:
+      except TypeError as e:
         if str(e).startswith('not all arguments'):
           s=self.fmt
         else:

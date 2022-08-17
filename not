@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import argparse,fnmatch,os,re,stat,sys
 from glob import glob
@@ -26,15 +26,14 @@ def compile_pattern(s):
   return re.compile(s)
 
 ap=argparse.ArgumentParser(
-  description="Output all filenames not matching any filespec on the command line."
+  description="""Output all filenames not matching any filespec on the command line. For example, something like "not *.pyc *.bak .ldif | xargs tar cvf source.tar" might be used to bundle up your source files."""
 )
 ap.add_argument('--path',action='store',nargs='*',default='.',help="One or more paths to search for the filespecs given on the command line.")
-ap.add_argument('--recursive','-r',action='store_true',default=False,help="Ordinarilly, only the given paths (with --path) or the current working directory are searched for files not matching those on the command line. This option searches those paths and all subdirectories beneath them.")
-ap.add_argument('--depth',type=non_negative_integer,default=sys.maxsize,help="Limit the depth of any recursive search.")
+ap.add_argument('-r','--recursive',dest='depth',action='store',default=0,type=non_negative_integer,help="The number of directories to descend when looking for files. (default: %(default)d)")
 ap.add_argument('--follow',action='store_true',default=True,help="Follow symlinks to directories if recursing.")
-ap.add_argument('--prune',nargs='+',action='store',default=[],help="List filespecs and regular expressions (starting with 're:') to specify directories NOT to recurse into.")
-ap.add_argument('-v',dest='invert',action='store_true',default=False,help="Invert the function of this command so that only MATCHING files are output.")
-ap.add_argument('filespecs',metavar='filespec',nargs='+',action='store',help="These are the filespecs and regular expressions (those starting with 're:') that will be suppressed in the output.")
+ap.add_argument('--prune',metavar='FILESPEC',nargs='+',action='store',default=[],help="One or more filespecs and regular expressions (starting with 're:') to specify directories NOT to recurse into.")
+ap.add_argument('-v',dest='invert',action='store_true',default=False,help="Invert the function of this command so that only MATCHING files are output. (But pruning is not inverted.)")
+ap.add_argument('filespecs',metavar='filespec',nargs='+',action='store',help="""These are filespecs and regular expressions (those starting with 're:'). Any maatching files will be suppressed in the output. (But see -v.) For example, "*java" and "re:.*java$" are equivalent ways of matching all files ending with "java".""")
 ap.add_argument('--debug',action='store_true',default=False,help="Enable debugging messages.")
 opt=ap.parse_args()
 
@@ -42,7 +41,6 @@ opt=ap.parse_args()
 from debug import DebugChannel
 debug=DebugChannel(enabled=opt.debug,stream=sys.stdout)
 debug('opt.path=%r'%(opt.path))
-debug('opt.recursive=%r'%(opt.recursive))
 debug('opt.depth=%r'%(opt.depth))
 debug('opt.follow=%r'%(opt.follow))
 debug('opt.prune=%r'%(opt.prune))
