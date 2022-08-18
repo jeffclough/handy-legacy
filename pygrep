@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import datetime,fnmatch,optparse,os,re,sys
 from handy import shellify,file_walker
@@ -82,7 +82,7 @@ class FakeMatchObject(object):
     # Return a tuple of strings corresponding to the requested groups.
     g=[]
     for ndx in args:
-      if isinstance(ndx,basestring):
+      if isinstance(ndx,str):
         g+=_groupdict[ndx]
       else:
         g+=self._groups[ndx-1]
@@ -98,9 +98,9 @@ class FakeMatchObject(object):
   def groupdict(self,default=None):
     "Just like the standard re.MatchObject.groupdict() method."
 
-    return dict([
-      (k,[v,default][v==None]) for k,v in self._groupdict.items()
-    ])
+    return {
+      k:(default if v is None else v) for k,v in self._groupdict.items()
+    }
 
     # The following methods and attributes are not implemented because
     # I don't need them in this code. And not all of them would have any
@@ -131,128 +131,131 @@ def grepfile(filename,r,also=None):
   else:
     try:
       inf=open(filename)
-    except Exception,e:
-      print >>sys.stderr,'%s: Error opening file %s: %s'%(progname,filename,e)
+    except Exception as e:
+      print('%s: Error opening file %s: %s'%(progname,filename,e), file=sys.stderr)
       return 0
 
   # Scan inf for matchine lines and handle them according to our global
   # options.
   matches=0
   linecount=0
-  for line in inf:
-    linecount+=1
-    if line and line[-1]=='\n':
-      line=line[:-1]
-    if opt.match:
-      m=r.match(line)
-    else:
-      m=r.search(line)
-    if (m!=None and also!=None) or (m!=None)!=opt.invert:
-      # If we've been given a subsequent match to test, do that now.
-      if also!=None:
-        #print 'D: r.pattern=%r'%(r.pattern,)
-        #print 'D: m.groupdict()["msg"]=%r'%(m.groupdict()["msg"],)
-        mm=eval(also)
-        #mm=r.search(m.groupdict()['msg'])
-        #print 'D: mm=%r'%(mm,)
-        if (mm!=None)==opt.invert:
-          continue
-        # Merge mm into m, and proceed as usual from there.
-        m=FakeMatchObject(m,mm)
-        if r==log_parser:
-          # This tight coupling is brought to you by expeditious pragmatism.
-          monthname=m._groupdict['month']
-          m._groupdict['month']='%02d'%datetime.datetime.strptime(monthname,'%b').month
-          m._groupdict['monthname']=monthname
-
-      # So this is a match! Yea!
-      matches+=1
-      if opt.list:
-        if opt.number:
-          continue
-        break
-
-      # Get our groups ready for their massage, in case they're scheduled for one.
-      if m:
-        groups=m.groups()
-        groupdict=m.groupdict()
+  try:
+    for line in inf:
+      linecount+=1
+      if line and line[-1]=='\n':
+        line=line[:-1]
+      if opt.match:
+        m=r.match(line)
       else:
-        groups=()
-        groupdict={}
+        m=r.search(line)
+      if (m!=None and also!=None) or (m!=None)!=opt.invert:
+        # If we've been given a subsequent match to test, do that now.
+        if also!=None:
+          #print 'D: r.pattern=%r'%(r.pattern,)
+          #print 'D: m.groupdict()["msg"]=%r'%(m.groupdict()["msg"],)
+          mm=eval(also)
+          #mm=r.search(m.groupdict()['msg'])
+          #print 'D: mm=%r'%(mm,)
+          if (mm!=None)==opt.invert:
+            continue
+          # Merge mm into m, and proceed as usual from there.
+          m=FakeMatchObject(m,mm)
+          if r==log_parser:
+            # This tight coupling is brought to you by expeditious pragmatism.
+            monthname=m._groupdict['month']
+            m._groupdict['month']='%02d'%datetime.datetime.strptime(monthname,'%b').month
+            m._groupdict['monthname']=monthname
 
-      if opt.strip:
-        # Remove leading and trailing white space from the values of all groups.
-        l=[]
-        for val in groups:
-          if val!=None:
-            val=val.strip()
-          l.append(val)
-        groups=tuple(l)
-        # Remove leading and trailing white space from the values of named groups.
-        l=[]
-        for key in groupdict:
-          val=groupdict[key]
-          if val!=None:
-            val=val.strip()
-          l.append((key,val))
-        groupdict=dict(l)
+        # So this is a match! Yea!
+        matches+=1
+        if opt.list:
+          if opt.number:
+            continue
+          break
 
-      # Handle any of our special (or general) formatting options.
-      if opt.groups=='shell':
-        line='; '.join([
-          '%s=%s'%(x.replace(' ','_'),shellify(groupdict[x]))
-            for x in sorted(groupdict.keys())
-        ])
-      elif opt.dictionary:
-        keys=groupdict.keys()
-        keys.sort()
-        line='{'+', '.join(['%r: %r'%(k,groupdict[k]) for k in keys])+'}'
-      elif opt.format:
-        try:
-          line=format(opt.format,*((m.group(),)+groups),**groupdict)
-        except AttributeError,e:
-          print 'opt.format=%r (type=%s)'%(opt.format,type(opt.format))
-          msg=str(e)
-          sys.stdout.flush()
-          sys.stderr.write('%s: %s(%d): %s\n'%(progname,filename,linecount,msg))
-          raise
-          sys.exit(2)
-        except IndexError,e:
-          msg=str(e)
-          sys.stdout.flush()
-          sys.stderr.write('%s: %s(%d): %s\n'%(progname,filename,linecount,msg))
-          sys.exit(2)
-        except ValueError,e:
-          msg=str(e)
-          sys.stdout.flush()
-          sys.stderr.write('%s: %s(%d): %s\n'%(progname,filename,linecount,msg))
-          sys.exit(2)
+        # Get our groups ready for their massage, in case they're scheduled for one.
+        if m:
+          groups=m.groups()
+          groupdict=m.groupdict()
+        else:
+          groups=()
+          groupdict={}
 
-      # Handle prefixing of filename and/or line number.
-      prefix=''
-      if opt.onefile:
-        if opt.number:
-          prefix='%d:'%linecount
-      elif opt.number:
-        prefix='%s:%d:'%(filename,linecount)
-      else:
-        prefix='%s:'%filename
+        if opt.strip:
+          # Remove leading and trailing white space from the values of all groups.
+          l=[]
+          for val in groups:
+            if val!=None:
+              val=val.strip()
+            l.append(val)
+          groups=tuple(l)
+          # Remove leading and trailing white space from the values of named groups.
+          l=[]
+          for key in groupdict:
+            val=groupdict[key]
+            if val!=None:
+              val=val.strip()
+            l.append((key,val))
+          groupdict=dict(l)
 
-      # These are the regular formats for when we're not numbering lines.
-      print prefix+line
-      if m and opt.groups:
-        if opt.groups=='tuple' and groups:
-          print '('+')('.join(['%s'%repr(x) for x in groups])+')'
-        if opt.groups=='dict' and groupdict:
-          d=groupdict
-          print ' '.join(['%s=%s'%(x,repr(d[x])) for x in sorted(d.keys())])
-        if opt.groups!='shell':
-          print ''
+        # Handle any of our special (or general) formatting options.
+        if opt.groups=='shell':
+          line='; '.join([
+            '%s=%s'%(x.replace(' ','_'),shellify(groupdict[x]))
+              for x in sorted(groupdict.keys())
+          ])
+        elif opt.dictionary:
+          keys=list(groupdict.keys())
+          keys.sort()
+          line='{'+', '.join(['%r: %r'%(k,groupdict[k]) for k in keys])+'}'
+        elif opt.format:
+          try:
+            line=format(opt.format,*((m.group(),)+groups),**groupdict)
+          except AttributeError as e:
+            print('opt.format=%r (type=%s)'%(opt.format,type(opt.format)))
+            msg=str(e)
+            sys.stdout.flush()
+            sys.stderr.write('%s: %s(%d): %s\n'%(progname,filename,linecount,msg))
+            raise
+            sys.exit(2)
+          except IndexError as e:
+            msg=str(e)
+            sys.stdout.flush()
+            sys.stderr.write('%s: %s(%d): %s\n'%(progname,filename,linecount,msg))
+            sys.exit(2)
+          except ValueError as e:
+            msg=str(e)
+            sys.stdout.flush()
+            sys.stderr.write('%s: %s(%d): %s\n'%(progname,filename,linecount,msg))
+            sys.exit(2)
+
+        # Handle prefixing of filename and/or line number.
+        prefix=''
+        if opt.onefile:
+          if opt.number:
+            prefix='%d:'%linecount
+        elif opt.number:
+          prefix='%s:%d:'%(filename,linecount)
+        else:
+          prefix='%s:'%filename
+
+        # These are the regular formats for when we're not numbering lines.
+        print(prefix+line)
+        if m and opt.groups:
+          if opt.groups=='tuple' and groups:
+            print('('+')('.join(['%s'%repr(x) for x in groups])+')')
+          if opt.groups=='dict' and groupdict:
+            d=groupdict
+            print(' '.join(['%s=%s'%(x,repr(d[x])) for x in sorted(d.keys())]))
+          if opt.groups!='shell':
+            print('')
+  except UnicodeDecodeError as e:
+    print("Binary file: %s"%filename,file=sys.stderr)
   if opt.list and matches>0:
     if opt.number:
-      print '%s:%d'%(filename,matches)
+      print('%s:%d'%(filename,matches))
     else:
-      print filename
+      print(filename)
   return matches
 
 # Handle our command line.
@@ -337,7 +340,7 @@ if opt.flags:
     elif f=='x':
       flags|=re.VERBOSE
     else:
-      print >>sys.stderr,'%s: Invalid flag character: "%s"'%(progname,f)
+      print('%s: Invalid flag character: "%s"'%(progname,f), file=sys.stderr)
       sys.exit(2)
 if opt.ignore_case:
   flags|=re.IGNORECASE
@@ -347,12 +350,12 @@ matches=0
 try:
   # Compile our regular expression.
   if not args:
-    print >>sys.stderr,'%s: Missing regular expression'%progname
+    print('%s: Missing regular expression'%progname, file=sys.stderr)
     sys.exit(2)
   try:
     r=re.compile(args[0],opt.flags)
-  except Exception,e:
-    print >>sys.stderr,'%s: %s'%(progname,e)
+  except Exception as e:
+    print('%s: %s'%(progname,e), file=sys.stderr)
     sys.exit(2)
   del args[0]
 
@@ -369,7 +372,7 @@ try:
     else:
       matches+=grepfile(filename,r)
 
-except IOError,e:
+except IOError as e:
   if 'broken pipe' not in str(e).lower():
     raise
 

@@ -1,6 +1,6 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
-import argparse,os,re,sys,urllib
+import argparse,os,re,sys,urllib.request,urllib.parse,urllib.error
 import english
 from handy import die,getch
 try:
@@ -43,13 +43,14 @@ ap.add_argument('--scale',metavar='N',default=16,type=int,help="""Scale the qr c
 ap.add_argument('--margin',metavar='N',default=2,type=int,help="""Surround the QR code with this many "units" of background color. The QR standard is 4, but this program's default is %(default)s because that's really big.""")
 ap.add_argument('--foreground',metavar='RGBA',action='store',default='000f',help="""RGBA (or RRGGBBAA) foreground color, which is normally %(default)s.""")
 ap.add_argument('--background',metavar='RGBA',action='store',default='ffff',help="""RGBA (or RRGGBBAA) background color, which is normally %(default)s.""")
+ap.add_argument('--debug',action='store_true',help="""Show some internal values before generating the QR image.""")
 ap.add_argument('text',metavar='WORD',nargs='+',action='append',help="""This is the text that will be encoded into the QR code.""")
 opt=ap.parse_args()
 
 if False:
-  print 'Raw color options:'
-  print '  foreground: %s'%(opt.foreground,)
-  print '  background: %s'%(opt.background,)
+  print('Raw color options:')
+  print('  foreground: %s'%(opt.foreground,))
+  print('  background: %s'%(opt.background,))
 
 # Cook some option values.
 opt.foreground=get_color_tuple(opt.foreground)
@@ -60,7 +61,7 @@ opt.text=' '.join(opt.text[0])
 if opt.format in ('png','svg'):
   if not opt.file:
     if any([x in opt.text for x in '.:/']):
-      opt.file=urllib.quote_plus(opt.text,'')
+      opt.file=urllib.parse.quote_plus(opt.text,'')
     else:
       opt.file=''.join(opt.text.split())
     #print 'D: opt.file=%r'%(opt.file,)
@@ -72,18 +73,18 @@ if opt.format in ('png','svg'):
       opt.file+=ext
   if os.path.exists(opt.file) and not opt.force:
     if getch('%s already exists. Overwrite? '%opt.file,echo=True).lower()!='y':
-      print 'Quitting.'
+      print('Quitting.')
       sys.exit(0)
 
 if False:
-  print 'Options:'
-  print '  file: %r'%(opt.file,)
-  print '  format: %r'%(opt.format,)
-  print '  scale: %r'%(opt.scale,)
-  print '  margin: %r'%(opt.margin,)
-  print '  foreground: %s'%(','.join(['%02x'%x for x in opt.foreground]))
-  print '  background: %s'%(','.join(['%02x'%x for x in opt.background]))
-  print '  text: %r'%(opt.text,)
+  print('Options:')
+  print('  file: %r'%(opt.file,))
+  print('  format: %r'%(opt.format,))
+  print('  scale: %r'%(opt.scale,))
+  print('  margin: %r'%(opt.margin,))
+  print('  foreground: %s'%(','.join(['%02x'%x for x in opt.foreground])))
+  print('  background: %s'%(','.join(['%02x'%x for x in opt.background])))
+  print('  text: %r'%(opt.text,))
 
 # Do the QR stuff.
 code=qr.create(opt.text)
@@ -93,5 +94,5 @@ elif opt.format=='svg':
   code.svg(opt.file,scale=opt.scale,module_color=opt.foreground,background=opt.background,quiet_zone=opt.margin)
 elif opt.format=='show':
   code.show(scale=opt.scale,module_color=opt.foreground,background=opt.background,quiet_zone=opt.margin)
-elif opt.format=='show':
-  code.terminal(module_color=opt.foreground,background=opt.background,quiet_zone=opt.margin)
+#elif opt.format=='show':
+#  code.terminal(module_color=opt.foreground,background=opt.background,quiet_zone=opt.margin)

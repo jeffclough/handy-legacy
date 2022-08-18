@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+
+import argparse
+
+def fibonacci_sequence():
+  "This is a Fibonacci sequence generator function."
+
+  m,n=0,1
+  yield m
+  while True:
+    yield n
+    m,n=n,m+n
+
+def fibonacci(n):
+  for f in fibonacci_sequence():
+    if n<1:
+      return f
+    n-=1
+
+ap=argparse.ArgumentParser()
+ap.add_argument('n',type=int,help="The number of Fibonacci numbers to generate.")
+opt=ap.parse_args()
+
+for i in range(opt.n):
+  print(fibonacci(i))
