@@ -6,7 +6,7 @@ import CSV as csv
 from handy import die,shellify
 from debug import DebugChannel
 
-dc=DebugChannel(True,label='D')
+dc=DebugChannel(False,label='D')
 
 def numeric(x):
   """Return the numeric value of x if x can be interpreted as either
