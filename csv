@@ -2,6 +2,18 @@
 
 import argparse,os,pipes,re,shlex,sys
 from functools import reduce
+
+# Make sure we'll find our "handy" modules, regardless of our shell's
+# PYTHONPATH value (or lack thereof), or die with a helpful message.
+for p in [os.path.abspath(os.path.join(os.path.abspath(os.path.dirname(sys.argv[0])),x)) for x in (os.path.join('..','lib','python'),'pylib')]:
+  if os.path.isdir(p) and p not in sys.path:
+    sys.path.insert(0,p)
+    break;
+else:
+  print("%s: ERROR - Can't find Jeff's \"handy\" modules! (Who installed this?)"%(sys.argv[0],),file=sys.stderr)
+  sys.exit(1)
+del p
+
 import CSV as csv
 from handy import die,shellify
 from debug import DebugChannel
@@ -25,6 +37,29 @@ def numeric(x):
   with contextlib.suppress(ValueError): return float(y)
   return x
 
+def parse_range(s):
+  '''Convert string list of ranges into a list of (n,m) range tuples.'''
+
+  ranges=[x.strip() for x in s.split(',')]
+  f=[]
+  for r in ranges:
+    r=r.split('-')
+    if len(r)==1:
+      m=int(r[0])
+      n=m-1
+    else:
+      n,m=r
+      if n=='':
+        n=0
+      else:
+        n=int(n)-1
+      if m=='':
+        m=None
+      else:
+        m=int(m)
+    f.append((n,m))
+  return f
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -42,7 +77,7 @@ ap=argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
 
   Form 3: %(prog)s --infmt=shell [OPTIONS] [value-1 ... value-n]
     Input MUST be lines of shell-escaped and -quoted values.""",
-  description=f"""\
+  description="""\
 This command reads data from standard input in either CSV (by default), Excel,
 or shell format and writes it to standard output as CSV (by default), shell, or
 either of two tabular format: table and markdown. The CSV dialects used for
@@ -52,40 +87,48 @@ reading and writing need not be the same and can be specified using the
 Regardless of which usage form is used, data values may be given as command
 line arguments to supply a row of data that will be appear as the first line of
 output. Typically, this is used to output column headings, (e.g.: 'First name'
-Last\ name email account zipcode), but it could just as easily be a row of
+Last\\ name email account zipcode), but it could just as easily be a row of
 actual data. Just in case it's not obvious, any data given on the command line
 in this way is not CSV-formatted. It is parsed by your shell, so use proper
 escapes and quoting to distinguish one argument (data value) from another.
 
 The output format defaults to CSV (--outfmt=csv), but it can also be set to
-shell, table, or markdown. If shell, each line of output is a list environment
-variable assignments separated by semicolons. This REQUIRES that the first line
-of input data consists of column headings that are valid when used to name
-environment variables. If --outfmt=table is used, consider using --headings 1
-(or 2 or whatever) to say how many lines of input should be treated as column
-headings. (The default is 0.) "-box" (the default) or "-ascii" can also be
-appended to "table" to determine whether box-drawing characters of normal ASCII
-characters are used to separate one column from another and heading roles from
-data rows. --outfmt=markdown is just like table output, but output is formatted
-as a Markdown table.
+shell, table, or markdown. If shell, each line of output is a list of
+environment variable assignments separated by semicolons. This REQUIRES the
+first line of input data to consist of column headings that are also valid
+environment variable names. If --outfmt=table is used, consider using
+--headings 1 (or 2 or whatever) to say how many lines of input should be
+treated as column headings. (The default is 0.) "-box" (the default) or
+"-ascii" can also be appended to "table" to determine whether box-drawing
+characters or normal ASCII characters are used to separate one column from
+another and heading rows from data rows. --outfmt=markdown is just like table
+output, but output is Markdown-formatted.
 
 CSV DIALECT SYNTAX
-{csv.CSV_DIALECT_DESCRIPTION}"""
-  )
+%s"""%(csv.CSV_DIALECT_DESCRIPTION,))
+
+ap.add_argument('--join',metavar='JOINSPEC',dest='join_fields',action='store',help="""Join the given field range into a single field separated by a single character. The first character of the JOINSPEC value is the field separator. The remainder of JOINSPEC is the same field range syntax (FIELDSPEC) described below for --keep. Also, --join renumbers fields as they are joined. So if "--join ' 1-2'" is given, fields 1 and 2 are joined as field 1, and any subsequent fields are renumbered beginning with 2. This is important to remember if you're also using the --keep option because --keep is evaluated after --join.""")
+ap.add_argument('--keep',metavar='FIELDSPEC',action='store',help="""Output only these fields. FIELDSPEC is made up of one or more ranges separated by commas. Each range is one of "N" (the Nth field), "N-" (from the Nth to the last field), or "N-M" (from the Nth to the Mth field, inclusive). Fields are counted beginning with 1. By default, all fields are kept (of course).""")
 ap.add_argument('--headings',dest='heading_lines',action='store',type=int,default=0,help="Specify how many rows (lines) of heading data are in the input. (default: %(default)r)")
 ap.add_argument('--infmt',dest='infmt',action='store',choices=('csv','excel','shell'),default='csv',help="Specify either csv, excel, or shell as the input format. See the usage and description above for details. (default: %(default)r)")
 ap.add_argument('--reader',dest='reading',metavar='DIALECT',action='store',default=csv.DEFAULT_DIALECT_SPEC,help="""Specify the CSV reader's dialect. See CSV DIALECT SYNTAX above. (default: %(default)r""")
 ap.add_argument('--outfmt',dest='outfmt',action='store',default='csv',help="Specify either csv, shell, table, table-ascii, table-box, table-nosep, or markdown as the output format. See the usage and description above for details. (default: %(default)r)")
 ap.add_argument('--writer',dest='writing',metavar='DIALECT',action='store',default=csv.DEFAULT_DIALECT_SPEC,help="Specify the CSV writer's dialect. See CSV DIALECT SYNTAX above. (default: %(default)r)")
-#ap.add_argument('--csv',dest='infmt',action='store_const',const='csv',default='csv',help="Set the input format to CSV. (This is the default.)")
-#ap.add_argument('--excel',dest='infmt',action='store_const',const='excel',help="Set the input format to Excel.")
 ap.add_argument('--worksheet',dest='worksheet',metavar='NAME_or_NUMBER',action='store',default=None,help="Give the name or number (starting with 0) of the worksheet to read if --excel was used. If not given, the first worksheet will be read.")
-#ap.add_argument('--shell',dest='infmt',action='store_const',const='shell',#help="Set the input format to shell. Each line of standard input is parsed for values as a shell would and then written to standard ouptut as CSV.")
 ap.add_argument('--test',dest='test',action='store_true',default=False,help="Run internal tests (for debugging purposes only).")
 ap.add_argument('args',action='store',nargs='*',default=[],help="See the usage forms above. Command line arguments' meanings depend on what form is being used.")
 opt=ap.parse_args()
 
 # Cook table output format specs a bit. (This is where opt.style comes from.)
+if opt.join_fields:
+  opt.joinchar=opt.join_fields[0]
+  op.join_fields=parse_range(opt.join_fields[1:])
+  # TODO Add logic to ensure opt.join_fields is in ascending order.
+  opt.join_fields.reverse() # Field joining is performed from right to left.
+else:
+  opt.join_fields=[]
+if opt.keep:
+  opt.keep=parse_range(opt.keep)
 if opt.outfmt.startswith('table'):
   if opt.outfmt=='table':
     opt.style='box'
@@ -337,7 +380,16 @@ if opt.args:
 # Read from the reader and write to the writer.
 for row in reader:
   #print(f"D: row={row!r}")
+  for n,m in opt.join_fields:
+    row[n:m]=[opt.joinchar.join([x for x in row[n:m] if x])]
+  if opt.keep:
+    r=[]
+    for n,m in opt.keep:
+      r.extend(row[n:m])
+    row=r
   writer.writerow(row)
 if opt.outfmt in ('markdown','table'):
+  # All those calls to writer.writerow() above have accumulated the data
+  # for our table. All that's left is to write it all out.
   writer.writerows()
 
