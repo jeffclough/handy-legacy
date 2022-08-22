@@ -6,7 +6,9 @@ from functools import reduce
 # Make sure we'll find our "handy" modules, regardless of our shell's
 # PYTHONPATH value (or lack thereof), or die with a helpful message.
 for p in [os.path.abspath(os.path.join(os.path.abspath(os.path.dirname(sys.argv[0])),x)) for x in (os.path.join('..','lib','python'),'pylib')]:
-  if os.path.isdir(p) and p not in sys.path:
+  if os.path.isdir(p):
+    if p in sys.path:
+      break
     sys.path.insert(0,p)
     break;
 else:
