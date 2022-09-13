@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-import os
+import os,re,sys
+
+prog=os.path.basename(sys.argv[0])
 
 # Get the character size of this terminal when this module is loaded.
 try:
@@ -228,8 +230,10 @@ if __name__=='__main__':
     ap=argparse.ArgumentParser(
       description="Output a progress bar and terminat with 0 (true) if pos < limit. Otherwise, return 1 (false)."
     )
+    ap.add_argument('--file',action='store_true',help="""Use the pos and limit arguments as a regular expression and filename, respectively. The position of the first occurance of the regular expression will be use for pos, and the size of the named file will be used for limit.""")
+    ap.add_argument('--file-last',action='store_true',help="""Just like --file, but the last occurance of the pattern in the file is used for the position.""")
     ap.add_argument('--newline','-n',action='store_true',help="Write a newline character to standard output after every progress bar. By default, only a carriage return is output, returning the cursor to the left-most column of the terminal.")
-    ap.add_argument('--fmt',action='store',default='(%d)',help="Format string for the numeric value of this progress bar. (default: %(default)s)")
+    ap.add_argument('--fmt','--format',dest='fmt',action='store',default='(%d)',help="Format string for the numeric value of this progress bar. This option is ignored if --bytes is given. (default: %(default)s)")
     ap.add_argument('--mark',action='store',default='>',help="Character that marks the porgress bar's current position. (default: %(default)s)")
     ap.add_argument('--trailer',action='store',default='=',help="Character to fill in the bar to the left of (trailing behind) the current position. (default: %(default)s)")
     ap.add_argument('--leader',action='store',default='-',help="Character to fill in the bar to the right of (leading) the current position. (default: %(default)s)")
@@ -239,14 +243,47 @@ if __name__=='__main__':
     ap.add_argument('--percent',action='store_true',help="Express progress as a percentage rather than as an absolute value.")
     ap.add_argument('--bytes',action='store_true',help="Express progress as a number of bytes in human-friendly units (B, KB, MB, GB, TB, or EB) according to the number of bytes in question.")
     ap.add_argument('--divisor',action='store',type=int,choices=(1000,1024),default=1000,help="For use with --bytes. This is the value you divide a number by to convert from one unit (like KB) to the next higher unit (like GB). It defaults to 1000, but you can set it to 1024 if you're counting memory bytes rather than filesystem bytes. These are the only two permitted values for the divisor artument.")
-    ap.add_argument('pos',action='store',type=float,help="The position you want this progress bar to express.")
-    ap.add_argument('limit',action='store',type=float,help="The upper limit of the pos argument.")
+    ap.add_argument('pos',action='store',help="The position you want this progress bar to express.")
+    ap.add_argument('limit',action='store',help="The upper limit of the pos argument.")
     opt=ap.parse_args()
+
+    # If --file is given, find the position of the first occurance of the
+    # opt.pos RE in the file named by opt.limit.
+    if opt.file or opt.file_last:
+      if opt.file and opt.file_last:
+        print(f"{prog}: Error: You can't use both --file and --file-last. Pick one.",file=sys.stderr)
+        sys.exit(1)
+      try:
+        pat=re.compile(opt.pos)
+        filename,opt.limit=opt.limit,os.path.getsize(opt.limit)
+        pos=found=0
+        with open(filename) as f:
+          for line in f:
+            m=pat.search(line)
+            if m:
+              found=pos+m.start()
+              if opt.file:
+                break
+            pos+=len(line)
+        opt.pos=found
+      except OSError as e:
+        print(f"{prog}: {e}",file=sys.stderr)
+        sys.exit(1)
+      except Exception as e:
+        print(f"{prog}: Error: {e}",file=sys.stderr)
+        sys.exit(1)
+
+    try:
+      if isinstance(opt.pos,str): opt.pos=float(opt.pos)
+      if isinstance(opt.limit,str): opt.limit=float(opt.limit)
+    except ValueError as e:
+      print(f"{prog}: Error: {e}",file=sys.stderr)
+      sys.exit(1)
 
     if opt.percent:
       p=PercentProgress(
         opt.limit,
-        #fmt=opt.fmt, <-- Let this class use its default format.
+        fmt=opt.fmt,
         mark=opt.mark,
         trailer=opt.trailer,
         leader=opt.leader,
