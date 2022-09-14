@@ -230,7 +230,7 @@ if __name__=='__main__':
     ap=argparse.ArgumentParser(
       description="Output a progress bar and terminat with 0 (true) if pos < limit. Otherwise, return 1 (false)."
     )
-    ap.add_argument('--file',action='store_true',help="""Use the pos and limit arguments as a regular expression and filename, respectively. The position of the first occurance of the regular expression will be use for pos, and the size of the named file will be used for limit.""")
+    ap.add_argument('--file',action='store_true',help="""Use the pos and limit arguments as a regular expression and filename, respectively. The position of the line following the first occurance of the regular expression will be use for pos, and the size of the named file will be used for limit.""")
     ap.add_argument('--file-last',action='store_true',help="""Just like --file, but the last occurance of the pattern in the file is used for the position.""")
     ap.add_argument('--newline','-n',action='store_true',help="Write a newline character to standard output after every progress bar. By default, only a carriage return is output, returning the cursor to the left-most column of the terminal.")
     ap.add_argument('--fmt','--format',dest='fmt',action='store',default='(%d)',help="Format string for the numeric value of this progress bar. This option is ignored if --bytes is given. (default: %(default)s)")
@@ -256,15 +256,16 @@ if __name__=='__main__':
       try:
         pat=re.compile(opt.pos)
         filename,opt.limit=opt.limit,os.path.getsize(opt.limit)
-        pos=found=0
+        found=0
         with open(filename) as f:
-          for line in f:
+          line=f.readline()
+          while line:
             m=pat.search(line)
             if m:
-              found=pos+m.start()
+              found=f.tell()
               if opt.file:
                 break
-            pos+=len(line)
+            line=f.readline()
         opt.pos=found
       except OSError as e:
         print(f"{prog}: {e}",file=sys.stderr)
