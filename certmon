@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
-import argparse,atexit,datetime,json,os,re,socket,ssl,io,subprocess,sys,time,threading
+import argparse,atexit,datetime,json,os,re,socket,ssl,io,subprocess,sys,time,threading,warnings
 from pprint import pprint
 from debug import DebugChannel
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # Put a little extra effort into finding our non-standard modules if needed.
 try:
@@ -78,7 +80,7 @@ class Certificate(object):
       self.error=re.sub(r'^\[.*\] ','',str(e))
     except Exception as e:
       t1=time.time()
-      print('Debug: (%s) e=%r'%(type(e),e))
+      #print('Debug: (%s) e=%r'%(type(e),e))
       self.error=str(e)
     else:
       t1=time.time()
@@ -253,8 +255,8 @@ else:
 
   # Wait for all our threads (except the main thread) to finish.
   spinner=Spinner(Spinner.cylon,True)
-  while threading.activeCount()>1:
-    print(f"Waiting for %s to finish [{spinner()}]  \r"%nounf('thread',threading.activeCount()-1),file=sys.stderr,end='')
+  while threading.active_count()>1:
+    print(f"Waiting for %s to finish [{spinner()}]  \r"%nounf('thread',threading.active_count()-1),file=sys.stderr,end='')
     time.sleep(0.1)
   print((' '*(prog.term_width-1))+'\r',file=sys.stderr,end='')
 log.info("Finished retrieval of %s"%nounf('certificate',len(opt.services)))
