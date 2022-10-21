@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse,os,re,stat,sys
 from glob import glob
+from debug import DebugChannel
 
 ap=argparse.ArgumentParser(
   usage="""
@@ -19,13 +20,16 @@ ap.add_argument('-d',dest='delimeter',action='store',default=':',help="Set the d
 ap.add_argument('-f','--follow',dest='follow',action='store_true',default=False,help="Monitor the input file for further content if the LASTLINE or ENDPAT is not found. This is similar to the -f option of tail. (NOT YET IMPLEMENTED!)")
 ap.add_argument('-i',dest='case',action='store_false',default=True,help="Ignore case when scanning for regular expressions.")
 ap.add_argument('-l',dest='filenames',action='store_false',default=True,help="Suppress normal output of filename before slices of that file when more than one file is given.")
-# TODO: Add the --last option.
+# TODO: Implement the --last option.
 ap.add_argument('--last',dest='last',action='store_true',default=False,help="Output only the last matching slice in each file. (NOT YET IMPLEMENTED!)")
-ap.add_argument('-n','--next',dest='next',action='store_true',default=False,help="Keeps ENDPAT from matching the same line STARTPAT matched. This also, and necessarily if you think about it, requires that the line matching ENDPAT not be output and remain available to be matched by STARTPAT. (This option has no effect if LASTLINE is use rather than ENDPAT, and it makes no sense if FIRSTLINE is used rather than STARTPAT.)")
+ap.add_argument('-n','--next',dest='next',action='store_true',default=False,help="Keeps ENDPAT from matching the same line STARTPAT matched. This also requires that the line matching ENDPAT not be output and remain available to be matched by STARTPAT. (This option has no effect if LASTLINE is use rather than ENDPAT, and it makes no sense if FIRSTLINE is used rather than STARTPAT.)")
 ap.add_argument('-m','--multi',dest='multi',action='store_true',default=False,help="Output more than one slice per file. Only the first slice is output by default. (This only makes sense if STARTPAT is used.")
-ap.add_argument('--test',dest='test',action='store_true',default=False,help="This runs a self-test and is intended for debugging this program. (No output means everything worked correctly.)")
+ap.add_argument('--debug',action='store_true',help="Turn on debugging output for trouble-shooting purposes.")
+ap.add_argument('--test',action='store_true',help="This runs a self-test and is intended for debugging this program. (No output means everything worked correctly.)")
 ap.add_argument('args',nargs='*',help="See forms 1 and 2 above under usage.")
 opt=ap.parse_args()
+
+dc=DebugChannel(opt.debug,label='D',line_fmt='{label}: {basename}({line}): {indent}{message}\n')
 
 def die(msg,rc=0):
   print(f"{sys.argv[0]}: {msg}",file=sys.stderr)
@@ -49,28 +53,18 @@ def parse_arg(arg):
   >>> m.group('fs','first','last')
   ('testing', None, None)
   >>> m=re_arg.match('testing:')
-  >>> m==None
-  False
   >>> m.group('fs','first','last')
   ('testing', None, None)
   >>> m=re_arg.match('testing::')
-  >>> m==None
-  False
   >>> m.group('fs','first','last')
   ('testing', None, None)
   >>> m=re_arg.match('testing:5')
-  >>> m==None
-  False
   >>> m.group('fs','first','last')
   ('testing', '5', None)
   >>> m=re_arg.match('testing:5:')
-  >>> m==None
-  False
   >>> m.group('fs','first','last')
   ('testing', '5', None)
   >>> m=re_arg.match('testing:5:10')
-  >>> m==None
-  False
   >>> m.group('fs','first','last')
   ('testing', '5', '10')
   >>> m=re_arg.match('testing::10')
@@ -105,6 +99,9 @@ def parse_arg(arg):
   if not m:
     die('Bad argument: %r'%arg)
   fs,first,last=m.group('fs','first','last')
+  if not first: first=None
+  if not last: last=None
+  dc(f"fs={fs!r}, first={first!r}, last={last!r}")
   relative=False
   if first==None:
     first=1
@@ -122,19 +119,19 @@ def parse_arg(arg):
       relative=True
       last=last[1:]
     if not last.isdigit():
-      die('Bad relative number: %s%s'%(('','+')[relative],last))
+      die('Bad numeric value: %s%s'%(('','+')[relative],last))
     last=int(last)
   else:
     try:
       last=re.compile(last,opt.re_flags)
     except:
-      die('Bad regular expression: %s'%last)
+      die('Bad regular expression: %r'%last)
   return fs,first,last,relative
 
 class FileReader(object):
   """Use this file-like class for reading lines from files while keeping
   track of the current line number and the position from which the
-  lastest line was read."""
+  most recent line was read."""
 
   def __init__(self,filename):
     """Given the name of the file to read from, initialize this
@@ -174,7 +171,7 @@ class FileReader(object):
       self.eof=True
     return line
 
-  def rewind(self):
+  def rewindOneLine(self):
     """Reposition this file to the beginning of the line most recently
     read from it. Return this FileReader instance."""
 
@@ -231,7 +228,7 @@ def slice(filename,first,last,relative=False):
               sys.stdout.write(line)
               if found:
                 if opt.next:
-                  f.rewind() # Set up to re-read this line.
+                  f.rewindOneLine() # Set up to re-read this line.
                 break
         if not opt.multi:
           break
