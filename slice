@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse,os,re,stat,sys
+import argparse,os,re,stat,traceback,sys
 from glob import glob
 from debug import DebugChannel
 
@@ -29,7 +29,7 @@ ap.add_argument('--test',action='store_true',help="This runs a self-test and is 
 ap.add_argument('args',nargs='*',help="See forms 1 and 2 above under usage.")
 opt=ap.parse_args()
 
-dc=DebugChannel(opt.debug,label='D',line_fmt='{label}: {basename}({line}): {indent}{message}\n')
+dc=DebugChannel(opt.debug,label='D',line_fmt='{label}: {basename}({function},{line}): {indent}{message}\n')
 
 def die(msg,rc=0):
   print(f"{sys.argv[0]}: {msg}",file=sys.stderr)
@@ -101,8 +101,8 @@ def parse_arg(arg):
   fs,first,last=m.group('fs','first','last')
   if not first: first=None
   if not last: last=None
-  dc(f"fs={fs!r}, first={first!r}, last={last!r}")
   relative=False
+  dc(f"fs={fs!r}, first={first!r}, last={last!r}")
   if first==None:
     first=1
   elif first.isdigit():
@@ -143,11 +143,14 @@ class FileReader(object):
     self.eof=False
 
   def __enter__(self):
+    dc(self.file.name)
     return self
 
   def __exit__(self,exc_type,exc_value,exc_traceback):
+    dc(self.file.name)
     if exc_value!=None:
-      print(exc_type,exc_value,exc_tb,sep="\n",file=sys.stderr)
+      traceback.print_exception(exc_type,exc_value,exc_traceback)
+      #print(exc_type,exc_value,exc_traceback,limit=None,sep="\n",file=sys.stderr)
     return True
 
   def __iter__(self):
@@ -155,20 +158,32 @@ class FileReader(object):
 
     while True:
       line=self.readline()
-      if line:
-        yield line
-      else:
+      if not line:
         break
+      yield line
+
+  @property
+  def seekable(self):
+    """Return the "seekable" state of the unlying file object."""
+
+    return self.file.seekable
 
   def readline(self):
-    """Read and return the next line from our file."""
+    """Read and return the next line from our file. Also remember the
+    file location of the returned line and manage this object's
+    line_number value and its eof state."""
 
+    if self.eof:
+      return ''
+    # Remember this new line's position in our file.
     self.pos=self.file.tell()
+    # Attempt to read the next line. line=='' indicates EOF.
     line=self.file.readline()
     if line:
       self.line_number+=1
     else:
       self.eof=True
+    dc(f"{self.eof=}, {line=}")
     return line
 
   def rewindOneLine(self):
@@ -194,9 +209,9 @@ def slice(filename,first,last,relative=False):
   with FileReader(filename) as f:
     if opt.next and not f.seekable:
       die("Cannot use -n (--next) option with %s because it can't be rewound."%(filename,))
-    
-    while not f.eof: # In case opt.multi is True.
-      # Skip lines until the first line of the slice.
+
+    while True: # In case opt.multi is True.
+      # Find the first line of our slice.
       if isinstance(first,int):
         for line in f:
           if f.line_number>=first:
@@ -205,42 +220,57 @@ def slice(filename,first,last,relative=False):
         for line in f:
           if first.search(line):
             break
-      if not f.eof:
-        # Output lines until the end of the slice (or the file).
-        sys.stdout.write(line)
-        if isinstance(last,int):
-          stop=last
-          if relative:
-            stop+=f.line_number-1
+
+      # If we're at EOF, there's no need to continue.
+      if f.eof:
+        break
+
+      # Output lines until the end of the slice (or EOF).
+      sys.stdout.write(line)
+      if isinstance(last,int):
+        stop=last
+        if relative:
+          stop+=f.line_number-1
+        for line in f:
+          if last!=0 and f.line_number>stop:
+            break
+          sys.stdout.write(line)
+      else:
+        found=last.search(line)
+        if not found:
           for line in f:
-            if last!=0 and f.line_number>stop:
-              break
-            sys.stdout.write(line)
-            pos=f.tell()
-        else:
-          if opt.next:
-            found=None
-          else:
             found=last.search(line)
-          while not found:
-            for line in f:
-              found=last.search(line)
-              sys.stdout.write(line)
-              if found:
-                if opt.next:
-                  f.rewindOneLine() # Set up to re-read this line.
-                break
-        if not opt.multi:
-          break
+            sys.stdout.write(line)
+            if found:
+              if opt.next:
+                f.rewindOneLine() # Set up to re-read this line.
+              break
+
+      # Break out of this loop unless we're looking for multiple slices.
+      if not opt.multi:
+        break
 
 # If the --test option was given, run our internal tests and quit.
 if opt.test:
-  import doctest
+  import doctest,subprocess
+
   failed,tested=doctest.testmod(
     optionflags=doctest.ELLIPSIS # Ellipsis matches substrings.
   )
   if failed:
     sys.exit(1)
+
+  def run(*args):
+    "Return (stdout,stderr) from running the given command."
+
+    proc=subprocess.Popen(args,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    stdut,stderr=proc.communicate()
+    return (proc.returncode,stdout,stderr)
+
+  prog=sys.argv[0]
+  error,stdout,stderr=run(prog,"%s:^aaa:^$")
+  
+
   sys.exit(0)
 
 # Step through our command line arguments:
@@ -267,4 +297,9 @@ aaa 2
 bbb 2
 ccc 2
 ddd 2
+
+aaa 3
+bbb 3
+ccc 3
+ddd 3
 """
