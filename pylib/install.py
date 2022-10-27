@@ -70,20 +70,21 @@ else:
 # These verbosity flag values can be combined bitwise in any
 # combination in an instance of V.
 class V(Flag):
-  QUIET=0       # A value that leaves all the others off.
+  QUIET=0       # A value that turns all the others off.
+  OPS=auto()    # Log file operations we perform.
   DEPS=auto()   # Log dependency logic.
   TIME=auto()   # Log time comparison logic.
   DEBUG=auto()  # Log debug statements.
 
 class Options(object):
   def __init__(self):
-    self.dry_run=False
+    self.dryrun=False
     self.force=False
     self.tdir=os.path.expandvars(os.path.expanduser('~/my'))
     self.verb=V.QUIET
 
   def __str__(self):
-    return f"dry_run={self.dry_run}, force={self.force}, tdir={self.tdir!r} verb={self.verb}"
+    return f"dryrun={self.dryrun}, force={self.force}, tdir={self.tdir!r} verb={self.verb}"
 
 opt=Options()
 log.debug(f"Defaults: {opt}")
@@ -145,27 +146,30 @@ def is_newer(src,dst,bias=-0.001):
 
 def out_of_date(target,*deps):
   """Return True if any of the other filename arguments identifies a
-  file with a later modification time than target. (Otherwise, return
-  False.)"""
+  file with a later modification time than target. The "deps" arguments
+  can be either filenames or lists or tuples of fileanmes."""
 
-  if not opt.force and os.path.exists(target):
-    t=filetime(target)
-  else:
+  if not os.path.exists(target):
     if opt.verb & V.DEPS:
-      if opt.force:
-        log.info(f"  {target} is being forced out of date.")
-      else:
-        log.info(f"  {target} is out of date because it's missing.")
+      log.info(f"  {target} is out of date because it's missing.")
     return True
+
+  if opt.force:
+    if opt.verb & V.DEPS:
+      log.info(f"  {target} is being forced out of date.")
+    return True
+
+  t=filetime(target)
+
   for d in deps:
     if isinstance(d,(list,tuple)):
       if outOfDate(target,*d):
         return True
     elif not os.path.exists(d):
-      # Return True for non-existant dependency in order to provoke an
-      # error when the dependency is not found.
+      # Return True for a non-existant dependency to provoke an error
+      # when that file isn't found.
       if opt.verb & V_DEPS:
-        log.info(f"  {target} depends on {d}, which doesn't exist.")
+        log.info(f"  {target} depends on {d}, which is missing.")
       return True
     elif is_newer(d,(target,t)):
       if opt.verb & V_DEPS:
@@ -174,8 +178,8 @@ def out_of_date(target,*deps):
   return False
 
 def expand_wildcards(filespec):
-  """Return a list of all the files matching filespec. If there are no
-  such files, return a list with only filespec in it."""
+  """Return a list of all the files matching filespec. If there is no
+  such file, return a list with only the filespec in it."""
 
   files=glob(filespec)
   if not files:
@@ -185,9 +189,8 @@ def expand_wildcards(filespec):
 def dir_mode(file_mode):
   """Given a file mode (of the shell variety), return a mode value
   appropriate for creating a directory to hold such a file. For instance,
-  dir_mode(0o640) will return 0x750. The idea is to enable directory
-  searching for every group with read or write access.
-  """
+  dir_mode(0o640) will return 0o750. The idea is to enable directory
+  searching for every permission group with read or write access."""
 
   # Yes, I could have used a loop, but isn't this easier to read?
   m=file_mode
@@ -202,8 +205,8 @@ def dir_mode(file_mode):
 # necessarily the same values used by the stat structure, though it seems they
 # often are. So use stat_mode() to convert from a Unix shell mode value like
 # 0o600 to (stat.S_IRUSR | stat.S_IWUSR). It's a little like the ntohs() and
-# htons() network functions. You can get by without them if you're on a
-# big-endian platform, but it's much safer to use them.
+# htons() network functions. You might get by without them if you're on a
+# big-endian platform Linux, but it's much safer to use them.
 #
 # There's also a stat_mode() function to convert mode values in the other
 # direction.
@@ -224,9 +227,9 @@ shell_to_stat_values={
   0o001:stat.S_IXOTH,
 }
 
-# This is the reverse look-up dictionary. If you have some bitwise combinarion
-# of stats.I[RWX](USR|GRP|OTH) values, this will give you the equivalent Unix
-# shell value.
+# This is the reverse look-up dictionary. If you have some bitwise
+# combination of stats.I[RWX](USR|GRP|OTH) values, this map will give
+# you the equivalent Unix shell numeric permssion value.
 stat_to_shell_values={v:k for k,v in shell_to_stat_values.items()}
 
 def stat_mode(mode):
@@ -249,7 +252,8 @@ def shell_mode(mode):
 
 def chmod(path,mode,dir_fd=None,follow_symlinks=True):
   """Just like os.chmod, but mode is the a simple integer whose bits 
-  match those of a Linux shell's chmod command.
+  match those of a Linux shell's chmod command. Be sure to use proper
+  octal notation (0o755) if when calling this function.
 
   [The text below was stolen from some man page, which was likely stolen
   from some other man page, and so on.]
@@ -280,14 +284,22 @@ def chmod(path,mode,dir_fd=None,follow_symlinks=True):
   os.chmod(path,stat_mode(mode),dir_fd=dir_fd,follow_symlinks=follow_simlinks)
 
 def getmod(path,dir_fd=None,follow_symlinks=True):
-  "Return the Unix shell version of fthe given files's mode."
+  """Return the Unix shell mode of the given file (which might be a
+  directory. From os.stat ...
+
+  Get the status of a file or a file descriptor. Perform the equivalent
+  of a stat() system call on the given path. path may be specified as
+  either a string or bytes – directly or indirectly through the PathLike
+  interface – or as an open file descriptor. Return a stat_result
+  object.
+
+  This function normally follows symlinks; to stat a symlink add the
+  argument follow_symlinks=False."""
 
   return shell_mode(os.stat(path,dir_fd=dir_fd,follow_symlinks=follow_symlinks).st_mode)
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -295,29 +307,26 @@ def getmod(path,dir_fd=None,follow_symlinks=True):
 class TargetHandler(ABC):
   """TargetHandler is an abstract base class of classes that know how to
   produce a target file from one or more sources. Tilde- or variable-
-  expansion is performed on the target filespec if appropriate.
+  expansion is performed on the target filespec if called for.
 
-  See the Copy class for examples.
-  """
+  See the Copy class for examples."""
 
   def __init__(self,target):
-    self.target=expand_all(target) # The file (or symlink) to be created.
-    self.perms=None     # Set this with the mode(perms) method.
-    self.source=None    # Set this with the from(source) method.
+    self.target=expand_all(str(target)) # The file (or symlink) to be created.
+    self.perms=None   # Set this with the mode(perms) method.
+    self.deps=None    # Set this with the dependsOn(...) method.
     # If setting both owner and group, you MAY do so with a single call to the
     # owner(user='someone',group='some_group') method.
-    self.user=None      # Set this with the owner(user='someone') method.
-    self.group=None     # Set this with the owner(group='some_group') method.
+    self.user=None    # Set this with the owner(user='some_account') method.
+    self.group=None   # Set this with the owner(group='some_group') method.
 
-  def frum(self,*args):
-    "Give one or more source files for our target."
+  def dependsOn(self,*args):
+    "Configure one or more source files for our target."
     
-    if len(args)>1:
-      self.source=args
-    elif len(args)==1:
-      self.source=args[0]
+    if args:
+      self.deps=args
     else:
-      self.source=None
+      self.deps=None
 
   def owner(self,user=None,group=None):
     "Set the desired owner and/or group of the target."
@@ -334,14 +343,14 @@ class TargetHandler(ABC):
 
   @abstractmethod
   def __call__(self):
-    """Pull the trigger by calling this Copy instance directly. This
-    method MUST be implemented in a subclass."""
+    """Build this target from its dependencies. This method MUST be
+    implemented in a subclass."""
 
     pass
 
 class Folder(TargetHandler):
   """A Folder instance will create a given directory if doesn't already
-  exist, createding any missing intermediate directories along the way,
+  exist, createting any missing intermediate directories along the way,
   or it will raise an exception if it already exists as something other
   than a directory. (It does follow symlinks.) The default mode of the
   new directory is 0o755.
@@ -372,10 +381,11 @@ class Folder(TargetHandler):
     self.mode=0o755
 
   def __call__(self):
-    "Create the any missing parts of our given directory."
+    "Create any missing parts of our directory."
 
-    if os.path.exists(self.target) and not os.path.isdir(self.target):
-      raise Error("Cannot create directory {self.target!r} because it already exists as something else.")
+    if os.path.exists(self.target)
+      if not os.path.isdir(self.target):
+        raise Error(f"Cannot create directory {self.target!r} because it already exists as something else.")
     else:
       # Oddly, os.mkdirs() uses the umask to set permissions on any intermediate
       # directories it creates. It uses its mode parameter only when creating
@@ -383,8 +393,17 @@ class Folder(TargetHandler):
       orig_umask=os.umask(stat_mode(self.mode^0o777))
       os.mkdirs(self.target,mode=stat_mode(self.mode))
       os.umask(orig_umask)
+      if opt.verb & V.OPS:
+        log.info(f"mkdir {self.target}")
 
     return self
+
+  def __str__(self):
+    """Return the name of the directory this Folder instance creates,
+    whether it's already done so, or wether it's even possible to create
+    that directory."""
+
+    return self.target
 
 class Copy(TargetHandler):
   """Instances of Copy know how to copy a source file to a destination.
@@ -392,20 +411,20 @@ class Copy(TargetHandler):
   create a symlink instead of copying the source to the target.
 
   Instances of Copy must be given exactly one source file (using the
-  frum() method, misspelled because "from" is a keyword).
+  dependsOn() method).
 
   Example: Copy file named by src to file named by targ.
 
-    Copy(targ).frum(src)()
+    Copy(targ).dependsOn(src)()
 
-  Example: Copy src to targ, setting the mode to 750 and user and group
-  ownership to root and wheel, respectively.
+  Example: Copy src to targ, setting the mode to 750 and user and
+  group ownership to root and wheel, respectively.
 
-    Copy(targ).frum(src).mode(0o750).owner(user='root',group='wheel')()
+    Copy(targ).dependsOn(src).mode(0o750).owner(user='root',group='wheel')()
 
-  Example: Create a symlink for src at targ.
+  Example: Create a symlink to src at targ.
 
-    Copy(targ).frum(src).as_symlink()()
+    Copy(targ).dependsOn(src).as_symlink()()
   """
 
   def __init__(self,target):
@@ -413,7 +432,7 @@ class Copy(TargetHandler):
     self.symlink=False  # Change this with the as_symlink() method.
 
   def as_symlink(self):
-    "We'll symplink target to source rather than copy it."
+    "Configure this target to create a symlink to the its source file."
 
     self.symlink=True
     return self
@@ -422,25 +441,31 @@ class Copy(TargetHandler):
     "Perform the copy operation by calling this Copy instance directly."
 
     # Make sure we have exactly one source file.
-    if not isinstance(self.source,str):
-      raise Error(f"""Class {__class__.__name__} MUST have exactly one source file (not {self.source!r}).""")
+    if len(self.deps)!=1:
+      raise Error(f"""Class {self.__class__.__name__} MUST have exactly one source file (not {self.deps!r}).""")
+
+    source=self.deps[0]
 
     if os.path.isdir(self.target):
       # Compute our actual target path.
-      self.target=os.path.join(self.target,os.path.basename(self.source))
+      self.target=os.path.join(self.target,os.path.basename(source))
 
     if self.symlink:
-      # Simply create a symlink from our target to our source.
-      if opt.dry_run:
-        log.info(f"Suppressing: {self.source} --> {self.target}")
+      # Simply create a symlink from our source to our target.
+      if opt.dryrun:
+        log.info(f"Dryrun suppresses {source} --> {self.target}")
       else:
-        os.symlink(self.source,self.target)
+        os.symlink(source,self.target)
+        if opt.verb & V.OPS:
+          log.info(f"{source} --> {self.target}")
     else:
       # Copy source to target, keeping as much metadata as possible.
-      if opt.dry_run:
-        log.info(f"Suppressing: {self.source} ==> {self.target}")
+      if opt.dryrun:
+        log.info(f"Dryrun suppresses {source} ==> {self.target}")
       else:
-        self.target=shutil.copy2(self.source,self.target)
+        self.target=shutil.copy2(source,self.target)
+        if opt.verb & V.OPS:
+          log.info(f"{source} ==> {self.target}")
         # Set the user and or group ownership if this instance is so configured.
         if self.user or self.group:
           shutil.chown(self.target,user=self.user,group=self.group)
@@ -459,9 +484,10 @@ class Command(object):
     self.result=None
 
   def __call__(self):
-    "Run the command the caller has set up. Return the exit status."
+    """Run the command the caller has set up. Return this Command
+    instance."""
 
-    if opt.dry_run:
+    if opt.dryrun:
       log.info(f"Suppressing command in dry-run mode: {cmd}")
       self.result=CompletedProcess(shlex.split(cmd),0) # Assume success.
     else:
@@ -475,23 +501,39 @@ class Command(object):
 
     return self
 
-
 if __name__=='__main__':
-  import argparse
+  import argparse,atexit
+
+  # Regardless of how this code terminates, put the PWD back like we found it.
+  atexit.register(os.chdir,os.getcwd())
+  # But for now, use this program's directory as the default.
+  os.chdir(os.path.dirname(sys.argv[0]))
 
   ap=argparse.ArgumentParser(
-    description=f"Install the given files to the given (with --target-dir) or default ({opt.tdir}) directory base."
+    description=f"Install the given files to the given (with --target-dir) or default ({opt.tdir}) base directory."
   )
   ap.add_argument('--target-dir',dest='tdir',action='store',type=expand_all,help="Set the base of the target directory structure. Subdirectories like bin, doc, etc, include, lib, man, and sbin will be created here if and when needed.")
   ap.add_argument('--force',action='store_true',help="Rather than comparing the timestamps of source and target files, copy the former to the latter unconditionally.")
+  ap.add_argument('--dryrun','-n',action='store_true',help="Go through all the motions, but don't do any work.")
+  #ap.add_argument('--debug',action='store_true',help="Log information helpful in analyzing problems.")
   ap.add_argument('--debug-deps',action='store_true',help="Output debug messages about file dependency logic.")
   ap.add_argument('--debug-time',action='store_true',help="Output debug messages about time comparison logic.")
   ap.add_argument('--debuger',action='store_true',help="Start pdb when this program is run. This is NOT for the uninitiated.")
-  ap.add_argument('--test',action='store_true',help="Run internal test, report the results, and terminate.")
+  ap.add_argument('--test',action='store_true',help="Run internal tests, report the results, and terminate.")
+  ap.add_argument('--debugger',action='store_true',help="Engage pdb within this script once we get through the setup. This is not for the uninitiated. See https://docs.python.org/3/library/pdb.html#debugger-commands for a command summary.")
   ap.add_argument('files',metavar='FILE',action='store',nargs='*',help="This is one of more files to be installed.")
   o=ap.parse_args()
+
+  # Update our Options instance (opt) with our command line option values.
+  opt.dryrun=o.dryrun
+  opt.force=o.force
+  opt.tdir=o.tdir
   if o.debug_deps: opt.verb|=V.DEPS
   if o.debug_time: opt.verb|=V.TIME
+
+  if o.debugger:
+    import pdb
+    pdb.set_trace()
 
   if o.test:
     import doctest
@@ -524,3 +566,72 @@ if __name__=='__main__':
       sys.exit(1)
     print(f"Passed all {total} tests!")
     sys.exit(0)
+
+  mac_scripts=[
+    'alex',
+  ]
+  scripts=[
+    'ad-userAccountControl',
+    'ansi',
+    'args',
+    'ascii',
+    'backup-volume',
+    'base',
+    'base16',
+    'base32',
+    'base64',
+    'beyondpod',
+    'certmon',
+    'chronorename',
+    'columnate',
+    'csv',
+    'datecycle',
+    'decode16',
+    'decode32',
+    'decode64',
+    'dump',
+    'encode16',
+    'encode32',
+    'encode64',
+    'factors',
+    'fib',
+    'freq',
+    'gensig',
+    'ind',
+    'ip2host',
+    'json',
+    'json2csv',
+    'keeplast',
+    'ldif',
+    'mark',
+    'mazer',
+    'mix',
+    'names',
+    'not',
+    'now',
+    'numlines',
+    'patch-cal',
+    'pg',
+    'ph',
+    'portname',
+    'pretty-json',
+    'prime',
+    'progress',
+    'pwgen',
+    'pygrep',
+    'randword',
+    're',
+    'reduce',
+    'secdel',
+    'slice',
+    'strftime',
+    'strptime',
+    'timeout',
+    'timeshift',
+    'title-case',
+    'tread',
+    'ts',
+  ]
+
+  for s in scripts:
+    Copy(s).to('bin').dependsOn(s)()
