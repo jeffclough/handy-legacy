@@ -4,6 +4,9 @@ import logging.handlers
 from logging import NOTSET,DEBUG,INFO,WARNING,ERROR,CRITICAL
 from io import IOBase
 
+from debug import DebugChannel
+dc=DebugChannel(label='D')
+
 # Get an ordered list of syslog facility names.
 syslog_facilities=list(logging.handlers.SysLogHandler.facility_names.items())
 syslog_facilities.sort(key=lambda x:x[1])
@@ -17,9 +20,6 @@ except AttributeError:
   # At some point, logging.py's internals changed to this.
   _nameToLevel={k:v for k,v in list(logging._nameToLevel.items())}
 
-#levels=[(a,b) for a,b in list(logging._levelNames.items()) if isinstance(b,int)]
-#levels.sort(key=lambda x:x[1])
-#levels=[x[0].lower() for x in levels if x[0]!='NOTSET']
 levels=sorted([(k,v) for k,v in list(_nameToLevel.items()) if k!=logging.NOTSET],key=lambda x:x[1])
 levels=[k for k,_ in levels]
 
@@ -62,19 +62,16 @@ def log_lines(log,level,data):
         l=str(l)
       log.log(level,l)
 
-def get_logger(**kwargs):
+def get_logger(
+  facility=None,
+  level='warning',
+  name=None,
+  logfmt='%(name)s[%(process)d] %(levelname).1s: %(message)s',
+  datefmt='%Y-%m-%d %H:%M:%S ',
+  child=None
+):
   """Return the default logging object (if facility==None), or set up a
-  new logger in any other case, and return that. Keyword arguments and
-  their default values are:
-
-    facility  None
-    level     'warning'
-    name      basename of process, minus any extension
-    logfmt    '%(name)s %(levelname).1s: %(message)s'
-    datefmt   '%Y-%m-%d %H:%M:%S '
-
-  Note the space at the end of datefmt's default value. None is provided
-  automatically, so end with one if you want one there.
+  new logger in any other case, and return that.
 
   If facility argument is None (the default), the caller is assumed to
   want to use a previously configured logger or just wants to use the
@@ -84,9 +81,8 @@ def get_logger(**kwargs):
   SysLogHandler.LOG_USER), or an instance of logging.Handler or any
   subclass thereof.
 
-  The level argument must be one of the following string values:
-  debug, info, notice, warning, error, or ctitical. ("warning" is the
-  default.)
+  The level argument must be one of the following string values: debug,
+  info, notice, warning, error, or ctitical. ("warning" is the default.)
 
   The name argument defaults to the name of the currently running
   program, but any string will do. Note that providing one says the
@@ -101,102 +97,153 @@ def get_logger(**kwargs):
   this to an empty string if you want to suppress "asctime" in the log
   output. Be sure to end datefmt with a space character (or other
   separator) if you want the to separate the timestamp from the rest of
-  the logged message."""
+  the logged message.
 
-  # Instantiate our keyword arguments as local variables.
-  facility=kwargs.get('facility',None)
-  level=kwargs.get('level','warning')
-  name=kwargs.get('name',os.path.basename(sys.argv[0]).rsplit('.',1)[0])
-  logfmt=kwargs.get('logfmt','%(name)s[%(process)d] %(levelname).1s: %(message)s')
-  datefmt=kwargs.get('datefmt','%Y-%m-%d %H:%M:%S ')
+  Note the space at the end of datefmt's default value. None is provided
+  automatically, so end with one if you want one there.
 
-  if facility==None:
-    # Assume this process has already set up a logger (or just wants to
-    # use the default logger), and return that.
-    log=logging.getLogger()
-    if not log.handlers:
-      # Suppress "No handlers could be found ..." message, in case our
-      # root logger hasn't been set up. NullHandler is a bit bucket.
-      log.addHandler(logging.NullHandler)
-    if name:
-      log.name=name
-    return log
+  The child argument, if given, must be a string and will name the child
+  logger of the main logger (which must already exist). A child logger
+  is will be returned in this case. This argument has meaning only if
+  facility is not given.
+  """
 
-  h=None
-  if isinstance(facility,logging.Handler):
-    # The caller has provided a handler for us.
-    h=facility
-    if isinstance(h,logging.StreamHandler):
-      # Prefix our log format with the date and time.
-      if 'asctime' in logfmt:
-        logfmt='%(asctime)s '+logfmt
-    f=logging.Formatter(logfmt,datefmt=datefmt)
-  else:
-    if isinstance(facility,str):
-      if facility in syslog_facilities:
-        # It looks like we're logging to syslog.
-        facility=logging.handlers.SysLogHandler.facility_names[facility]
-      else:
-        # This string must be a filename, so open it for appending.
-        facility=os.path.expanduser(os.path.expandvars(facility))
-        if os.path.isfile(facility):
-          mode='a'
-        elif not os.path.exists(facility):
-          mode='w'
-        else:
-          raise ValueError('"%s" exists but is not a regular file.'%(facility,))
-        facility=open(facility,mode)
+  dc(f"{facility=}, {level=}, {name=}, {logfmt=}, {datefmt=}, {child=}")
 
-    if isinstance(facility,int):
-      # This is a syslog facility number, or had better be.
-      system=platform.system()
-      if system=='Darwin':
-        h=logging.handlers.SysLogHandler(address='/var/run/syslog',facility=facility)
-      elif system=='Linux':
-        h=logging.handlers.SysLogHandler(address='/dev/log',facility=facility)
-      else:
-        h=logging.handlers.SysLogHandler(
-          address=('localhost',logging.handlers.SYSLOG_UDP_PORT),
-          facility=facility
-        )
-      f=logging.Formatter(logfmt)
-    elif isinstance(facility,IOBase):
-      # This is a stream, so set up formatting accordingly.
-      h=logging.StreamHandler(facility)
-      f=logging.Formatter('%(asctime)s'+logfmt,datefmt=datefmt)
+  # If no name is provided, use the name of the current program (minus
+  # any file extension).
+  if not name:
+    name=os.path.basename(sys.argv[0]).rsplit('.',1)[0]
+
+  if facility is None:
+    if child:
+      # Initialize this log as a child of the main logger.
+      dc(f"Setting up child logger {child!r}.")
+      log=logging.getLogger().getChild(child)
     else:
-      raise ValueError('bad log facility value: %r'%(facility,))
+      # Assume this process has already set up a logger (or just wants to
+      # use the default logger), and return that.
+      dc(f"No facility, so getting root logger.")
+      log=logging.getLogger()
+      if not log.handlers:
+        # Suppress "No handlers could be found ..." message, in case our
+        # root logger hasn't been set up. NullHandler is a bit bucket.
+        log.addHandler(logging.NullHandler)
+      if name:
+        log.name=name
+      dc(f"Returning with logger {log!r}")
+      return log
+
+  if not child:
+    # Child loggers use the parent logger's facility, handler, and
+    # formatting.
+    h=None
+    if isinstance(facility,logging.Handler):
+      dc(f"facility is logging.Handler {facility!r}")
+      # The caller has provided a handler for us.
+      h=facility
+      if isinstance(h,logging.StreamHandler):
+        # Prefix our log format with the date and time.
+        if 'asctime' in logfmt:
+          logfmt='%(asctime)s '+logfmt
+      f=logging.Formatter(logfmt,datefmt=datefmt)
+    else:
+      if isinstance(facility,str):
+        dc(f"facility is string {facility!r}")
+        if facility in syslog_facilities:
+          # It looks like we're logging to syslog.
+          facility=logging.handlers.SysLogHandler.facility_names[facility]
+        else:
+          # This string must be a filename, so open it for appending.
+          dc(f"Treating {facility=} as a filename.")
+          facility=os.path.expanduser(os.path.expandvars(facility))
+          dc(f"Expanded filename is {facility!r}.")
+          if os.path.isfile(facility):
+            mode='a'
+          elif not os.path.exists(facility):
+            mode='w'
+          else:
+            raise ValueError('"%s" exists but is not a regular file.'%(facility,))
+          facility=open(facility,mode)
+
+      if isinstance(facility,int):
+        dc(f"facility is integer {facility!r}")
+        # This is a syslog facility number, or had better be.
+        system=platform.system()
+        if system=='Darwin':
+          h=logging.handlers.SysLogHandler(address='/var/run/syslog',facility=facility)
+        elif system=='Linux':
+          h=logging.handlers.SysLogHandler(address='/dev/log',facility=facility)
+        else:
+          dc(f"Createing SysLogHandler for this logger.")
+          h=logging.handlers.SysLogHandler(
+            address=('localhost',logging.handlers.SYSLOG_UDP_PORT),
+            facility=facility
+          )
+        dc(f"Createing logging.Formatter from {logfmt=}")
+        f=logging.Formatter(logfmt)
+      elif isinstance(facility,IOBase):
+        dc(f"facility is {facility!r}")
+        # This is a stream, so add date and time to the start of our log format.
+        h=logging.StreamHandler(facility)
+        logfmt='%(asctime)s'+logfmt
+        dc(f"Createing logging.Formatter from {logfmt=}, {datefmt=}")
+        f=logging.Formatter(logfmt,datefmt=datefmt)
+      else:
+        raise ValueError('bad log facility value: %r'%(facility,))
 
   if isinstance(level,str):
     # If level is a string, make sure it is upper case.
     level=level.upper()
+    dc(f"level is string {level!r}")
   elif isinstance(level,int) and level in _nameToLevel:
+    dc(f"level is int {level!r}")
     level=_nameToLevel[level]
+    dc(f"converted level is int {level!r}")
   else:
     raise ValueError('bad log level value: %r'%(level,))
 
   # Now create the new logger, and return it to the caller.
-  h.setFormatter(f)
-  log=logging.getLogger(name)
-  log.addHandler(h)
+  if not child:
+    dc(f"Applying formatter {f!r} to handler {h!r}")
+    h.setFormatter(f)
+    log=logging.getLogger(name)
+    dc(f"Adding handler to logger")
+    log.addHandler(h)
+  l=_nameToLevel[level]
+  dc(f"{level=}, {_nameToLevel[level]=}")
   log.setLevel(_nameToLevel[level])
-  #log.name=name
+  dc(f"Returning with logger {log!r}")
   return log
 
 
 class LogStream(object):
-  """If you need to write to some log facility as if it were a stream,
+  """If you need to write to some logger as if it were a stream,
   instantiate LogStream using the parameters you'd use with
-  get_logger(). If you don't supply a "level" argument, it will default
-  to "debug"."""
+  get_logger(). You can also """
 
-  def __init__(self,**kwargs):
-    if 'level' not in kwargs:
-      kwargs['level']='debug'
-    self.level=kwargs['level'].upper()
-    self.log=kwargs.get('logger')
-    if not self.log:
-      self.log=get_logger(**kwargs)
+  def __init__(self,
+    faciliity=None,
+    level='warning',
+    name=None,
+    logfmt='%(name)s[%(process)d] %(levelname).1s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S ',
+    child=None,
+    logger=None
+  ):
+    """These arguments are teh same as for get_logger, except for the
+    logger argument. If you already have a logger set up and simply want
+    to be able to write to it in a stream-like way, pass that logger to
+    this initializer as logger's value."""
+
+    if logger:
+      self.level=logging.getLevelName(logger.level)
+      dc(f"{logger.handlers}")
+      dc(f"{self.level=}")
+      self.log=logger
+    else:
+      self.level=level
+      self.log=getlogger(facility=facility,level=level,name=name,logfmt=logfmt,datefmt=datefmt,child=child)
 
   def write(self,s):
     self.log.log(_nameToLevel[self.level],s)
@@ -212,23 +259,29 @@ class LogStream(object):
 
 
 if __name__=='__main__':
-  import optparse
+  import argparse
 
-  op=optparse.OptionParser('usage: %prog [options] message ...')
+  ap=argparse.ArgumentParser(description="Running this command test's the loggy.py module. It writes a single log message according to the options given.")
 
-  op.add_option('--facility',dest='facility',metavar='FACILITY',action='store',default='stdout',help="Log to the given syslog facility (any of: %s). (default: %%default)"%', '.join(syslog_facilities))
-  op.add_option('--file',dest='facility',metavar='FILE',action='store',help="Log message to the given file. The special filenames stdout and stderr (or any of the facilities listed above) may also be given. The --file option is just a synonym for --facility. They're exactly the same.")
-  op.add_option('--level',dest='level',action='store',default='info',help="Log at the given level, any of: %s (default=%%default)"%', '.join(levels))
+  ap.add_argument('--debug',action='store_true',help="Turn on debug output (for use during development of the loggy module).")
+  ap.add_argument('--facility',action='store',default='stdout',help="Log to the given syslog facility (any of: %s). (default: %%(default)s)"%', '.join(syslog_facilities))
+  ap.add_argument('--file',dest='facility',metavar='FILE',action='store',help="Log message to the given file. The special filenames stdout and stderr (or any of the facilities listed above) may also be given. The --file option is just a synonym for --facility. They're exactly the same.")
+  ap.add_argument('--level',action='store',default='info',help="Log at the given level, any of: %s (default=%%(default)s)"%', '.join(levels))
+  ap.add_argument('--stream',action='store_true',help="Write out log message using our LogStream rather than a simple logger instance.")
+  ap.add_argument('args',metavar='message',action='store',nargs='+',help="The message to be logged. ")
 
-  opt,args=op.parse_args()
-  if opt.facility=='stdout':   opt.facility=sys.stdout
-  elif opt.facility=='stderr': opt.facility=sys.stderr
+  opt=ap.parse_args()
+  dc.enable(opt.debug)
+  if opt.facility=='stdout':
+    opt.facility=sys.stdout
+  elif opt.facility=='stderr':
+    opt.facility=sys.stderr
 
-  if False:
-    # Write log data in the usual way.
-    log=get_logger(facility=opt.facility,level=opt.level)
-    log.log(_nameToLevel[opt.level.upper()],' '.join(args))
-  else:
+  log=get_logger(facility=opt.facility,level=opt.level)
+  if opt.stream:
     # Write log data as if to a proper stream.
-    f=LogStream(facility=opt.facility,level=opt.level)
-    f.write(' '.join(args))
+    f=LogStream(logger=log)
+    f.write(' '.join(opt.args))
+  else:
+    # Write log data in the usual way.
+    log.log(_nameToLevel[opt.level.upper()],' '.join(opt.args))
