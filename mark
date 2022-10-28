@@ -417,7 +417,11 @@ def get_input_lines(f=sys.stdin):
         continue
       if not opt.keep or opt.keep.search(s):
         yield s
-      s=f.readline()
+      try:
+        s=f.readline()
+      except UnicodeDecodeError as e:
+        print(f"UnicodeDecodeError: {str(e)}",file=sys.stderr)
+        continue
   except KeyboardInterrupt:
     sys.exit(0)
 
