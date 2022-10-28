@@ -407,7 +407,7 @@ def get_input_lines(f=sys.stdin):
   """This generator function lets us read stdin with a for loop while
   keeping the ability to call sys.stdin.readline(), which is important
   for buffer control reasons. This is also a sensible place to implement
-  our --discard and --keep functionality and to handly some exceptions."""
+  our --discard and --keep functionality and to handle some exceptions."""
 
   while True:
     try:
