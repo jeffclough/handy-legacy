@@ -404,26 +404,24 @@ class DelimitedDataReader(object):
     return flist
 
 def get_input_lines(f=sys.stdin):
-  '''This generator function lets read stdin with a for loop while
+  """This generator function lets us read stdin with a for loop while
   keeping the ability to call sys.stdin.readline(), which is important
-  for buffer control reasons. This is also a sensible place to
-  implement our --discard and --keep functionality.'''
+  for buffer control reasons. This is also a sensible place to implement
+  our --discard and --keep functionality and to handly some exceptions."""
 
-  try:
-    s=f.readline()
-    while s:
+  while True:
+    try:
+      s=f.readline()
+      if not s:
+        break
       if opt.discard and opt.discard.search(s):
-        s=f.readline()
         continue
       if not opt.keep or opt.keep.search(s):
         yield s
-      try:
-        s=f.readline()
-      except UnicodeDecodeError as e:
-        print(f"UnicodeDecodeError: {str(e)}",file=sys.stderr)
-        continue
-  except KeyboardInterrupt:
-    sys.exit(0)
+    except UnicodeDecodeError as e:
+      print(f"UnicodeDecodeError: {str(e)}. Discarding current buffer. Data has been lost!",file=sys.stderr)
+    except KeyboardInterrupt:
+      sys.exit(0)
 
 # Convert opt.palette into a list of ansi.Color objects.
 opt.palette=ansi.Palette(opt.palette)
