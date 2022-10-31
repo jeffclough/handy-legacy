@@ -30,8 +30,11 @@
 # Use this command to create all possible symlinks to the alex script:
 # say -v '?'|sed -E 's/ +[a-z]{2}[_-].*//'|tr 'A-Z' 'a-z'|grep -v alex|while read v; do ln -s alex "$v"; done
 
-# Use this command to sample all voices the say command will accept:
+# Use this command to sample all english voices using the same text.
 # say -v '?' | sed -E 's/ +[a-z]{2}[_-].*//' | while read v; do echo $v; say -v "$v" "Hello. My name is $v."; done
+
+# Or this will speak each voice's own greating text:
+# say -v '?' | grep en_ | sed -E 's/ +[a-z]{2}[_-].* #//' | while read v m; do echo "$v"; say -v "$v" "$m"; done
 
 # "-r 200" sets the speach rate at 200 words per minute.
 # Not all voices respect the -r option.
@@ -41,6 +44,7 @@
 #       in all of your persuits while chasing your dream
 OPTIONS="-r 200"
 
+# ... because "lc" is only two characters.
 lc() {
   tr '[:upper:]' '[:lower:]'
 }
@@ -67,6 +71,10 @@ if ! supportedVoice "$voice"; then
 fi
 
 if [ $# -gt 0 ]; then
+  if ! which lame >/dev/null 2>&1; then
+    echo "You must install \"lame\" in order to create an MP3 file." >/dev/stderr
+    exit 1
+  fi
   # Get our output filename, and make sure it ends with ".mp3".
   outfile="$1"
   [[ "$(echo "$outfile"|lc)" =~ '.mp3' ]] || outfile="$outfile.mp3"
