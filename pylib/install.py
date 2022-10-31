@@ -404,11 +404,12 @@ class Folder(TargetHandler):
       # Oddly, os.mkdirs() uses the umask to set permissions on any intermediate
       # directories it creates. It uses its mode parameter only when creating
       # the leaf directory.
-      orig_umask=os.umask(stat_mode(self.mode^0o777))
-      os.mkdirs(self.target,mode=stat_mode(self.mode))
-      os.umask(orig_umask)
       if options.verb & V.OPS:
         print(f"mkdir {self.target}")
+      if not options.dryrun:
+        orig_umask=os.umask(stat_mode(self.mode^0o777))
+        os.makedirs(self.target,mode=stat_mode(self.mode))
+        os.umask(orig_umask)
 
     return self
 
