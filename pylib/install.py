@@ -13,55 +13,18 @@ executables.
 #  'Error',
 #  'TargetHandler',
 #  'V',
-#  'opt',
+#  'options',
 #  'dir_mode',
 #  'DEVNULL',
 #  'PIPE',
 #  'STDOUT',
 #]
 
-import os,shlex,shutil,stat,sys,time
+import os,re,shlex,shutil,stat,sys,time
 from abc import ABC,abstractmethod
-from enum import Enum,Flag,auto
+from enum import Flag,auto
 from functools import reduce
 from subprocess import run,DEVNULL,PIPE,STDOUT,CompletedProcess
-
- # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-import logging
-from logging.handlers import SysLogHandler,TimedRotatingFileHandler
-
-# This code uses the (possibly default) root logger of the application that's
-# using it. If the root logger has no handlers (its default state) a
-# TimedRotatingFileHandler is assigned to it.
-log=logging.getLogger(os.path.basename(sys.argv[0]).rsplit('.',1)[0])
-if log.handlers: # I know. I'm being bad.
-  # Our logger will be a child of the already-configured main logger.
-  log=log.getChild('install')
-else:
-  # We need to set up our own logging.
-  if False:
-    # Log to ~/.buzzapi.log.
-    h=TimedRotatingFileHandler(
-      os.path.expanduser('~/.buzzapi.log'),
-      when='W6',
-      interval=1,
-      backupCount=6
-    )
-    h.setFormatter(
-      logging.Formatter(
-        "%(asctime)s %(name)s %(levelname).1s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-      )
-    )
-  else:
-    # Log to stdout.
-    h=logging.StreamHandler(sys.stdout)
-    h.setFormatter(logging.Formatter("%(levelname).1s: %(message)s"))
-  log.addHandler(h)
-  del h # Don't leave crumbs.
-  log.setLevel(logging.INFO)
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -71,23 +34,53 @@ else:
 # combination in an instance of V.
 class V(Flag):
   QUIET=0       # A value that turns all the others off.
-  OPS=auto()    # Log file operations we perform.
-  DEPS=auto()   # Log dependency logic.
-  TIME=auto()   # Log time comparison logic.
-  DEBUG=auto()  # Log debug statements.
+  OPS=auto()    # Print file operations we perform.
+  DEPS=auto()   # Print dependency logic.
+  TIME=auto()   # Print time comparison logic.
+  DEBUG=auto()  # Print debug statements.
 
 class Options(object):
   def __init__(self):
     self.dryrun=False
     self.force=False
-    self.tdir=os.path.expandvars(os.path.expanduser('~/my'))
-    self.verb=V.QUIET
+    self.tdir='~/my'
+    self.verb=V.OPS
 
   def __str__(self):
     return f"dryrun={self.dryrun}, force={self.force}, tdir={self.tdir!r} verb={self.verb}"
 
-opt=Options()
-log.debug(f"Defaults: {opt}")
+  def verbFlags(self):
+    return str(self.verb)[2:].lower().replace('|','+')
+
+def parse_verbosity(flags):
+  """Given a verbosity flags string value, return the corresponding
+  options.V value."""
+
+  verb=V.QUIET
+  for f in re.findall(r"[-+]?\w+",flags):
+    # Figure out what this flag is and what we're doing with it.
+    if f[0] in '-+':
+      op=f[0]
+      f=f[1:]
+    else:
+      op='+'
+    if f=='quiet': v=V.QUIET
+    elif f=='ops': v=V.OPS
+    elif f=='deps': v=V.DEPS
+    elif f=='time': v=V.TIME
+    elif f=='debug': v=V.DEBUG
+    else:
+      raise ValueError(f"Unrecognized flag {f!r} in {flags!r}.")
+    # Either add or subtract the flag v in verb's value.
+    if op=='+':
+      verb|=v
+    else:
+      verb&=~v
+  # Return the caller's verbosity flags as a V value.
+  return verb
+
+options=Options()
+#print(f"options: {str(options)}")
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -104,8 +97,8 @@ def expand_all(filename):
   "Return the filename with ~ and environment variables expanded."
 
   p=os.path.expandvars(os.path.expanduser(filename))
-  if opt.verb & V.DEBUG:
-    log.info(f"expand_all({filename!r}) -> {p!r}")
+  if options.verb & V.DEBUG:
+    print(f"expand_all({filename!r}) -> {p!r}")
   return p
 
 def filetime(filename,default=0):
@@ -115,8 +108,8 @@ def filetime(filename,default=0):
 
   try:
     default=os.path.getmtime(filename)
-    if opt.verb & V.TIME:
-      log.info(f"  {filename}\tt={default:0.6f} ({time.strftime('%Y-%m-%d %H:%M:%S.%f',time.localtime(default))})")
+    if options.verb & V.TIME:
+      print(f"  {filename}\tt={default:0.6f} ({time.strftime('%Y-%m-%d %H:%M:%S.%f',time.localtime(default))})")
   except:
     pass
   return default
@@ -134,15 +127,17 @@ def is_newer(src,dst,bias=-0.001):
   defaults to -0.001 seconds (-1 miliseconds) to avoid needless file
   copies on some operating systems. (I'm looking at you, macOS.)"""
 
+  src=os.fspath(src)
+  dst=os.fspath(dst)
   ts=filetime(src,1)+bias
   if isinstance(dst,tuple):
     dst,td=dst
   else:
     td=filetime(dst)
-  if opt.verb & V.TIME:
+  if options.verb & V.TIME:
     rel='newer' if ts>td else 'older'
-    log.info(f"  {src} is {rel} than {dst}")
-  return opt.force or (ts>td)
+    print(f"  {src} is {rel} than {dst}")
+  return options.force or (ts>td)
 
 def out_of_date(target,*deps):
   """Return True if any of the other filename arguments identifies a
@@ -150,13 +145,13 @@ def out_of_date(target,*deps):
   can be either filenames or lists or tuples of fileanmes."""
 
   if not os.path.exists(target):
-    if opt.verb & V.DEPS:
-      log.info(f"  {target} is out of date because it's missing.")
+    if options.verb & V.DEPS:
+      print(f"  {target} is out of date because it's missing.")
     return True
 
-  if opt.force:
-    if opt.verb & V.DEPS:
-      log.info(f"  {target} is being forced out of date.")
+  if options.force:
+    if options.verb & V.DEPS:
+      print(f"  {target} is being forced out of date.")
     return True
 
   t=filetime(target)
@@ -168,12 +163,12 @@ def out_of_date(target,*deps):
     elif not os.path.exists(d):
       # Return True for a non-existant dependency to provoke an error
       # when that file isn't found.
-      if opt.verb & V_DEPS:
-        log.info(f"  {target} depends on {d}, which is missing.")
+      if options.verb & V_DEPS:
+        print(f"  {target} depends on {d}, which is missing.")
       return True
     elif is_newer(d,(target,t)):
-      if opt.verb & V_DEPS:
-        log.info(f"  {target} depends on {d}, which is newer.")
+      if options.verb & V_DEPS:
+        print(f"  {target} depends on {d}, which is newer.")
       return True
   return False
 
@@ -312,13 +307,23 @@ class TargetHandler(ABC):
   See the Copy class for examples."""
 
   def __init__(self,target):
-    self.target=expand_all(str(target)) # The file (or symlink) to be created.
+    self.target=os.fspath(target) # The file (or symlink) to be created.
     self.perms=None   # Set this with the mode(perms) method.
     self.deps=None    # Set this with the dependsOn(...) method.
     # If setting both owner and group, you MAY do so with a single call to the
     # owner(user='someone',group='some_group') method.
     self.user=None    # Set this with the owner(user='some_account') method.
     self.group=None   # Set this with the owner(group='some_group') method.
+
+  def __fspath__(self):
+    "Return the string version of this target."
+
+    return self.target
+
+  def __str__(self):
+    "Return the string version of this target."
+
+    return self.target
 
   def dependsOn(self,*args):
     "Configure one or more source files for our target."
@@ -327,6 +332,13 @@ class TargetHandler(ABC):
       self.deps=args
     else:
       self.deps=None
+    return self
+
+  def expand(self):
+    "Expand any ~ or $VAR substrings in this target's filename."
+
+    self.target=expand_all(self.target)
+    return self
 
   def owner(self,user=None,group=None):
     "Set the desired owner and/or group of the target."
@@ -335,11 +347,13 @@ class TargetHandler(ABC):
       self.user=user if user else None
     if group:
       self.group=group if group else None
+    return self
 
   def mode(self,perms):
     "Set the permissions of our target file."
 
     self.perms=perms
+    return self
 
   @abstractmethod
   def __call__(self):
@@ -383,7 +397,7 @@ class Folder(TargetHandler):
   def __call__(self):
     "Create any missing parts of our directory."
 
-    if os.path.exists(self.target)
+    if os.path.exists(self.target):
       if not os.path.isdir(self.target):
         raise Error(f"Cannot create directory {self.target!r} because it already exists as something else.")
     else:
@@ -393,8 +407,8 @@ class Folder(TargetHandler):
       orig_umask=os.umask(stat_mode(self.mode^0o777))
       os.mkdirs(self.target,mode=stat_mode(self.mode))
       os.umask(orig_umask)
-      if opt.verb & V.OPS:
-        log.info(f"mkdir {self.target}")
+      if options.verb & V.OPS:
+        print(f"mkdir {self.target}")
 
     return self
 
@@ -444,31 +458,34 @@ class Copy(TargetHandler):
     if len(self.deps)!=1:
       raise Error(f"""Class {self.__class__.__name__} MUST have exactly one source file (not {self.deps!r}).""")
 
+    # Get the source file.
     source=self.deps[0]
+    if isinstance(source,TargetHandler):
+      # Make sure this target is ready to be coppied or linked to.
+      source()
 
     if os.path.isdir(self.target):
       # Compute our actual target path.
       self.target=os.path.join(self.target,os.path.basename(source))
 
     if self.symlink:
-      # Simply create a symlink from our source to our target.
-      if opt.dryrun:
-        log.info(f"Dryrun suppresses {source} --> {self.target}")
-      else:
-        os.symlink(source,self.target)
-        if opt.verb & V.OPS:
-          log.info(f"{source} --> {self.target}")
+      if os.path.is_symlink(self.target):
+        if os.path.abspath(source)!=os.path.realpath(self.target):
+          if not options.dryrun:
+            os.symlink(source,self.target)
+            if options.verb & V.OPS:
+              print(f"{source} <-- {self.target}")
     else:
       # Copy source to target, keeping as much metadata as possible.
-      if opt.dryrun:
-        log.info(f"Dryrun suppresses {source} ==> {self.target}")
-      else:
-        self.target=shutil.copy2(source,self.target)
-        if opt.verb & V.OPS:
-          log.info(f"{source} ==> {self.target}")
-        # Set the user and or group ownership if this instance is so configured.
-        if self.user or self.group:
-          shutil.chown(self.target,user=self.user,group=self.group)
+      if is_newer(source,self.target):
+        if options.verb & V.OPS:
+          print(f"{source} ==> {self.target}")
+        if not options.dryrun:
+          # Copy the file.
+          self.target=shutil.copy2(source,self.target,follow_symlinks=False)
+          # Set the user and or group ownership if this instance is so configured.
+          if self.user or self.group:
+            shutil.chown(self.target,user=self.user,group=self.group)
 
     return self
 
@@ -487,22 +504,24 @@ class Command(object):
     """Run the command the caller has set up. Return this Command
     instance."""
 
-    if opt.dryrun:
-      log.info(f"Suppressing command in dry-run mode: {cmd}")
-      self.result=CompletedProcess(shlex.split(cmd),0) # Assume success.
+    if options.verb & V.OPS:
+      print(cmd)
+    if options.dryrun:
+      # Put together a "fake" CompletedProcess result with a return code of 0
+      # and empty stdout and stderr values.
+      self.result=CompletedProcess(shlex.split(cmd),0,"","")
     else:
+      # Run our command, capturing it stdout and stderr output as string values.
       r=self.result=run(self.cmd,text=True,stdin=self.stdin,stdout=self.stdout,stderr=self.stderr)
+    if r.returncode or options.verb & V.OPS:
+      if r.stdout: print(r.stdout)
+      if r.stderr: print(r.stderr,file=sys.stderr)
       if r.returncode:
-        if r.stdout:
-          log.info(r.stdout.read())
-        if r.stderr:
-          log.error(r.stderr.read())
-        raise Error(f"Non-zero return code ({r.returncode}) from \"{self.cmd}\".")
-
+        raise Error(f"Non-zero return code ({r.returncode}): {self.cmd}")
     return self
 
 if __name__=='__main__':
-  import argparse,atexit
+  import argparse,atexit,platform
 
   # Regardless of how this code terminates, put the PWD back like we found it.
   atexit.register(os.chdir,os.getcwd())
@@ -510,32 +529,38 @@ if __name__=='__main__':
   os.chdir(os.path.dirname(sys.argv[0]))
 
   ap=argparse.ArgumentParser(
-    description=f"Install the given files to the given (with --target-dir) or default ({opt.tdir}) base directory."
+    #formatter_class=argparse.RawDescriptionHelpFormatter,
+    description=f"""\
+Install the "handy" scripts to the given (with --dir) or default ({options.tdir}) base directory.
+ 
+The --verbosity (-v) flags are any of quiet, ops, deps, time, and debug. The "quiet" flags turns all the others off. Flags can be combined joined with + or - characters to add or remove those flags. The first flag listed is assumed to be added unless preceded by -. There are no spaces in --verbosity's value.
+"""
   )
-  ap.add_argument('--target-dir',dest='tdir',action='store',type=expand_all,help="Set the base of the target directory structure. Subdirectories like bin, doc, etc, include, lib, man, and sbin will be created here if and when needed.")
+  ap.add_argument('--dir',dest='tdir',action='store',type=expand_all,default=options.tdir,help="Set the base of the target directory structure. Subdirectories like bin, doc, etc, include, lib, man, and sbin will be created here if and when needed. (default: %(default)r)")
   ap.add_argument('--force',action='store_true',help="Rather than comparing the timestamps of source and target files, copy the former to the latter unconditionally.")
   ap.add_argument('--dryrun','-n',action='store_true',help="Go through all the motions, but don't do any work.")
-  #ap.add_argument('--debug',action='store_true',help="Log information helpful in analyzing problems.")
-  ap.add_argument('--debug-deps',action='store_true',help="Output debug messages about file dependency logic.")
-  ap.add_argument('--debug-time',action='store_true',help="Output debug messages about time comparison logic.")
-  ap.add_argument('--debuger',action='store_true',help="Start pdb when this program is run. This is NOT for the uninitiated.")
   ap.add_argument('--test',action='store_true',help="Run internal tests, report the results, and terminate.")
+  ap.add_argument('-v','--verbosity',action='store',default=options.verbFlags(),help="""Verbosity flags. See description text above for details. (default: %(default)r)""")
   ap.add_argument('--debugger',action='store_true',help="Engage pdb within this script once we get through the setup. This is not for the uninitiated. See https://docs.python.org/3/library/pdb.html#debugger-commands for a command summary.")
   ap.add_argument('files',metavar='FILE',action='store',nargs='*',help="This is one of more files to be installed.")
-  o=ap.parse_args()
+  opt=ap.parse_args()
 
-  # Update our Options instance (opt) with our command line option values.
-  opt.dryrun=o.dryrun
-  opt.force=o.force
-  opt.tdir=o.tdir
-  if o.debug_deps: opt.verb|=V.DEPS
-  if o.debug_time: opt.verb|=V.TIME
+  # Parse our verbosity flags first.
+  options.verb=parse_verbosity(opt.verbosity)
 
-  if o.debugger:
+  # Update our Options instance (options) with our command line option values.
+  options.dryrun=opt.dryrun
+  options.force=opt.force
+  options.tdir=opt.tdir
+
+  if options.verb & V.DEBUG:
+    print(f"options: {options}")
+
+  if opt.debugger:
     import pdb
     pdb.set_trace()
 
-  if o.test:
+  if opt.test:
     import doctest
 
     def test_mode_conversion():
@@ -633,5 +658,17 @@ if __name__=='__main__':
     'ts',
   ]
 
-  for s in scripts:
-    Copy(s).to('bin').dependsOn(s)()
+  Folder(options.tdir).expand()
+  bin_dir=Folder(os.path.join(options.tdir,'bin'))()
+  Folder(os.path.join(options.tdir,'etc'))()
+  Folder(os.path.join(options.tdir,'include'))()
+  Folder(os.path.join(options.tdir,'lib'))()
+  Folder(os.path.join(options.tdir,'lib','python'))()
+
+  Copy(os.path.join(bin_dir,'mark')).dependsOn('mark')()
+
+  #if platform.system()=="Darwin":
+  #  for s in mac_script:
+  #    Copy(
+  #for s in scripts:
+  #  Copy(s).to('bin').dependsOn(s)()

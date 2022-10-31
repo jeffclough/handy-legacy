@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Generic Boiler-plate code for using the make module.
+
+# Prefer the python modules in our pylib directory.
+import atexit,os,sys
+sys.path.insert(1,os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])),'pylib'))
+sys.path.insert(1,os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])),'lib','python'))
+from install import *
+
+# Change the current directory to the directory where this command lives, but
+# restore the original CWD when this command exits.
+atexit.register(os.chdir,os.getcwd())
+os.chdir(os.path.dirname(sys.argv[0]))
+
+# Provide a default installation prefix directory.
+if make.opt.prefix==None:
+  make.opt.prefix='~/my'
+make.opt.prefix=make.expand_all(make.opt.prefix)
+
+# End of Boiler-plate code.
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+make.COPTS=[]
+if make.OS_NAME=='Darwin':
+  # Suppress complaints about missing braces in if...else statements.
+  make.COPTS.append('-Wno-dangling-else')
+
+CPROGS=( # Compile these targets from C source files.
+  'datecycle',
+# 'mix',
+  'numlines',
+  'portname',
+  'randword',
+  'secdel',
+  'timeshift',
+)
+
+SCRIPTS=( # These targets are simply copied during installation.
+  'ad-userAccountControl',
+  'alex',
+  'ansi',
+  'ascii',
+  'args',
+  'backup-volume',
+  'base',
+  'certmon',
+  'chronorename',
+  'columnate',
+  'csv',
+  'cutcsv',
+  'dump',
+  'factors',
+  'freq',
+  'gensig/gensig',
+  'ind',
+  'ip2host',
+  'json',
+  'json2csv',
+  'keeplast',
+  'ldif',
+  'mazer',
+  'mark',
+  'mix',
+  'names',
+  'not',
+  'now',
+  'pa',
+  'patch-cal',
+  'ph',
+  'pretty-json',
+  'prime',
+  'progress',
+  'pwgen',
+  'pygrep',
+  'qr',
+  'reduce',
+  'slice',
+  'strftime',
+  'strptime',
+  'timeout',
+  'title-case',
+  'tread',
+  'ts',
+)
+
+# Add all the base*, decode*, and encode* variants to SCRIPTS.
+SCRIPTS=tuple(
+  [x for x in SCRIPTS]
+  +['base%d'%b for b in (16,32,64)]
+  +['decode%d'%b for b in (16,32,64)]
+  +['encode%d'%b for b in (16,32,64)]
+)
+
+DATA=( # Copy these data files to make.opt.prefix/etc.
+  'gensig/quotes',
+  'gensig/*.sig',
+)
+
+# Both home-grown and modules and PyPi packages are installed here.
+PYTHON_LIB_DIR=make.expand_all('$HOME/my/lib/python')
+
+# Define some targets of different types and their dependencies.
+make.CExecutable('datecycle','datecycle.c',objs='ls_class.o')
+make.CObjectFile('ls_class.o','ls_class.c','ls_class.h')
+make.CObjectFile('ls_class_test','ls_class.c','ls_class.h',opts='-DTEST')
+#make.CExecutable('mix','mix.c')
+make.CExecutable('numlines','numlines.c')
+make.CExecutable('portname','portname.c')
+make.CExecutable('randword','randword.c')
+make.CExecutable('secdel','secdel.c')
+make.CExecutable('timeshift','timeshift.c')
+make.DependentTarget('cutcsv','xlrd')
+make.PipInstall('xlrd',PYTHON_LIB_DIR,minver='2.6')
+
+# We need one installer for each target directory.
+make.Installer('install',make.path(make.opt.prefix,'bin'),CPROGS,SCRIPTS)
+make.Installer('install',make.path(make.opt.prefix,'etc'),DATA)
+make.Installer(
+  'install',
+  make.path(make.opt.prefix,'lib','python'),
+  make.path('pylib','*.py'),
+)
+
+for target in make.args:
+  if target=='clean':
+    make.clean()
+  else:
+    make.make(target)
+
+make.symlink(make.path(make.SRCDIR,'.RE.rc'),'~/.RE.rc')
+make.symlink('../../bin/strptime',make.path(make.opt.prefix,'lib','python','strptime.py'))
+make.symlink('../../bin/progress',make.path(make.opt.prefix,'lib','python','progress.py'))
+make.symlink('../../bin/ph',make.path(make.opt.prefix,'lib','python','ccso.py'))
