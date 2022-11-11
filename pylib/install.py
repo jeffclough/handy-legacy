@@ -7,18 +7,21 @@ executables.
 
 """
 
-#__all__=[
-#  'Command',
-#  'Copy',
-#  'Error',
-#  'TargetHandler',
-#  'V',
-#  'options',
-#  'dir_mode',
-#  'DEVNULL',
-#  'PIPE',
-#  'STDOUT',
-#]
+__all__=[
+  'DEVNULL',
+  'PIPE',
+  'STDOUT',
+  'Command',
+  'Error',
+  'Target',
+  'File',
+  'Folder',
+  'V',
+  'expand_all',
+  'parse_verbosity',
+  'options',
+  'dir_mode',
+]
 
 import os,re,shlex,shutil,stat,sys,time
 from abc import ABC,abstractmethod
@@ -38,12 +41,14 @@ class V(Flag):
   DEPS=auto()   # Print dependency logic.
   TIME=auto()   # Print time comparison logic.
   DEBUG=auto()  # Print debug statements.
+  FULL=OPS|DEPS|TIME|DEBUG # Way too much!
 
 class Options(object):
   def __init__(self):
     self.dryrun=False
     self.force=False
     self.tdir='~/my'
+    self.sdir=os.path.dirname(sys.argv[0])
     self.verb=V.OPS
 
   def __str__(self):
@@ -69,6 +74,7 @@ def parse_verbosity(flags):
     elif f=='deps': v=V.DEPS
     elif f=='time': v=V.TIME
     elif f=='debug': v=V.DEBUG
+    elif f=='full': v=V.FULL
     else:
       raise ValueError(f"Unrecognized flag {f!r} in {flags!r}.")
     # Either add or subtract the flag v in verb's value.
@@ -92,6 +98,14 @@ class Error(Exception):
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Some general utility functions.
+
+def chdir(path):
+  """Chage to the given directory, and return he previous current
+  directory."""
+
+  prev=os.getcwd()
+  os.chdir(path)
+  return prev
 
 def expand_all(filename):
   "Return the filename with ~ and environment variables expanded."
@@ -299,197 +313,6 @@ def getmod(path,dir_fd=None,follow_symlinks=True):
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class TargetHandler(ABC):
-  """TargetHandler is an abstract base class of classes that know how to
-  produce a target file from one or more sources. Tilde- or variable-
-  expansion is performed on the target filespec if called for.
-
-  See the Copy class for examples."""
-
-  def __init__(self,target):
-    self.target=os.fspath(target) # The file (or symlink) to be created.
-    self.perms=None   # Set this with the mode(perms) method.
-    self.deps=None    # Set this with the dependsOn(...) method.
-    # If setting both owner and group, you MAY do so with a single call to the
-    # owner(user='someone',group='some_group') method.
-    self.user=None    # Set this with the owner(user='some_account') method.
-    self.group=None   # Set this with the owner(group='some_group') method.
-
-  def __fspath__(self):
-    "Return the string version of this target."
-
-    return self.target
-
-  def __str__(self):
-    "Return the string version of this target."
-
-    return self.target
-
-  def dependsOn(self,*args):
-    "Configure one or more source files for our target."
-    
-    if args:
-      self.deps=args
-    else:
-      self.deps=None
-    return self
-
-  def expand(self):
-    "Expand any ~ or $VAR substrings in this target's filename."
-
-    self.target=expand_all(self.target)
-    return self
-
-  def owner(self,user=None,group=None):
-    "Set the desired owner and/or group of the target."
-
-    if user is not None:
-      self.user=user if user else None
-    if group:
-      self.group=group if group else None
-    return self
-
-  def mode(self,perms):
-    "Set the permissions of our target file."
-
-    self.perms=perms
-    return self
-
-  @abstractmethod
-  def __call__(self):
-    """Build this target from its dependencies. This method MUST be
-    implemented in a subclass."""
-
-    pass
-
-class Folder(TargetHandler):
-  """A Folder instance will create a given directory if doesn't already
-  exist, createting any missing intermediate directories along the way,
-  or it will raise an exception if it already exists as something other
-  than a directory. (It does follow symlinks.) The default mode of the
-  new directory is 0o755.
-
-  Tilde- and variable-expansion are performed on the name of the path
-  first.
-
-  Example: Make sure our target folder exists before attempting to
-  install files there.
-
-    Folder('~/my/bin')() # Configure and create in one step.
-
-  Example: Same as above, but specify a mode of 0o750.
-
-    Folder('~/my/bin').mode(0o750)()
-
-  Example: Create a directory and get the expanded path to the created
-  (or existing) directory.
-
-    libs=Folder('~/my/lib') # Set up the folder we need.
-    print(f"Making sure {libs.target} exists ...")
-    libs() # You have to "call" this Folder instance to do the work.
-
-  """
-
-  def __init__(self,target):
-    super().__init__(target)
-    self.mode=0o755
-
-  def __call__(self):
-    "Create any missing parts of our directory."
-
-    if os.path.exists(self.target):
-      if not os.path.isdir(self.target):
-        raise Error(f"Cannot create directory {self.target!r} because it already exists as something else.")
-    else:
-      # Oddly, os.mkdirs() uses the umask to set permissions on any intermediate
-      # directories it creates. It uses its mode parameter only when creating
-      # the leaf directory.
-      if options.verb & V.OPS:
-        print(f"mkdir {self.target}")
-      if not options.dryrun:
-        orig_umask=os.umask(stat_mode(self.mode^0o777))
-        os.makedirs(self.target,mode=stat_mode(self.mode))
-        os.umask(orig_umask)
-
-    return self
-
-  def __str__(self):
-    """Return the name of the directory this Folder instance creates,
-    whether it's already done so, or wether it's even possible to create
-    that directory."""
-
-    return self.target
-
-class Copy(TargetHandler):
-  """Instances of Copy know how to copy a source file to a destination.
-  Use Copy(target).as_sysmlink() to configure the Copy instance to
-  create a symlink instead of copying the source to the target.
-
-  Instances of Copy must be given exactly one source file (using the
-  dependsOn() method).
-
-  Example: Copy file named by src to file named by targ.
-
-    Copy(targ).dependsOn(src)()
-
-  Example: Copy src to targ, setting the mode to 750 and user and
-  group ownership to root and wheel, respectively.
-
-    Copy(targ).dependsOn(src).mode(0o750).owner(user='root',group='wheel')()
-
-  Example: Create a symlink to src at targ.
-
-    Copy(targ).dependsOn(src).as_symlink()()
-  """
-
-  def __init__(self,target):
-    super().__init__(target)
-    self.symlink=False  # Change this with the as_symlink() method.
-
-  def as_symlink(self):
-    "Configure this target to create a symlink to the its source file."
-
-    self.symlink=True
-    return self
-
-  def __call__(self):
-    "Perform the copy operation by calling this Copy instance directly."
-
-    # Make sure we have exactly one source file.
-    if len(self.deps)!=1:
-      raise Error(f"""Class {self.__class__.__name__} MUST have exactly one source file (not {self.deps!r}).""")
-
-    # Get the source file.
-    source=self.deps[0]
-    if isinstance(source,TargetHandler):
-      # Make sure this target is ready to be coppied or linked to.
-      source()
-
-    if os.path.isdir(self.target):
-      # Compute our actual target path.
-      self.target=os.path.join(self.target,os.path.basename(source))
-
-    if self.symlink:
-      if os.path.is_symlink(self.target):
-        if os.path.abspath(source)!=os.path.realpath(self.target):
-          if not options.dryrun:
-            os.symlink(source,self.target)
-            if options.verb & V.OPS:
-              print(f"{source} <-- {self.target}")
-    else:
-      # Copy source to target, keeping as much metadata as possible.
-      if is_newer(source,self.target):
-        if options.verb & V.OPS:
-          print(f"{source} ==> {self.target}")
-        if not options.dryrun:
-          # Copy the file.
-          self.target=shutil.copy2(source,self.target,follow_symlinks=False)
-          # Set the user and or group ownership if this instance is so configured.
-          if self.user or self.group:
-            shutil.chown(self.target,user=self.user,group=self.group)
-
-    return self
-
 class Command(object):
   def __init__(self,cmd,input=None,stdin=None,stdout=None,stderr=None):
     "Initialize this Command instance."
@@ -521,155 +344,291 @@ class Command(object):
         raise Error(f"Non-zero return code ({r.returncode}): {self.cmd}")
     return self
 
-if __name__=='__main__':
-  import argparse,atexit,platform
+class Target(object):
+  """Target is an abstract base class of classes that know how to
+  produce a target file from one or more sources. Tilde- or variable-
+  expansion is performed on the target filespec if called for.
 
-  # Regardless of how this code terminates, put the PWD back like we found it.
-  atexit.register(os.chdir,os.getcwd())
-  # But for now, use this program's directory as the default.
-  os.chdir(os.path.dirname(sys.argv[0]))
+  See the File class for examples."""
 
-  ap=argparse.ArgumentParser(
-    #formatter_class=argparse.RawDescriptionHelpFormatter,
-    description=f"""\
-Install the "handy" scripts to the given (with --dir) or default ({options.tdir}) base directory.
- 
-The --verbosity (-v) flags are any of quiet, ops, deps, time, and debug. The "quiet" flags turns all the others off. Flags can be combined joined with + or - characters to add or remove those flags. The first flag listed is assumed to be added unless preceded by -. There are no spaces in --verbosity's value.
-"""
-  )
-  ap.add_argument('--dir',dest='tdir',action='store',type=expand_all,default=options.tdir,help="Set the base of the target directory structure. Subdirectories like bin, doc, etc, include, lib, man, and sbin will be created here if and when needed. (default: %(default)r)")
-  ap.add_argument('--force',action='store_true',help="Rather than comparing the timestamps of source and target files, copy the former to the latter unconditionally.")
-  ap.add_argument('--dryrun','-n',action='store_true',help="Go through all the motions, but don't do any work.")
-  ap.add_argument('--test',action='store_true',help="Run internal tests, report the results, and terminate.")
-  ap.add_argument('-v','--verbosity',action='store',default=options.verbFlags(),help="""Verbosity flags. See description text above for details. (default: %(default)r)""")
-  ap.add_argument('--debugger',action='store_true',help="Engage pdb within this script once we get through the setup. This is not for the uninitiated. See https://docs.python.org/3/library/pdb.html#debugger-commands for a command summary.")
-  ap.add_argument('files',metavar='FILE',action='store',nargs='*',help="This is one of more files to be installed.")
-  opt=ap.parse_args()
+  def __init__(self,target):
+    # Remember the file to be created.
+    if target.startswith(os.sep):
+      self.target=target
+    else:
+      self.target=os.path.join(options.tdir,target)
+    self.target=os.path.normpath(os.fspath(target))
+    self.mode=None   # Set this with the mode(perms) method.
+    self.deps=[]     # Set this with the dependsOn(...) method.
+    # If setting both owner and group, you MAY do so with a single call to the
+    # owner(user='someone',group='some_group') method.
+    self.user=None    # Set this with the owner(user='some_account') method.
+    self.group=None   # Set this with the owner(group='some_group') method.
 
-  # Parse our verbosity flags first.
-  options.verb=parse_verbosity(opt.verbosity)
+  def __fspath__(self):
+    "Return the string version of this target."
 
-  # Update our Options instance (options) with our command line option values.
-  options.dryrun=opt.dryrun
-  options.force=opt.force
-  options.tdir=opt.tdir
+    return self.target
 
-  if options.verb & V.DEBUG:
-    print(f"options: {options}")
+  def __str__(self):
+    "Return the string version of this target."
 
-  if opt.debugger:
-    import pdb
-    pdb.set_trace()
+    return self.target
 
-  if opt.test:
-    import doctest
+  def dependsOn(self,*args):
+    "Configure one or more source files for our target."
+    
+    if args:
+      self.deps=args
+    else:
+      self.deps=[]
+    return self
 
-    def test_mode_conversion():
-      """
-      >>> stat_mode(0o700)==stat.S_IRUSR|stat.S_IWUSR|stat.S_IXUSR
-      True
-      >>> stat_mode(0o070)==stat.S_IRGRP|stat.S_IWGRP|stat.S_IXGRP
-      True
-      >>> stat_mode(0o007)==stat.S_IROTH|stat.S_IWOTH|stat.S_IXOTH
-      True
-      >>> shell_mode(stat.S_IRUSR|stat.S_IWUSR|stat.S_IXUSR)==0o700
-      True
-      >>> shell_mode(stat.S_IRGRP|stat.S_IWGRP|stat.S_IXGRP)==0o070
-      True
-      >>> shell_mode(stat.S_IROTH|stat.S_IWOTH|stat.S_IXOTH)==0o007
-      True
-      >>> dir_mode(0o640)==0o750
-      True
-      >>> dir_mode(0o400)==0o500
-      True
-      """
+  def expand(self):
+    "Expand any ~ or $VAR substrings in this target's filename."
 
-      pass
+    self.target=expand_all(self.target)
+    return self
 
-    failed,total=doctest.testmod()
-    if failed:
-      print(f"Failed {failed} of {total} tests.")
-      sys.exit(1)
-    print(f"Passed all {total} tests!")
-    sys.exit(0)
+  def owner(self,user=None,group=None):
+    "Set the desired owner and/or group of the target."
 
-  mac_scripts=[
-    'alex',
-  ]
-  scripts=[
-    'ad-userAccountControl',
-    'ansi',
-    'args',
-    'ascii',
-    'backup-volume',
-    'base',
-    'base16',
-    'base32',
-    'base64',
-    'beyondpod',
-    'certmon',
-    'chronorename',
-    'columnate',
-    'csv',
-    'datecycle',
-    'decode16',
-    'decode32',
-    'decode64',
-    'dump',
-    'encode16',
-    'encode32',
-    'encode64',
-    'factors',
-    'fib',
-    'freq',
-    'gensig',
-    'ind',
-    'ip2host',
-    'json',
-    'json2csv',
-    'keeplast',
-    'ldif',
-    'mark',
-    'mazer',
-    'mix',
-    'names',
-    'not',
-    'now',
-    'numlines',
-    'patch-cal',
-    'pg',
-    'ph',
-    'portname',
-    'pretty-json',
-    'prime',
-    'progress',
-    'pwgen',
-    'pygrep',
-    'randword',
-    're',
-    'reduce',
-    'secdel',
-    'slice',
-    'strftime',
-    'strptime',
-    'timeout',
-    'timeshift',
-    'title-case',
-    'tread',
-    'ts',
-  ]
+    if user is not None:
+      self.user=user if user else None
+    if group:
+      self.group=group if group else None
+    return self
 
-  Folder(options.tdir).expand()
-  bin_dir=Folder(os.path.join(options.tdir,'bin'))()
-  Folder(os.path.join(options.tdir,'etc'))()
-  Folder(os.path.join(options.tdir,'include'))()
-  Folder(os.path.join(options.tdir,'lib'))()
-  Folder(os.path.join(options.tdir,'lib','python'))()
+  def chmod(self,mode):
+    """Set the permissions of our target file. It's simplest to use
+    octal for the mode number, just like you'd do with the chmod command
+    from a shell prompt. For example:
 
-  Copy(os.path.join(bin_dir,'mark')).dependsOn('mark')()
+        target.chmod(0o755)"""
 
-  #if platform.system()=="Darwin":
-  #  for s in mac_script:
-  #    Copy(
-  #for s in scripts:
-  #  Copy(s).to('bin').dependsOn(s)()
+    self.mode=mode
+    return self
+
+  def __call__(self):
+    """Create this target from its dependencies. This method MUST be
+    implemented in each instantiable subclass."""
+
+    for d in self.deps:
+      if isinstance(d,Target):
+        d()
+
+    return self
+
+class File(Target):
+  """An instance of File is ... a file."""
+
+  def __init__(self,target):
+    super().__init__(target)
+    self.source=None
+    self.links=[]
+
+  def __call__(self):
+    "Make sure all our dependencies are up to date."
+
+    # Target.__call__() handles any dependencies.
+    super().__call__()
+
+    if self.source:
+      # Copy our source file to our target file.
+      if is_newer(self.source,self.target):
+        if options.verb & V.OPS:
+          print(f"{self.source} ==> {self.target}")
+        if not options.dryrun:
+          # Copy the file.
+          self.target=shutil.copy2(self.source,self.target,follow_symlinks=False)
+          # Set the user and or group ownership if this instance is so configured.
+          if self.user or self.group:
+            shutil.chown(self.target,user=self.user,group=self.group)
+
+    if self.links:
+      # Our target's directory is the path all symlink paths are relative
+      # to (unless the paths are absolute).
+      d=os.path.dirname(self.target)
+      prev_dir=chdir(d)
+      # With our current directory set, create our simlink(s).
+      targ=os.path.relpath(self.target)
+      try:
+        for l in self.links:
+          l=os.path.abspath(l)
+          #if options.verb & V.DEBUG: print(f"{l=}, {os.path.islink(l)=}")
+          if not os.path.islink(l):
+            if options.verb & V.OPS:
+              print(f"{l} --> {targ}")
+            if not options.dryrun:
+              os.symlink(targ,l)
+      finally:
+        chdir(prev_dir)
+
+    return self
+
+  def link(self,*args):
+    """Prepare to create one or more symlinks to this target file.
+    Non-absolute paths in links are relative to the directory our target
+    file is in.
+
+    The links won't be created until this File instance is called.
+
+    Return a reference to this File object."""
+
+    self.links.extend(args)
+    return self
+
+  def copy(self,source):
+    """Prepare to copy the source file to our target file. Non-absolute
+    paths in links are relative to the path in install.options.sdir,
+    which is initially set to the directory the installer script is in.
+    The source file also becomes this target's sole dependency.
+
+    The copy will not be performed until this File instance is called.
+
+    Return a referece to this File object."""
+
+    s=os.fspath(source)
+    if not s.startswith(os.sep):
+      s=os.path.normpath(os.path.join(options.sdir,s))
+    self.deps=[s]
+    self.source=s
+    return self
+
+class Folder(Target):
+  """A Folder instance will create a given directory if doesn't already
+  exist, createting any missing intermediate directories along the way,
+  or it will raise an exception if it already exists as something other
+  than a directory. (It does follow symlinks.) The default mode of the
+  new directory is 0o755.
+
+  Tilde- and variable-expansion are performed on the name of the path
+  first.
+
+  Example: Make sure our target folder exists before attempting to
+  install files there.
+
+    Folder('~/my/bin')() # Configure and create in one step.
+
+  Example: Same as above, but specify a mode of 0o750.
+
+    Folder('~/my/bin').chmod(0o750)()
+
+  Example: Create a directory and get the expanded path to the created
+  (or existing) directory.
+
+    libs=Folder('~/my/lib') # Set up the folder we need.
+    print(f"Making sure {libs.target} exists ...")
+    libs() # You have to "call" this Folder instance to do the work.
+
+  """
+
+  def __init__(self,target):
+    super().__init__(target)
+    self.mode=0o755
+
+  def __call__(self):
+    "Create any missing parts of our directory."
+
+    super().__call__()
+
+    if os.path.exists(self.target):
+      if not os.path.isdir(self.target):
+        raise Error(f"Cannot create directory {self.target!r} because it already exists as something else.")
+    else:
+      # Oddly, os.mkdirs() uses the umask to set permissions on any intermediate
+      # directories it creates. It uses its mode parameter only when creating
+      # the leaf directory.
+      if options.verb & V.OPS:
+        print(f"mkdir {self.target}")
+      if not options.dryrun:
+        orig_umask=os.umask(stat_mode(self.mode^0o777))
+        os.makedirs(self.target,mode=stat_mode(self.mode))
+        os.umask(orig_umask)
+
+    return self
+
+  def __str__(self):
+    """Return the name of the directory this Folder instance creates,
+    whether it's already done so, or wether it's even possible to create
+    that directory."""
+
+    return self.target
+
+  def __truediv__(self,other):
+    """Return a filesystem path joining this target and the other."""
+
+    return f"{str(self)}{os.sep}{str(other)}"
+
+#class Copy(Target):
+#  """Instances of Copy know how to copy a source file to a destination.
+#  Use Copy(target).as_sysmlink() to configure the Copy instance to
+#  create a symlink instead of copying the source to the target.
+#
+#  Instances of Copy must be given exactly one source file (using the
+#  dependsOn() method).
+#
+#  Example: Copy file named by src to file named by targ.
+#
+#    Copy(targ).dependsOn(src)()
+#
+#  Example: Copy src to targ, setting the mode to 750 and user and
+#  group ownership to root and wheel, respectively.
+#
+#    Copy(targ).dependsOn(src).chmod(0o750).owner(user='root',group='wheel')()
+#
+#  Example: Create a symlink to src at targ.
+#
+#    Copy(targ).dependsOn(src).asSymlink()()
+#  """
+#
+#  def __init__(self,target):
+#    super().__init__(target)
+#    self.symlink=False  # Change this with the asSymlink() method.
+#
+#  def asSymlink(self,relative=True):
+#    "Configure this target to be a symlink to the its source file."
+#
+#    self.symlink=True
+#    self.relative=relative
+#    return self
+#
+#  def __call__(self):
+#    "Perform the copy operation by calling this Copy instance directly."
+#
+#    # Make sure we have exactly one source file.
+#    if len(self.deps)!=1:
+#      raise Error(f"""Class {self.__class__.__name__} MUST have exactly one source file (not {self.deps!r}).""")
+#
+#    # Get the source file.
+#    source=self.deps[0]
+#    if isinstance(source,Target):
+#      # Make sure this target is ready to be coppied or linked to.
+#      source()
+#
+#    if os.path.isdir(self.target):
+#      # Compute our actual target path.
+#      self.target=os.path.join(self.target,os.path.basename(source))
+#
+#    if self.symlink:
+#      if os.path.is_symlink(self.target):
+#        if os.path.abspath(source)!=os.path.realpath(self.target):
+#          if not options.dryrun:
+#            # TODO: Process self.relative here.
+#            if options.verb & V.OPS:
+#              print(f"{source} <-- {self.target}")
+#            os.symlink(source,self.target)
+#    else:
+#      # Copy source to target, keeping as much metadata as possible.
+#      if is_newer(source,self.target):
+#        if options.verb & V.OPS:
+#          print(f"{source} ==> {self.target}")
+#        if not options.dryrun:
+#          # Copy the file.
+#          self.target=shutil.copy2(source,self.target,follow_symlinks=False)
+#          # Set the user and or group ownership if this instance is so configured.
+#          if self.user or self.group:
+#            shutil.chown(self.target,user=self.user,group=self.group)
+#
+#    return self
+

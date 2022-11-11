@@ -1,1 +1,180 @@
-pylib/install.py
+#!/usr/bin/env python3
+import argparse,atexit,os,platform,sys
+
+# We run this code from the source directory, and we want to use the latest
+# version of our libraries.
+SRCDIR=os.path.dirname(os.path.realpath(sys.argv[0]))
+sys.path.insert(1,os.path.join(SRCDIR,'pylib'))
+from install import *
+
+# Regardless of how this code terminates, put the PWD back like we found it.
+atexit.register(os.chdir,os.getcwd())
+# But for now, use this program's directory as the default.
+os.chdir(SRCDIR)
+
+ap=argparse.ArgumentParser(
+  #formatter_class=argparse.RawDescriptionHelpFormatter,
+  description=f"""\
+Install the "handy" scripts to the given (with --dir) or default ({options.tdir}) base directory.
+
+The --verbosity (-v) flags are any of quiet, ops, deps, time, debug, and full. The "quiet" flag turns all the others off. "full" turns them all on. Flags can be combined with + or - characters to add or remove those flags. The first flag listed is assumed to be added unless preceded by -. There are no spaces in --verbosity's value. E.g. "./install -v ops+time ..." or "./install -v full-debug".
+"""
+)
+ap.add_argument('--dir',dest='tdir',action='store',default=options.tdir,help="Set the base of the target directory structure. Subdirectories like bin, doc, etc, include, lib, man, and sbin will be created here if and when needed. (default: %(default)r)")
+ap.add_argument('--force',action='store_true',help="Rather than comparing the timestamps of source and target files, copy the former to the latter unconditionally.")
+ap.add_argument('--dryrun','-n',action='store_true',help="Go through all the motions, but don't do any work.")
+ap.add_argument('--test',action='store_true',help="Run internal tests, report the results, and terminate.")
+ap.add_argument('-v','--verbosity',action='store',default=options.verbFlags(),help="""Verbosity flags. See description text above for details. (default: %(default)r)""")
+ap.add_argument('--debugger',action='store_true',help="Engage pdb within this script once we get through the setup. This is not for the uninitiated. See https://docs.python.org/3/library/pdb.html#debugger-commands for a command summary.")
+ap.add_argument('target',action='store',nargs='*',help="This is one of more files to be installed.")
+opt=ap.parse_args()
+
+# Parse our verbosity flags first.
+options.verb=parse_verbosity(opt.verbosity)
+
+# Update our Options instance (options) with our command line option values.
+options.dryrun=opt.dryrun
+options.force=opt.force
+options.tdir=expand_all(options.tdir)
+
+if options.verb & V.DEBUG:
+  print(f"options: {options}")
+
+if opt.debugger:
+  import pdb
+  pdb.set_trace()
+
+if opt.test:
+  import doctest
+
+  def test_mode_conversion():
+    """
+    >>> stat_mode(0o700)==stat.S_IRUSR|stat.S_IWUSR|stat.S_IXUSR
+    True
+    >>> stat_mode(0o070)==stat.S_IRGRP|stat.S_IWGRP|stat.S_IXGRP
+    True
+    >>> stat_mode(0o007)==stat.S_IROTH|stat.S_IWOTH|stat.S_IXOTH
+    True
+    >>> shell_mode(stat.S_IRUSR|stat.S_IWUSR|stat.S_IXUSR)==0o700
+    True
+    >>> shell_mode(stat.S_IRGRP|stat.S_IWGRP|stat.S_IXGRP)==0o070
+    True
+    >>> shell_mode(stat.S_IROTH|stat.S_IWOTH|stat.S_IXOTH)==0o007
+    True
+    >>> dir_mode(0o640)==0o750
+    True
+    >>> dir_mode(0o400)==0o500
+    True
+    """
+
+    pass
+
+  failed,total=doctest.testmod()
+  if failed:
+    print(f"Failed {failed} of {total} tests.")
+    sys.exit(1)
+  print(f"Passed all {total} tests!")
+  sys.exit(0)
+
+# TODO: Process command line targets. Default to "all".
+
+scripts=[
+  'ad-userAccountControl',
+  'ansi',
+  'args',
+  'ascii',
+  'backup-volume',
+  'base',
+  'certmon',
+  'chronorename',
+  'columnate',
+  'csv',
+  'datecycle',
+  'dump',
+  'factors',
+  'fib',
+  'freq',
+  'gensig',
+  'ind',
+  'ip2host',
+  'json',
+  'json2csv',
+  'keeplast',
+  'ldif',
+  'mark',
+  'mazer',
+  'mix',
+  'names',
+  'not',
+  'now',
+  'numlines',
+  'patch-cal',
+  'pg',
+  'ph',
+  'portname',
+  'pretty-json',
+  'prime',
+  'progress',
+  'pwgen',
+  'pygrep',
+  'randword',
+  're',
+  'reduce',
+  'secdel',
+  'slice',
+  'strftime',
+  'strptime',
+  'timeout',
+  'timeshift',
+  'title-case',
+  'tread',
+  'ts',
+]
+base_links=[
+  'base16',
+  'base32',
+  'base64',
+  'decode16',
+  'decode32',
+  'decode64',
+  'encode16',
+  'encode32',
+  'encode64',
+]
+
+# Make sure we have someplace to install these files.
+Folder(options.tdir)()
+bin_dir=Folder(os.path.join(options.tdir,'bin'))()
+Folder(os.path.join(options.tdir,'etc'))()
+Folder(os.path.join(options.tdir,'include'))()
+Folder(os.path.join(options.tdir,'lib'))()
+Folder(os.path.join(options.tdir,'lib','python'))()
+
+#File(os.path.join(bin_dir,'base')).copy('base'),link(
+File(bin_dir/'base').copy('base').link(
+  'base16',
+  'base32',
+  'base64',
+  'decode16',
+  'decode32',
+  'decode64',
+  'encode16',
+  'encode32',
+  'encode64'
+)()
+
+sys.exit(0)
+
+## Copy lots of Python scripts to our bin directory.
+#for s in scripts:
+#  Copy(os.path.join(bin_dir,s)).dependsOn(s)()
+#
+## If we're running on a Mac, install Mac files.
+#if opt.workstation:
+#  workstation_scripts=[
+#    'alex',
+#    'beyondpod',
+#  ]
+#  if platform.system()=="Darwin":
+#    for s in workstation_scripts:
+#      Copy(os.path.join(bin_dir,s)).dependsOn(s)()
