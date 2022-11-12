@@ -42,17 +42,17 @@
 # Try this input with the "Good News" voice. :-)
 #     we're very proud of you and know you'll do well
 #       in all of your persuits while chasing your dream
-OPTIONS="-r 200"
+OPTIONS="-r 250"
 
 # ... because "lc" is only two characters.
 lc() {
   tr '[:upper:]' '[:lower:]'
 }
 
-# Return zero value iff "$1" is a supported voice.
+# Return zero value (true) iff "$1" is a supported voice.
 supportedVoice() {
   [[ "$(
-    say -v '?' | sed -E 's/ +[a-z]{2}[_-].*//' | lc | while read v; do
+    say -v\? | sed -E 's/ +[a-z]{2}[_-].*//' | lc | while read v; do
       if [[ "$v" == "$1" ]]; then
         echo "$v"
         break
@@ -62,7 +62,6 @@ supportedVoice() {
 }
 
 voice=$(basename "$0")
-vlist=($(say -v '?' | sed 's/ .*//' | lc))
 if ! supportedVoice "$voice"; then
   echo "'$voice' is not one of the permitted voices."
   echo "Choose from:"

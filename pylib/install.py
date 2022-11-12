@@ -13,9 +13,11 @@ __all__=[
   'STDOUT',
   'Command',
   'Error',
+  'Path',
   'Target',
   'File',
   'Folder',
+  'Path',
   'V',
   'dir_mode',
   'expand_all',
@@ -25,10 +27,10 @@ __all__=[
 ]
 
 import os,platform,re,shlex,shutil,stat,sys,time
-from abc import ABC,abstractmethod
 from enum import Flag,auto
 from functools import reduce
 from subprocess import run,DEVNULL,PIPE,STDOUT,CompletedProcess
+from path import Path
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -352,13 +354,13 @@ class Command(object):
     elif isinstance(args,(list,tuple)):
       args=list(args)
     else:
-      raise ValueError(f"Command arguments must be a string or sequence, not {cmd!r}.")
+      raise ValueError(f"Command arguments must be a string or sequence, not {args!r}.")
     if options.verb & V.OPS and not quiet:
       print(shlex.join(self.cmd+args))
     if options.dryrun:
       # Put together a "fake" CompletedProcess result with a return code of 0
       # and empty stdout and stderr values.
-      r=CompletedProcess(cmd+args,0,"","")
+      r=CompletedProcess(self.cmd+args,0,"","")
     else:
       # Run our command, capturing it stdout and stderr output as string values.
       if options.verb & V.DEBUG:
@@ -367,9 +369,9 @@ class Command(object):
     self.result=r.returncode
     self.stdout=r.stdout
     self.stderr=r.stderr
-    if self.result or options.verb & V.OPS and not quiet:
-      if self.stdout: print(r.stdout)
-      if self.stderr: print(r.stderr,file=sys.stderr)
+    if self.result or (options.verb & V.OPS and not quiet):
+      if self.stdout: print(self.stdout)
+      if self.stderr: print(self.stderr,file=sys.stderr)
       if self.result:
         raise Error(f"Non-zero return code ({self.result}): {shlex.join(self.cmd+args)}")
     return self

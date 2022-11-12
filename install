@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse,atexit,os,re,sys
+from pprint import pprint
 
 # We run this code from the source directory, and we want to use the latest
 # version of our libraries.
@@ -80,7 +81,16 @@ if opt.test:
 
 # TODO: Process command line targets. Default to "all".
 
-# These Python modules are located in our pylib directory.
+# Make sure we have someplace to install these files.
+target_dir=Folder(options.tdir)()
+bin_dir=Folder(os.path.join(options.tdir,'bin'))()
+Folder(os.path.join(options.tdir,'etc'))()
+Folder(os.path.join(options.tdir,'include'))()
+Folder(os.path.join(options.tdir,'lib'))()
+lib_dir=Folder(os.path.join(options.tdir,'lib','python'))()
+
+# Copy our library modules first because some of our scripts are really just
+# symlinks to them. These Python modules are located in our pylib directory.
 pylibs=[
   'CSV.py',
   'RE.py',
@@ -111,17 +121,15 @@ pylibs=[
   'versioning.py',
 ]
 
-# Make sure we have someplace to install these files.
-target_dir=Folder(options.tdir)()
-bin_dir=Folder(os.path.join(options.tdir,'bin'))()
-Folder(os.path.join(options.tdir,'etc'))()
-Folder(os.path.join(options.tdir,'include'))()
-Folder(os.path.join(options.tdir,'lib'))()
-lib_dir=Folder(os.path.join(options.tdir,'lib','python'))()
-
-# Copy our library modules.
 for f in pylibs:
   File(lib_dir/f).copy(os.path.join('pylib',f))()
+
+# Set up symlinks to Python modules that can also be run as commands.
+command_links=[
+  'timeout',
+]
+for f in command_links:
+  File(lib_dir/f).copy(os.path.join('pylib',f)).link(bin_dir/f)()
 
 # Copy our "base" script and set up its symlinks.
 File(bin_dir/'base').copy('base').link(
@@ -136,7 +144,7 @@ File(bin_dir/'base').copy('base').link(
   'encode64'
 )()
 
-# These are located in our source directory.
+# Copy our Python and shell scripts. These are located in our source directory.
 scripts=[
   'ad-userAccountControl',
   'ansi',
@@ -181,7 +189,6 @@ scripts=[
   'slice',
   'strftime',
   'strptime',
-  'timeout',
   'timeshift',
   'title-case',
   'tread',
@@ -192,13 +199,17 @@ scripts=[
 for f in scripts:
   File(bin_dir/f).copy(f)()
 
-if install.platform.system=='Darwin':
-  # Get a list of the English voices built into the "say" command.
+if platform.system=='Darwin':
+  # Get a list of the non-Alex English voices built into the "say" command.
   re_say_parser=re.compile(r'([-a-zA-Z]+)\s+([_a-zA-Z]+)')
-  say=Command("say",stdout=PIPE,stderr=PIPE)
-  say("-v",'?',quiet=True)
+  say=Command("say -r250",stdout=PIPE,stderr=PIPE,quiet=True)
+  say("-v?")
   voices=[
-    m.group(1) for m in
+    m.group(1).lower() for m in
       [re_say_parser.match(l) for l in say.stdout.split('\n')]
-    if m and m.group(2).startswith('en_')
+    if m and m.group(2).startswith('en_') and m.group(1).lower()!='alex'
   ]
+  # Install our "alex" script and set up its symlinks.
+  File(bin_dir/'alex').copy('alex').link(*voices)
+
+
