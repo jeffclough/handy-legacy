@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse,atexit,os,platform,sys
+import argparse,atexit,os,re,sys
 
 # We run this code from the source directory, and we want to use the latest
 # version of our libraries.
@@ -44,6 +44,8 @@ if opt.debugger:
   import pdb
   pdb.set_trace()
 
+### Testing ###
+
 if opt.test:
   import doctest
 
@@ -78,13 +80,69 @@ if opt.test:
 
 # TODO: Process command line targets. Default to "all".
 
+# These Python modules are located in our pylib directory.
+pylibs=[
+  'CSV.py',
+  'RE.py',
+  'abbrev.py',
+  'ansi.py',
+  'conf.py',
+  'daemon.py',
+  'date_parser.py',
+  'debug.py',
+  'dirwalker.py',
+  'english.py',
+  'exiftool.py',
+  'grep.py',
+  'handy.py',
+  'install.py',
+  'latlong.py',
+  'loggy.py',
+  'parsing.py',
+  'phonetics.py',
+  'png.py',
+  'prime.py',
+  'pyparsing.py',
+  'semver.py',
+  'stardate.py',
+  'table.py',
+  'timeout.py',
+  'tree.py',
+  'versioning.py',
+]
+
+# Make sure we have someplace to install these files.
+target_dir=Folder(options.tdir)()
+bin_dir=Folder(os.path.join(options.tdir,'bin'))()
+Folder(os.path.join(options.tdir,'etc'))()
+Folder(os.path.join(options.tdir,'include'))()
+Folder(os.path.join(options.tdir,'lib'))()
+lib_dir=Folder(os.path.join(options.tdir,'lib','python'))()
+
+# Copy our library modules.
+for f in pylibs:
+  File(lib_dir/f).copy(os.path.join('pylib',f))()
+
+# Copy our "base" script and set up its symlinks.
+File(bin_dir/'base').copy('base').link(
+  'base16',
+  'base32',
+  'base64',
+  'decode16',
+  'decode32',
+  'decode64',
+  'encode16',
+  'encode32',
+  'encode64'
+)()
+
+# These are located in our source directory.
 scripts=[
   'ad-userAccountControl',
   'ansi',
   'args',
   'ascii',
   'backup-volume',
-  'base',
   'certmon',
   'chronorename',
   'columnate',
@@ -94,7 +152,6 @@ scripts=[
   'factors',
   'fib',
   'freq',
-  'gensig',
   'ind',
   'ip2host',
   'json',
@@ -130,51 +187,18 @@ scripts=[
   'tread',
   'ts',
 ]
-base_links=[
-  'base16',
-  'base32',
-  'base64',
-  'decode16',
-  'decode32',
-  'decode64',
-  'encode16',
-  'encode32',
-  'encode64',
-]
 
-# Make sure we have someplace to install these files.
-Folder(options.tdir)()
-bin_dir=Folder(os.path.join(options.tdir,'bin'))()
-Folder(os.path.join(options.tdir,'etc'))()
-Folder(os.path.join(options.tdir,'include'))()
-Folder(os.path.join(options.tdir,'lib'))()
-Folder(os.path.join(options.tdir,'lib','python'))()
+# Copy our scripts.
+for f in scripts:
+  File(bin_dir/f).copy(f)()
 
-#File(os.path.join(bin_dir,'base')).copy('base'),link(
-File(bin_dir/'base').copy('base').link(
-  'base16',
-  'base32',
-  'base64',
-  'decode16',
-  'decode32',
-  'decode64',
-  'encode16',
-  'encode32',
-  'encode64'
-)()
-
-sys.exit(0)
-
-## Copy lots of Python scripts to our bin directory.
-#for s in scripts:
-#  Copy(os.path.join(bin_dir,s)).dependsOn(s)()
-#
-## If we're running on a Mac, install Mac files.
-#if opt.workstation:
-#  workstation_scripts=[
-#    'alex',
-#    'beyondpod',
-#  ]
-#  if platform.system()=="Darwin":
-#    for s in workstation_scripts:
-#      Copy(os.path.join(bin_dir,s)).dependsOn(s)()
+if install.platform.system=='Darwin':
+  # Get a list of the English voices built into the "say" command.
+  re_say_parser=re.compile(r'([-a-zA-Z]+)\s+([_a-zA-Z]+)')
+  say=Command("say",stdout=PIPE,stderr=PIPE)
+  say("-v",'?',quiet=True)
+  voices=[
+    m.group(1) for m in
+      [re_say_parser.match(l) for l in say.stdout.split('\n')]
+    if m and m.group(2).startswith('en_')
+  ]

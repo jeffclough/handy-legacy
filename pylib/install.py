@@ -17,13 +17,14 @@ __all__=[
   'File',
   'Folder',
   'V',
+  'dir_mode',
   'expand_all',
   'parse_verbosity',
+  'platform',
   'options',
-  'dir_mode',
 ]
 
-import os,re,shlex,shutil,stat,sys,time
+import os,platform,re,shlex,shutil,stat,sys,time
 from abc import ABC,abstractmethod
 from enum import Flag,auto
 from functools import reduce
@@ -43,6 +44,7 @@ class V(Flag):
   DEBUG=auto()  # Print debug statements.
   FULL=OPS|DEPS|TIME|DEBUG # Way too much!
 
+# These options configure this module's behavior.
 class Options(object):
   def __init__(self):
     self.dryrun=False
@@ -56,6 +58,14 @@ class Options(object):
 
   def verbFlags(self):
     return str(self.verb)[2:].lower().replace('|','+')
+
+# Store some system characteristics.
+platform=type('',(),dict(
+  arch=platform.machine(),          # 'arm64'
+  os=platform.platform(),           # 'macOS-12.6-arm64-arm-64bit'
+  system=platform.system(),         # 'Darwin'
+  release=platform.uname().release  # '21.6.0'
+))
 
 def parse_verbosity(flags):
   """Given a verbosity flags string value, return the corresponding
@@ -314,34 +324,54 @@ def getmod(path,dir_fd=None,follow_symlinks=True):
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 class Command(object):
-  def __init__(self,cmd,input=None,stdin=None,stdout=None,stderr=None):
+  def __init__(self,cmd,stdin=None,stdout=None,stderr=None,quiet=False):
     "Initialize this Command instance."
 
-    self.cmd=cmd
-    self.input=input
+    if isinstance(cmd,str):
+      self.cmd=shlex.split(cmd)
+    elif isinstance(cmd,(list,tuple)):
+      self.cmd=list(cmd)
+    else:
+      raise ValueError(f"Command must be a string or sequence, not {cmd!r}.")
     self.stdin=stdin
     self.stdout=stdout
-    self.strerr=stderr
+    self.stderr=stderr
     self.result=None
+    self.quiet=quiet
 
-  def __call__(self):
+  def __call__(self,*args,quiet=None):
     """Run the command the caller has set up. Return this Command
     instance."""
 
-    if options.verb & V.OPS:
-      print(cmd)
+    if quiet is None:
+      quiet=self.quiet
+
+    if isinstance(args,str):
+      # Convert this string to an args list.
+      args=shlex.split(args)
+    elif isinstance(args,(list,tuple)):
+      args=list(args)
+    else:
+      raise ValueError(f"Command arguments must be a string or sequence, not {cmd!r}.")
+    if options.verb & V.OPS and not quiet:
+      print(shlex.join(self.cmd+args))
     if options.dryrun:
       # Put together a "fake" CompletedProcess result with a return code of 0
       # and empty stdout and stderr values.
-      self.result=CompletedProcess(shlex.split(cmd),0,"","")
+      r=CompletedProcess(cmd+args,0,"","")
     else:
       # Run our command, capturing it stdout and stderr output as string values.
-      r=self.result=run(self.cmd,text=True,stdin=self.stdin,stdout=self.stdout,stderr=self.stderr)
-    if r.returncode or options.verb & V.OPS:
-      if r.stdout: print(r.stdout)
-      if r.stderr: print(r.stderr,file=sys.stderr)
-      if r.returncode:
-        raise Error(f"Non-zero return code ({r.returncode}): {self.cmd}")
+      if options.verb & V.DEBUG:
+        print(f"run({self.cmd+args},text=True,stdin={self.stdin},stdout={self.stdout},stderr={self.stderr})")
+      r=run(self.cmd+args,text=True,stdin=self.stdin,stdout=self.stdout,stderr=self.stderr)
+    self.result=r.returncode
+    self.stdout=r.stdout
+    self.stderr=r.stderr
+    if self.result or options.verb & V.OPS and not quiet:
+      if self.stdout: print(r.stdout)
+      if self.stderr: print(r.stderr,file=sys.stderr)
+      if self.result:
+        raise Error(f"Non-zero return code ({self.result}): {shlex.join(self.cmd+args)}")
     return self
 
 class Target(object):
@@ -559,76 +589,3 @@ class Folder(Target):
     """Return a filesystem path joining this target and the other."""
 
     return f"{str(self)}{os.sep}{str(other)}"
-
-#class Copy(Target):
-#  """Instances of Copy know how to copy a source file to a destination.
-#  Use Copy(target).as_sysmlink() to configure the Copy instance to
-#  create a symlink instead of copying the source to the target.
-#
-#  Instances of Copy must be given exactly one source file (using the
-#  dependsOn() method).
-#
-#  Example: Copy file named by src to file named by targ.
-#
-#    Copy(targ).dependsOn(src)()
-#
-#  Example: Copy src to targ, setting the mode to 750 and user and
-#  group ownership to root and wheel, respectively.
-#
-#    Copy(targ).dependsOn(src).chmod(0o750).owner(user='root',group='wheel')()
-#
-#  Example: Create a symlink to src at targ.
-#
-#    Copy(targ).dependsOn(src).asSymlink()()
-#  """
-#
-#  def __init__(self,target):
-#    super().__init__(target)
-#    self.symlink=False  # Change this with the asSymlink() method.
-#
-#  def asSymlink(self,relative=True):
-#    "Configure this target to be a symlink to the its source file."
-#
-#    self.symlink=True
-#    self.relative=relative
-#    return self
-#
-#  def __call__(self):
-#    "Perform the copy operation by calling this Copy instance directly."
-#
-#    # Make sure we have exactly one source file.
-#    if len(self.deps)!=1:
-#      raise Error(f"""Class {self.__class__.__name__} MUST have exactly one source file (not {self.deps!r}).""")
-#
-#    # Get the source file.
-#    source=self.deps[0]
-#    if isinstance(source,Target):
-#      # Make sure this target is ready to be coppied or linked to.
-#      source()
-#
-#    if os.path.isdir(self.target):
-#      # Compute our actual target path.
-#      self.target=os.path.join(self.target,os.path.basename(source))
-#
-#    if self.symlink:
-#      if os.path.is_symlink(self.target):
-#        if os.path.abspath(source)!=os.path.realpath(self.target):
-#          if not options.dryrun:
-#            # TODO: Process self.relative here.
-#            if options.verb & V.OPS:
-#              print(f"{source} <-- {self.target}")
-#            os.symlink(source,self.target)
-#    else:
-#      # Copy source to target, keeping as much metadata as possible.
-#      if is_newer(source,self.target):
-#        if options.verb & V.OPS:
-#          print(f"{source} ==> {self.target}")
-#        if not options.dryrun:
-#          # Copy the file.
-#          self.target=shutil.copy2(source,self.target,follow_symlinks=False)
-#          # Set the user and or group ownership if this instance is so configured.
-#          if self.user or self.group:
-#            shutil.chown(self.target,user=self.user,group=self.group)
-#
-#    return self
-
