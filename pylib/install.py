@@ -51,8 +51,8 @@ class Options(object):
   def __init__(self):
     self.dryrun=False
     self.force=False
-    self.tdir='~/my'
-    self.sdir=os.path.dirname(sys.argv[0])
+    self.tdir=Path('~/my').expandUser()
+    self.sdir=Path(sys.argv[0]).dirName()
     self.verb=V.OPS
 
   def __str__(self):
@@ -111,18 +111,18 @@ class Error(Exception):
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Some general utility functions.
 
-def chdir(path):
-  """Chage to the given directory, and return he previous current
-  directory."""
-
-  prev=os.getcwd()
-  os.chdir(path)
-  return prev
+#def chdir(path):
+#  """Chage to the given directory, and return he previous current
+#  directory."""
+#
+#  prev=os.getcwd()
+#  os.chdir(path)
+#  return prev
 
 def expand_all(filename):
   "Return the filename with ~ and environment variables expanded."
 
-  p=os.path.expandvars(os.path.expanduser(filename))
+  p=os.path.expandvars(os.path.expanduser(str(filename)))
   if options.verb & V.DEBUG:
     print(f"expand_all({filename!r}) -> {p!r}")
   return p
@@ -133,7 +133,7 @@ def filetime(filename,default=0):
   (presumably something that represents this file to be VERY old)."""
 
   try:
-    default=os.path.getmtime(filename)
+    default=os.path.getmtime(str(filename))
     if options.verb & V.TIME:
       print(f"  {filename}\tt={default:0.6f} ({time.strftime('%Y-%m-%d %H:%M:%S.%f',time.localtime(default))})")
   except:
@@ -170,7 +170,7 @@ def out_of_date(target,*deps):
   file with a later modification time than target. The "deps" arguments
   can be either filenames or lists or tuples of fileanmes."""
 
-  if not os.path.exists(target):
+  if not target.exists():
     if options.verb & V.DEPS:
       print(f"  {target} is out of date because it's missing.")
     return True
@@ -186,7 +186,7 @@ def out_of_date(target,*deps):
     if isinstance(d,(list,tuple)):
       if outOfDate(target,*d):
         return True
-    elif not os.path.exists(d):
+    elif not d.exists():
       # Return True for a non-existant dependency to provoke an error
       # when that file isn't found.
       if options.verb & V_DEPS:
@@ -385,11 +385,13 @@ class Target(object):
 
   def __init__(self,target):
     # Remember the file to be created.
-    if target.startswith(os.sep):
+    if not isinstance(target,Path):
+      target=Path(target)
+    if target.isAbs():
       self.target=target
     else:
-      self.target=os.path.join(options.tdir,target)
-    self.target=os.path.normpath(os.fspath(target))
+      self.target=options.tdir/target
+    self.target=self.target.normal()
     self.mode=None   # Set this with the mode(perms) method.
     self.deps=[]     # Set this with the dependsOn(...) method.
     # If setting both owner and group, you MAY do so with a single call to the
@@ -410,16 +412,15 @@ class Target(object):
   def dependsOn(self,*args):
     "Configure one or more source files for our target."
     
-    if args:
-      self.deps=args
-    else:
-      self.deps=[]
+    self.deps.extend([
+      x if isinstance(x,(Target,Path)) else Path(x) for x in args
+    ])
     return self
 
   def expand(self):
     "Expand any ~ or $VAR substrings in this target's filename."
 
-    self.target=expand_all(self.target)
+    self.target=self.target.expandAll()
     return self
 
   def owner(self,user=None,group=None):
@@ -445,6 +446,8 @@ class Target(object):
     """Create this target from its dependencies. This method MUST be
     implemented in each instantiable subclass."""
 
+    # In theis base class, we ensure all dependencies are up to date.
+    # It's up to the subclass to build the target.
     for d in self.deps:
       if isinstance(d,Target):
         d()
@@ -452,7 +455,7 @@ class Target(object):
     return self
 
 class File(Target):
-  """An instance of File is ... a file."""
+  """An instance of File is ... a filename."""
 
   def __init__(self,target):
     super().__init__(target)
@@ -480,25 +483,31 @@ class File(Target):
     if self.links:
       # Our target's directory is the path all symlink paths are relative
       # to (unless the paths are absolute).
-      d=os.path.dirname(self.target)
-      prev_dir=chdir(d)
-      # With our current directory set, create our simlink(s).
-      targ=os.path.relpath(self.target)
+      d=self.target.dirName()
+      prev_dir=d.chdir()
+      # With our current directory set, create our symlink(s).
+      targ=self.target.relative()
       try:
         for l in self.links:
-          l=os.path.abspath(l)
-          #if options.verb & V.DEBUG: print(f"{l=}, {os.path.islink(l)=}")
-          if not os.path.islink(l):
+          l=l.absolute()
+          if l.isLink() and l.real()==targ.absolute():
+            continue # This link already exists.
+          if l.exists() and not l.isDir() and self.force_links:
+            if options.verb & V.OPS:
+              print(f"rm {l}")
+            if not options.dryrun:
+              l.remove() # Remove this directory entry that's in the way.
+          if not l.exists():
             if options.verb & V.OPS:
               print(f"{l} --> {targ}")
             if not options.dryrun:
               os.symlink(targ,l)
       finally:
-        chdir(prev_dir)
+        prev_dir.chdir()
 
     return self
 
-  def link(self,*args):
+  def link(self,*args,force=False):
     """Prepare to create one or more symlinks to this target file.
     Non-absolute paths in links are relative to the directory our target
     file is in.
@@ -507,7 +516,10 @@ class File(Target):
 
     Return a reference to this File object."""
 
-    self.links.extend(args)
+    self.links.extend([
+      x if isinstance(x,(Path,Target)) else Path(x) for x in args
+    ])
+    self.force_links=force
     return self
 
   def copy(self,source):
@@ -520,10 +532,10 @@ class File(Target):
 
     Return a referece to this File object."""
 
-    s=os.fspath(source)
-    if not s.startswith(os.sep):
-      s=os.path.normpath(os.path.join(options.sdir,s))
-    self.deps=[s]
+    s=source if isinstance(source,(Path,Target)) else Path(source)
+    if not s.isAbs():
+      s=(options.sdir/s).normal()
+    self.deps=[s] # Make sure our source file is a dependency.
     self.source=s
     return self
 
@@ -542,7 +554,7 @@ class Folder(Target):
 
     Folder('~/my/bin')() # Configure and create in one step.
 
-  Example: Same as above, but specify a mode of 0o750.
+  Example: Same as above, but also set rwxr-x--- file permissions.
 
     Folder('~/my/bin').chmod(0o750)()
 
@@ -552,7 +564,6 @@ class Folder(Target):
     libs=Folder('~/my/lib') # Set up the folder we need.
     print(f"Making sure {libs.target} exists ...")
     libs() # You have to "call" this Folder instance to do the work.
-
   """
 
   def __init__(self,target):
@@ -564,9 +575,9 @@ class Folder(Target):
 
     super().__call__()
 
-    if os.path.exists(self.target):
-      if not os.path.isdir(self.target):
-        raise Error(f"Cannot create directory {self.target!r} because it already exists as something else.")
+    if self.target.exists():
+      if not self.target.isDir():
+        raise Error(f"Cannot create directory {self} because it already exists as something else.")
     else:
       # Oddly, os.mkdirs() uses the umask to set permissions on any intermediate
       # directories it creates. It uses its mode parameter only when creating
@@ -590,4 +601,4 @@ class Folder(Target):
   def __truediv__(self,other):
     """Return a filesystem path joining this target and the other."""
 
-    return f"{str(self)}{os.sep}{str(other)}"
+    return self.target/other

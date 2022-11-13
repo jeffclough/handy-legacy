@@ -36,7 +36,7 @@ options.verb=parse_verbosity(opt.verbosity)
 # Update our Options instance (options) with our command line option values.
 options.dryrun=opt.dryrun
 options.force=opt.force
-options.tdir=expand_all(options.tdir)
+options.tdir=Path(options.tdir).expandAll()
 
 if options.verb & V.DEBUG:
   print(f"options: {options}")
@@ -83,11 +83,13 @@ if opt.test:
 
 # Make sure we have someplace to install these files.
 target_dir=Folder(options.tdir)()
-bin_dir=Folder(os.path.join(options.tdir,'bin'))()
-Folder(os.path.join(options.tdir,'etc'))()
-Folder(os.path.join(options.tdir,'include'))()
-Folder(os.path.join(options.tdir,'lib'))()
-lib_dir=Folder(os.path.join(options.tdir,'lib','python'))()
+bin_dir=Folder(options.tdir/'bin')()
+Folder(options.tdir/'etc')()
+Folder(options.tdir/'include')()
+Folder(options.tdir/'lib')()
+lib_dir=Folder(options.tdir/'lib'/'python')()
+
+pylib=Folder('pylib') # No need to create this one.
 
 # Copy our library modules first because some of our scripts are really just
 # symlinks to them. These Python modules are located in our pylib directory.
@@ -109,20 +111,18 @@ pylibs=[
   'latlong.py',
   'loggy.py',
   'parsing.py',
-  'phonetics.py',
   'png.py',
   'prime.py',
   'pyparsing.py',
   'semver.py',
   'stardate.py',
   'table.py',
-  'timeout.py',
   'tree.py',
   'versioning.py',
 ]
 
 for f in pylibs:
-  File(lib_dir/f).copy(os.path.join('pylib',f))()
+  File(lib_dir/f).copy(pylib/f)()
 
 # Set up symlinks to Python modules that can also be run as commands.
 command_links=[
@@ -130,6 +130,8 @@ command_links=[
 ]
 for f in command_links:
   File(lib_dir/f).copy(os.path.join('pylib',f)).link(bin_dir/f)()
+  module=f+'.py'
+  File(lib_dir/module).copy(pylib/module).link(bin_dir/f)
 
 # Copy our "base" script and set up its symlinks.
 File(bin_dir/'base').copy('base').link(
@@ -142,6 +144,11 @@ File(bin_dir/'base').copy('base').link(
   'encode16',
   'encode32',
   'encode64'
+)()
+
+# Do something very similar with phonetics.py.
+File(lib_dir/'phonetics.py').copy(pylib/'phonetics.py').link(
+  *[f'../../bin/{x}' for x in ('nato','police','raf','us','wu')]
 )()
 
 # Copy our Python and shell scripts. These are located in our source directory.

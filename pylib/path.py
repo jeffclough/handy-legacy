@@ -66,6 +66,7 @@ __author__='Jeff Clough, @jeffclough@mastodon.social'
 __version__='0.1.0-2022-11-12'
 
 import os,re
+from datetime import datetime
 
 # Splitting paths needs to be able to split on colons (for drive or volume
 # names) as well as on whatever's in os.sep.
@@ -93,7 +94,7 @@ class Path(str):
 
     return str.__new__(cls,os.sep.join(
       [x.strip('/') if i>0 else x.rstrip('/')
-        for i,x in enumerate([os.path.normpath(y) for y in s])
+        for i,x in enumerate([os.path.normpath(str(y)) for y in s])
       ]
     ))
 
@@ -145,18 +146,66 @@ class Path(str):
       items=[''.join(items[:l+n])]+items[l+n:]
     return [Path(x) for  x in items]
 
-  # Steal some functionality from os.path.
-  def abs(self): return Path(os.path.abspath(self))
+  # Steal some functionality from os and os.path.
+  def absolute(self): return Path(os.path.abspath(str(self)))
+  def relative(self,start=os.curdir): return Path(os.path.relpath(str(self),str(start)))
+  def normal(self): return Path(os.path.normpath(str(self)))
+  def real(self): return Path(os.path.realpath(str(self)))
+
   def baseName(self): return self.split(-1)[1]
   def dirName(self): return self.split(-1)[0]
-  def expandUser(self): return Path(os.path.expanduser(self))
-  def expandVars(self): return Path(os.path.expandvars(self))
-  def exists(self): return os.path.exists(self)
-  def isAbs(self): return os.path.isabs(self)
-  def isDir(self): return os.path.isdir(self)
-  def isFile(self): return os.path.isfile(self)
-  def isLink(self): return os.path.islink(self)
-  def isMount(self): return os.path.ismount(self)
-  def normal(self): return Path(os.path.normpath(self))
-  def real(self): return Path(os.path.realpath(self))
-  def size(self): return Path(os.path.getsize(self))
+
+  def expandAll(self): return Path(os.path.expanduser(os.path.expandvars(str(self))))
+  def expandUser(self): return Path(os.path.expanduser(str(self)))
+  def expandVars(self): return Path(os.path.expandvars(str(self)))
+
+  def exists(self): return os.path.exists(str(self))
+  def isAbs(self): return os.path.isabs(str(self))
+  def isDir(self): return os.path.isdir(str(self))
+  def isFile(self): return os.path.isfile(str(self))
+  def isLink(self): return os.path.islink(str(self))
+  def isMount(self): return os.path.ismount(str(self))
+
+  def aTime(self): return datetime.fromtimestamp(os.path.getatime(str(self)))
+  def cTime(self): return datetime.fromtimestamp(os.path.getctime(str(self)))
+  def mTime(self): return datetime.fromtimestamp(os.path.getmtime(str(self)))
+  def size(self): return os.path.getsize(str(self))
+
+  def remove(self):
+    "Delete this file and return a reference to this Path object."
+
+    os.remove(str(self))
+    return self
+
+  @classmethod
+  def getCwd(cls):
+    """Return the current working directory as a Path object. This is a
+    class method, so call it as Path.getCwd()."""
+
+    return cls(os.getcwd())
+
+  def chdir(self):
+    """Set this Path as the current directory. Return the previously
+    current directory as a Path object."""
+
+    prev=Path.getCwd()
+    os.chdir(str(self))
+    return prev
+
+  def touch(self,*,atime=None,mtime=None,ref=None):
+    """Set the atime and mtime of this file. Return a reference to this
+    Path object."""
+
+    # Get the atime and mtime to be set for this Path's file.
+    if ref:
+      if not isinstance(ref,Path):
+        ref=Path(str(ref))
+      atime=ref.aTime()
+      mtime=ref.mTime()
+    if isinstance(atime,datetime): atime=atime.timestamp()
+    if isinstance(mtime,datetime): mtime=mtime.timestamp()
+
+    # Set the atime and mtime for this file.
+    os.utime(str(self),(atime,mtime))
+
+    return self
