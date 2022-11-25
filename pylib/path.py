@@ -7,11 +7,15 @@ thing:
     Path('alpha/bravo')
     >>> print(p)
     alpha/bravo
+    >>> p/'charlie'
+    Path('alpha/bravo/charlie')
     >>> p/='charlie'
     >>> print(p)
     alpha/bravo/charlie
     >>> print(p.split())
     [Path('alpha'), Path('bravo'), Path('charlie')]
+    >>> print(p.split(-1))
+    [Path('alpha/bravo'), Path('charlie')]
     >>> print(p.split(-1)[0])
     alpha/bravo
 
@@ -31,15 +35,17 @@ a string object. You can do all the things with a path you've always
 done with strings ... but see Path.split()'s docs for how it's different
 from str.split().
 
-A rooted path is a little different from the examples above.
+Splitting a rooted path presents os.sep (e.g. '/') as the first path
+component.
 
     >>> Path('/usr/local/bin').split()
-    [Path('/usr'), Path('local'), Path('bin')]
-    >>> Path('/usr/local//bin').split()
-    [Path('/usr'), Path('local'), Path('bin')]
+    [Path('/'), Path('usr'), Path('local'), Path('bin')]
+    >>> Path('/usr/local/','/bin').split()
+    [Path('/'), Path('usr'), Path('local'), Path('bin')]
 
-Here's more of a real-world example: Find all the directories in your
-current PATH that have an 'etc' directory next to them.
+Here's something closer to a real-world example: Find all the
+directories in your current PATH that have an 'etc' directory next to
+them.
 
     import os
     from path import Path
@@ -51,7 +57,8 @@ current PATH that have an 'etc' directory next to them.
     ]
 
 This code is still very new. There are certainly some buggy edge-cases
-to be worked out, but I think the Path class will be very handy.
+to be worked out, but I think the Path class will be very handy for
+applications that need to deal with filesystem structures.
 
 By the way, the trickiest part of Path's code is from "Russia Must
 Remove Putin" (a.k.a. Aaron C Hall) at StackOverflow. His example of an
@@ -61,26 +68,24 @@ https://bit.ly/how-to-subclass-str-in-python.
 
 __all__=[
   'Path',
+  '__author__',
+  '__version__',
 ]
 __author__='Jeff Clough, @jeffclough@mastodon.social'
-__version__='0.1.0-2022-11-12'
+__version__='0.1.1-2022-11-24'
 
 import os,re
 from datetime import datetime
 
 # Splitting paths needs to be able to split on colons (for drive or volume
 # names) as well as on whatever's in os.sep.
-#re_splitter=re.compile('/?[^:/]+[:/]?')
 re_splitter=re.compile(f"{os.sep}?[^:{os.sep}]+[:{os.sep}]?")
-
-# This RE simply matches any single path-separating character.
-re_sep=re.compile(f"[:{os.sep}]")
 
 class Path(str):
   def __new__(cls,*s):
     """
     >>> Path()
-    Path('')
+    Path('.')
     >>> Path('a')
     Path('a')
     >>> p=Path('a','b','c')
@@ -92,11 +97,11 @@ class Path(str):
     /a/b/c
     """
 
-    return str.__new__(cls,os.sep.join(
-      [x.strip('/') if i>0 else x.rstrip('/')
-        for i,x in enumerate([os.path.normpath(str(y)) for y in s])
-      ]
-    ))
+#    return str.__new__(cls,os.sep.join(
+#      [x.strip(os.sep) if i>0 else x.rstrip(os.sep)
+#        for i,x in enumerate([os.path.normpath(str(y)) for y in s])
+#      ]
+    return str.__new__(cls,os.path.normpath(os.sep.join(s)))
 
   def __repr__(self):
     return f"{type(self).__name__}({super().__repr__()})"
@@ -125,16 +130,30 @@ class Path(str):
     >>> Path('a','b','c').split(1)
     [Path('a'), Path('b/c')]
     >>> Path('/a/b/c').split()
-    [Path('/a'), Path('b'), Path('c')]
+    [Path('/'), Path('a'), Path('b'), Path('c')]
     >>> Path('a','b','c').split(-1)
     [Path('a/b'), Path('c')]
     >>> Path('a','b','c','d').split(-2)
     [Path('a/b'), Path('c'), Path('d')]
     >>> Path('/a','b','c').split(-1)
     [Path('/a/b'), Path('c')]
+    >>> Path('/a/b/c').dirName()
+    Path('/a/b')
+    >>> Path('/a/b/c').baseName()
+    Path('c')
+    >>> Path('a').dirName()
+    Path('.')
+    >>> Path('a').baseName()
+    Path('a')
+    >>> Path('/a').dirName()
+    Path('/')
+    >>> Path('/a').baseName()
+    Path('a')
     """
 
     items=re_splitter.findall(self)
+    if items and items[0].startswith(os.sep):
+      items[:1]=[os.sep,items[0][1:]]
     if n is None:
       # No further treatment is needed.
       pass
