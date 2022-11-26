@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+
+import argparse,sys,time,inspect
+from debug import DebugChannel
+
+def delay(**kwargs):
+  """Keep debug output from flying by too fast to do any good. This
+  is just a simple example of what might be done with a callback
+  function."""
+
+  time.sleep(.1)
+  return True
+
+dc=DebugChannel(True,stream=sys.stdout,callback=delay)
+
+def exception_test():
+  dc("Called exception_test() ...").indent()
+  x=1/0
+  dc("Returning from exception_test().").undent()
+
+@dc
+def subtest():
+  #for i,f in enumerate(inspect.stack()):
+  #  print(f"{i}: {f.filename=} {f.lineno=} {f.function=}")
+  dc('MULTILINE OUTPUT ...\n').indent()
+  dc('MULTILINE\nOUTPUT\n...\n')
+  dc.undent()('LIST OUTPUT ...')
+  dc('LIST OUTPUT ...'.split())
+  dc('TUPLE OUTPUT ...')
+  dc(tuple('TUPLE OUTPUT ...'.split()))
+  dc('DICTIONARY OUTPUT ...')
+  dc(dict(a='dictionary',c='output',b='...'))
+  dc('DONE!')
+
+@dc
+def testing():
+  """Make lots of calls to our DebugChannel object to put it
+  through its paces."""
+  
+  try:
+    dc('BASIC OUTPUT ...').indent()
+    dc('Message 1')
+    dc('Message 2')
+    dc.undent()
+    dc('INDENTED OUTPUT ...').indent().setIndentString('| ')
+    dc('indlev=%r'%(dc.indlev,)).indent(1)
+    dc('indlev=%r'%(dc.indlev,)).indent(1)
+    dc('indlev=%r'%(dc.indlev,)).indent(1)
+    dc('indlev=%r'%(dc.indlev,))
+    dc('same level')
+    dc.indent(-1)('indlev=%r'%(dc.indlev,))
+    dc.indent(-1)('indlev=%r'%(dc.indlev,))
+    dc.indent(-1)('indlev=%r'%(dc.indlev,))
+    dc.indent(-1).write('indlev=%r'%(dc.indlev,))
+    dc.indent(-1).write('indlev=%r'%(dc.indlev,))
+    dc.indent(-1).write('indlev=%r'%(dc.indlev,))
+    dc.indent().setIndentString('  ') # Restore indenture to where it ought to be.
+    dc('DISABLING OUTPUT ...').indent()
+    prev=dc.enable(False)
+    dc("Disabled debug output (so you shouldn't see this).")
+    prev=dc.enable(prev)
+    dc.undent()('RE-ENABLED OUTPUT ...')
+    dc('Previous DebugChannel enabled state: %r'%(prev,))
+    if opt.with_exception:
+      exception_test()
+    subtest()
+  except Exception as e:
+    dc.writeTraceback(e)
+
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Main Code
+
+ap=argparse.ArgumentParser()
+ap.add_argument('--format',action='store',default="{date} {time} {label}: {basename}:{function}:{line}: {indent}{message}",help="Set the DebugChannel's output format. (default: %(default)r)")
+ap.add_argument('--ignore-subtest',action='store_true',help="Tell our DebugChannel not to log activity in the subtest() function.")
+ap.add_argument('--with-exception',action='store_true',help="Throw and output an exception at some point.")
+opt=ap.parse_args()
+opt.format+='\n'
+dc.setFormat(opt.format)
+
+if opt.ignore_subtest:
+  dc.ignoreModule(inspect.stack()[0].filename,'subtest')
+
+#print(f"{dc.ignore_modules=}")
+testing()
+#print(f"{dc.ignore_modules=}")
