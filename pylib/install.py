@@ -19,6 +19,7 @@ __all__=[
   'Folder',
   'Path',
   'V',
+  'dc',
   'dir_mode',
   'expand_all',
   'parse_verbosity',
@@ -31,6 +32,13 @@ from enum import Flag,auto
 from functools import reduce
 from subprocess import run,DEVNULL,PIPE,STDOUT,CompletedProcess
 from path import Path
+from debug import DebugChannel
+
+dc=DebugChannel(
+  False,
+  sys.stdout,
+  fmt="{label}: {basename}:{line} {function}: {indent}{message}\n"
+)
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -52,11 +60,11 @@ class Options(object):
     self.dryrun=False
     self.force=False
     self.tdir=Path('~/my').expandUser()
-    self.sdir=Path(sys.argv[0]).dirName()
+    self.sdir=Path(sys.argv[0]).dirName().absolute()
     self.verb=V.OPS
 
   def __str__(self):
-    return f"dryrun={self.dryrun}, force={self.force}, tdir={self.tdir!r} verb={self.verb}"
+    return f"dryrun={self.dryrun}, force={self.force}, sdir={self.sdir!r} tdir={self.tdir!r} verb={self.verb}"
 
   def verbFlags(self):
     return str(self.verb)[2:].lower().replace('|','+')
@@ -123,8 +131,7 @@ def expand_all(filename):
   "Return the filename with ~ and environment variables expanded."
 
   p=os.path.expandvars(os.path.expanduser(str(filename)))
-  if options.verb & V.DEBUG:
-    print(f"expand_all({filename!r}) -> {p!r}")
+  dc(f"expand_all({filename!r}) -> {p!r}")
   return p
 
 def filetime(filename,default=0):
@@ -363,8 +370,7 @@ class Command(object):
       r=CompletedProcess(self.cmd+args,0,"","")
     else:
       # Run our command, capturing it stdout and stderr output as string values.
-      if options.verb & V.DEBUG:
-        print(f"run({self.cmd+args},text=True,stdin={self.stdin},stdout={self.stdout},stderr={self.stderr})")
+      dc(f"run({self.cmd+args},text=True,stdin={self.stdin},stdout={self.stdout},stderr={self.stderr})")
       r=run(self.cmd+args,text=True,stdin=self.stdin,stdout=self.stdout,stderr=self.stderr)
     self.result=r.returncode
     self.stdout=r.stdout
@@ -458,12 +464,18 @@ class File(Target):
   """An instance of File is ... a filename."""
 
   def __init__(self,target):
+    """Set the filename of this File object's target file."""
+
     super().__init__(target)
     self.source=None
     self.links=[]
+    self.force_links=False
+    self.follow=False
 
   def __call__(self):
-    "Make sure all our dependencies are up to date."
+    """After making sure all our dependencies are up to date, perform any
+    copy and/or symlink operations the caller has set up for this File
+    object. Return a reference to this File object."""
 
     # Target.__call__() handles any dependencies.
     super().__call__()
@@ -475,54 +487,66 @@ class File(Target):
           print(f"{self.source} ==> {self.target}")
         if not options.dryrun:
           # Copy the file.
-          self.target=shutil.copy2(self.source,self.target,follow_symlinks=False)
+          self.target=shutil.copy2(self.source,self.target,follow_symlinks=self.follow)
           # Set the user and or group ownership if this instance is so configured.
           if self.user or self.group:
             shutil.chown(self.target,user=self.user,group=self.group)
 
     if self.links:
-      # Our target's directory is the path all symlink paths are relative
-      # to (unless the paths are absolute).
-      d=self.target.dirName()
-      prev_dir=d.chdir()
-      # With our current directory set, create our symlink(s).
-      targ=self.target.relative()
+      # Because we do our best to create relative symlinks, we have to change
+      # the current current directory to where the link will be created and
+      # then create using the relative path to our target.
+
+      org_dir=Path.getCwd()
       try:
         for l in self.links:
-          l=l.absolute()
-          if l.isLink() and l.real()==targ.absolute():
-            continue # This link already exists.
+          # Preparation ...
+          org_dir.chdir() # We have to start in with our original CWD.
+          ldir,lfile=l.absolute().split(-1)
+          ldir.chdir()    # Now we switch to the link's directory.
+          t=self.target.relative() # This is our relative link.
+          # Execution ...
+          if lfile.isLink() and lfile.real()==self.target:
+            continue
           if l.exists() and not l.isDir() and self.force_links:
-            if options.verb & V.OPS:
-              print(f"rm {l}")
-            if not options.dryrun:
-              l.remove() # Remove this directory entry that's in the way.
+            if options.verb & V.OPS: print(f"rm {l}")
+            if not options.dryrun: l.remove()
           if not l.exists():
-            if options.verb & V.OPS:
-              print(f"{l} --> {targ}")
-            if not options.dryrun:
-              os.symlink(targ,l)
+            if options.verb & V.OPS: print(f"{l} --> {t}")
+            if not options.dryrun: os.symlink(t,l)
       finally:
-        prev_dir.chdir()
+        # TODO: Make Path.getCwD and Path.chdir() viable Python context
+        # managers so we can get away from the try ... finally pattern.
+        org_dir.chdir()   # Restore our original CWD.
 
     return self
 
-  def link(self,*args,force=False):
-    """Prepare to create one or more symlinks to this target file.
-    Non-absolute paths in links are relative to the directory our target
-    file is in.
+  def link(self,*args,link_dir=None,force=None):
+    """Prepare to create one or more symlinks (args_ to this target
+    file. Non-absolute paths are relative to link_dir if given, or our
+    target's directory otherwise.
 
-    The links won't be created until this File instance is called.
+    The force argument defaults to None but is interpreted as boolean if
+    it's anything else. Normally, symlinks won't replace an existing
+    file or simlink, but force=True means the new symlink will be
+    creeated unless it already exists as a symlink and points to this
+    File object's target.
+
+    The link(s) won't be created until this File instance is called. The
+    link(...) method just sets things up.
 
     Return a reference to this File object."""
 
     self.links.extend([
       x if isinstance(x,(Path,Target)) else Path(x) for x in args
     ])
-    self.force_links=force
+    if link_dir:
+      self.link_dir=link_dir
+    if force is not None:
+      self.force_links=force
     return self
 
-  def copy(self,source):
+  def copy(self,source,follow=False):
     """Prepare to copy the source file to our target file. Non-absolute
     paths in links are relative to the path in install.options.sdir,
     which is initially set to the directory the installer script is in.
@@ -537,6 +561,7 @@ class File(Target):
       s=(options.sdir/s).normal()
     self.deps=[s] # Make sure our source file is a dependency.
     self.source=s
+    self.follow=follow
     return self
 
 class Folder(Target):
@@ -597,6 +622,9 @@ class Folder(Target):
     that directory."""
 
     return self.target
+
+  def __repr__(self):
+    return f"{self.__class__.__name__}({repr(self.target)})"
 
   def __truediv__(self,other):
     """Return a filesystem path joining this target and the other."""

@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 import argparse,atexit,os,re,sys
-from pprint import pprint
 
 # We run this code from the source directory, and we want to use the latest
 # version of our libraries.
 SRCDIR=os.path.dirname(os.path.realpath(sys.argv[0]))
-sys.path.insert(1,os.path.join(SRCDIR,'pylib'))
+sys.path.insert(0,os.path.join(SRCDIR,'pylib'))
 from install import *
 
 # Regardless of how this code terminates, put the PWD back like we found it.
@@ -32,14 +31,14 @@ opt=ap.parse_args()
 
 # Parse our verbosity flags first.
 options.verb=parse_verbosity(opt.verbosity)
+dc.enable(options.verb & V.DEBUG)
 
 # Update our Options instance (options) with our command line option values.
 options.dryrun=opt.dryrun
 options.force=opt.force
 options.tdir=Path(options.tdir).expandAll()
 
-if options.verb & V.DEBUG:
-  print(f"options: {options}")
+dc(f"options: {options}")
 
 if opt.debugger:
   import pdb
@@ -89,10 +88,11 @@ Folder(options.tdir/'include')()
 Folder(options.tdir/'lib')()
 lib_dir=Folder(options.tdir/'lib'/'python')()
 
-pylib=Folder('pylib') # No need to create this one.
+pylib=Folder(options.sdir/'pylib') # No need to create this in the filesystem.
 
 # Copy our library modules first because some of our scripts are really just
-# symlinks to them. These Python modules are located in our pylib directory.
+# symlinks to them. These Python modules are located in our pylib directory
+# and must be copied to ~/my/lib/python.
 pylibs=[
   'CSV.py',
   'RE.py',
@@ -122,16 +122,24 @@ pylibs=[
 ]
 
 for f in pylibs:
-  File(lib_dir/f).copy(pylib/f)()
+  File(lib_dir/f).copy(pylib/f,follow=True)()
 
 # Set up symlinks to Python modules that can also be run as commands.
 command_links=[
   'timeout',
 ]
-for f in command_links:
-  File(lib_dir/f).copy(os.path.join('pylib',f)).link(bin_dir/f)()
-  module=f+'.py'
-  File(lib_dir/module).copy(pylib/module).link(bin_dir/f)
+for cmd in command_links:
+  mod=cmd+'.py'
+  File(lib_dir/mod).copy(pylib/mod).link(bin_dir/cmd,force=options.force)()
+
+# Do something very similar with phonetics.py.
+File(lib_dir/'phonetics.py').copy(pylib/'phonetics.py').link(
+  *[bin_dir/x for x in ('nato','police','raf','us','wu')],
+  force=options.force
+)()
+
+#TODO: Figure out why forcing links works for "base" below, but not for
+# "timeout" and "phonetics.py" above.
 
 # Copy our "base" script and set up its symlinks.
 File(bin_dir/'base').copy('base').link(
@@ -143,13 +151,11 @@ File(bin_dir/'base').copy('base').link(
   'decode64',
   'encode16',
   'encode32',
-  'encode64'
+  'encode64',
+  force=options.force
 )()
 
-# Do something very similar with phonetics.py.
-File(lib_dir/'phonetics.py').copy(pylib/'phonetics.py').link(
-  *[f'../../bin/{x}' for x in ('nato','police','raf','us','wu')]
-)()
+sys.exit(0)
 
 # Copy our Python and shell scripts. These are located in our source directory.
 scripts=[
