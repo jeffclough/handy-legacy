@@ -502,7 +502,7 @@ class File(Target):
           if lfile.isLink() and lfile.real()==self.target:
             continue
           if l.exists() and not l.isDir() and self.force_links:
-            if options.verb & V.OPS: print(f"rm {l}")
+            dc(f"rm {l}")
             if not options.dryrun: l.remove()
           if not l.exists():
             if options.verb & V.OPS: print(f"{l} --> {t}")
