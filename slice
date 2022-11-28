@@ -24,6 +24,7 @@ ap.add_argument('-l',dest='filenames',action='store_false',default=True,help="Su
 ap.add_argument('--last',dest='last',action='store_true',default=False,help="Output only the last matching slice in each file. (NOT YET IMPLEMENTED!)")
 ap.add_argument('-n','--next',dest='next',action='store_true',default=False,help="Keeps ENDPAT from matching the same line STARTPAT matched. This also requires that the line matching ENDPAT not be output and remain available to be matched by STARTPAT. (This option has no effect if LASTLINE is use rather than ENDPAT, and it makes no sense if FIRSTLINE is used rather than STARTPAT.)")
 ap.add_argument('-m','--multi',dest='multi',action='store_true',default=False,help="Output more than one slice per file. Only the first slice is output by default. (This only makes sense if STARTPAT is used.")
+ap.add_argument('--divider',action='store',default=None,help="Print this string between slices if --multi was used. (default: %(default)r)")
 ap.add_argument('--debug',action='store_true',help="Turn on debugging output for trouble-shooting purposes.")
 ap.add_argument('--test',action='store_true',help="This runs a self-test and is intended for debugging this program. (No output means everything worked correctly.)")
 ap.add_argument('args',nargs='*',help="See forms 1 and 2 above under usage.")
@@ -183,7 +184,7 @@ class FileReader(object):
       self.line_number+=1
     else:
       self.eof=True
-    dc(f"{self.eof=}, {line=}")
+    dc(f"self.eof={self.eof}, line={line}")
     return line
 
   def rewindOneLine(self):
@@ -249,6 +250,8 @@ def slice(filename,first,last,relative=False):
       # Break out of this loop unless we're looking for multiple slices.
       if not opt.multi:
         break
+      if opt.divider is not None:
+        print(opt.divider)
 
 # If the --test option was given, run our internal tests and quit.
 if opt.test:
@@ -264,7 +267,7 @@ if opt.test:
     "Return (stdout,stderr) from running the given command."
 
     proc=subprocess.Popen(args,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-    stdut,stderr=proc.communicate()
+    stdout,stderr=proc.communicate()
     return (proc.returncode,stdout,stderr)
 
   prog=sys.argv[0]
