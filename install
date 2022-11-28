@@ -8,7 +8,7 @@ sys.path.insert(0,os.path.join(SRCDIR,'pylib'))
 from install import *
 
 __author__='Jeff Clough, @jeffclough@mastodon.social'
-__version__='0.1.0-2022-11-27'
+__version__='0.1.1-2022-11-27'
 
 # Regardless of how this code terminates, put the PWD back like we found it.
 atexit.register(os.chdir,os.getcwd())
@@ -114,6 +114,7 @@ pylibs=[
   'latlong.py',
   'loggy.py',
   'parsing.py',
+  'path.py',
   'png.py',
   'prime.py',
   'pyparsing.py',
@@ -157,8 +158,6 @@ File(bin_dir/'base').copy('base').link(
   'encode64',
   force=options.force
 )()
-
-sys.exit(0)
 
 # Copy our Python and shell scripts. These are located in our source directory.
 scripts=[
@@ -215,17 +214,18 @@ scripts=[
 for f in scripts:
   File(bin_dir/f).copy(f)()
 
+dc(f"{platform.system=}")
 if platform.system=='Darwin':
   # Get a list of the non-Alex English voices built into the "say" command.
   re_say_parser=re.compile(r'([-a-zA-Z]+)\s+([_a-zA-Z]+)')
   say=Command("say -r250",stdout=PIPE,stderr=PIPE,quiet=True)
   say("-v?")
   voices=[
-    m.group(1).lower() for m in
+    bin_dir/m.group(1).lower() for m in
       [re_say_parser.match(l) for l in say.stdout.split('\n')]
     if m and m.group(2).startswith('en_') and m.group(1).lower()!='alex'
   ]
+  dc(f"Found voices: {voices}")
   # Install our "alex" script and set up its symlinks.
-  File(bin_dir/'alex').copy('alex').link(*voices)
-
+  File(bin_dir/'alex').copy('alex').link(*voices)()
 

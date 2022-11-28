@@ -7,7 +7,7 @@ executables.
 
 """
 __author__='Jeff Clough, @jeffclough@mastodon.social'
-__version__='0.1.0-2022-11-27'
+__version__='0.1.1-2022-11-27'
 
 __all__=[
   'DEVNULL',
