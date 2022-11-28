@@ -111,7 +111,7 @@ pylibs=[
   'grep.py',
   'handy.py',
   'install.py',
-  'latlong.py',
+# 'latlong.py',
   'loggy.py',
   'parsing.py',
   'path.py',
@@ -214,7 +214,7 @@ scripts=[
 for f in scripts:
   File(bin_dir/f).copy(f)()
 
-dc(f"{platform.system=}")
+dc(f"platform.system={platform.system}")
 if platform.system=='Darwin':
   # Get a list of the non-Alex English voices built into the "say" command.
   re_say_parser=re.compile(r'([-a-zA-Z]+)\s+([_a-zA-Z]+)')
@@ -229,3 +229,5 @@ if platform.system=='Darwin':
   # Install our "alex" script and set up its symlinks.
   File(bin_dir/'alex').copy('alex').link(*voices)()
 
+# We exit with a return code of 1 if any exceptions occurred.
+sys.exit(int(bool(Target.exceptions)))

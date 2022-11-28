@@ -383,6 +383,10 @@ class Target(object):
 
   See the File class for examples."""
 
+  # This class attribute holds a list of exceptions that have occurred in an
+  # instance of this class or that of any of its subclasses.
+  exceptions=[]
+
   def __init__(self,target):
     # Remember the file to be created.
     if not isinstance(target,Path):
@@ -465,11 +469,18 @@ class File(Target):
     self.links=[]
     self.force_links=False
     self.follow=False
+    self.exception=None
 
   def __call__(self):
     """After making sure all our dependencies are up to date, perform any
     copy and/or symlink operations the caller has set up for this File
-    object. Return a reference to this File object."""
+    object.
+
+    If an OSError exception occurs, announce it on stderr and store the
+    exception instance in this instance's "exception" attribute, which
+    will otherwise be None.
+    
+    Return a reference to this File object."""
 
     # Target.__call__() handles any dependencies.
     super().__call__()
@@ -481,7 +492,13 @@ class File(Target):
           print(f"{self.source} ==> {self.target}")
         if not options.dryrun:
           # Copy the file.
-          self.target=shutil.copy2(self.source,self.target,follow_symlinks=self.follow)
+          try:
+            self.target=shutil.copy2(self.source,self.target,follow_symlinks=self.follow)
+          except OSError as e:
+            print(f"\n    {e}\n",file=sys.stderr)
+            self.exception=e
+            __class__.exceptions.append(e)
+            return self
           # Set the user and or group ownership if this instance is so configured.
           if self.user or self.group:
             shutil.chown(self.target,user=self.user,group=self.group)
@@ -499,14 +516,19 @@ class File(Target):
           ldir.chdir()    # Now we switch to the link's directory.
           t=self.target.relative() # This is our relative link.
           # Execution ...
-          if lfile.isLink() and lfile.real()==self.target:
-            continue
-          if l.exists() and not l.isDir() and self.force_links:
-            dc(f"rm {l}")
-            if not options.dryrun: l.remove()
-          if not l.exists():
-            if options.verb & V.OPS: print(f"{l} --> {t}")
-            if not options.dryrun: os.symlink(t,l)
+          try:
+            if lfile.isLink() and lfile.real()==self.target:
+              continue
+            if l.exists() and not l.isDir() and self.force_links:
+              dc(f"rm {l}")
+              if not options.dryrun: l.remove()
+            if not l.exists():
+              if options.verb & V.OPS: print(f"{l} --> {t}")
+              if not options.dryrun: os.symlink(t,l)
+          except OSError as e:
+            print(f"\n    {e}\n",file=sys.stderr)
+            self.exception=e
+            __class__.exceptions.append(e)
 
     return self
 
@@ -593,15 +615,20 @@ class Folder(Target):
       if not self.target.isDir():
         raise Error(f"Cannot create directory {self} because it already exists as something else.")
     else:
-      # Oddly, os.mkdirs() uses the umask to set permissions on any intermediate
-      # directories it creates. It uses its mode parameter only when creating
-      # the leaf directory.
-      if options.verb & V.OPS:
-        print(f"mkdir {self.target}")
-      if not options.dryrun:
-        orig_umask=os.umask(stat_mode(self.mode^0o777))
-        os.makedirs(self.target,mode=stat_mode(self.mode))
-        os.umask(orig_umask)
+      try:
+        # Oddly, os.mkdirs() uses the umask to set permissions on any intermediate
+        # directories it creates. It uses its mode parameter only when creating
+        # the leaf directory.
+        if options.verb & V.OPS:
+          print(f"mkdir {self.target}")
+        if not options.dryrun:
+          orig_umask=os.umask(stat_mode(self.mode^0o777))
+          os.makedirs(self.target,mode=stat_mode(self.mode))
+          os.umask(orig_umask)
+      except OSError as e:
+        print(f"\n    {e}\n",file=sys.stderr)
+        self.exception=e
+        __class__.exceptions.append(e)
 
     return self
 
