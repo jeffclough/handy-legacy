@@ -7,6 +7,9 @@ SRCDIR=os.path.dirname(os.path.realpath(sys.argv[0]))
 sys.path.insert(0,os.path.join(SRCDIR,'pylib'))
 from install import *
 
+__author__='Jeff Clough, @jeffclough@mastodon.social'
+__version__='0.1.0-2022-11-27'
+
 # Regardless of how this code terminates, put the PWD back like we found it.
 atexit.register(os.chdir,os.getcwd())
 # But for now, use this program's directory as the default.

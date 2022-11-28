@@ -6,6 +6,8 @@ Facilitate installing, building (if necessary), and installing
 executables.
 
 """
+__author__='Jeff Clough, @jeffclough@mastodon.social'
+__version__='0.1.0-2022-11-27'
 
 __all__=[
   'DEVNULL',
@@ -118,14 +120,6 @@ class Error(Exception):
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Some general utility functions.
-
-#def chdir(path):
-#  """Chage to the given directory, and return he previous current
-#  directory."""
-#
-#  prev=os.getcwd()
-#  os.chdir(path)
-#  return prev
 
 def expand_all(filename):
   "Return the filename with ~ and environment variables expanded."
@@ -393,7 +387,7 @@ class Target(object):
     # Remember the file to be created.
     if not isinstance(target,Path):
       target=Path(target)
-    if target.isAbs():
+    if target.isAbsolute():
       self.target=target
     else:
       self.target=options.tdir/target
@@ -498,10 +492,9 @@ class File(Target):
       # then create using the relative path to our target.
 
       org_dir=Path.getCwd()
-      try:
-        for l in self.links:
-          # Preparation ...
-          org_dir.chdir() # We have to start in with our original CWD.
+      for l in self.links:
+        with org_dir.chdir(): 
+          # org_dir must be the current directory for l.absolute() to work.
           ldir,lfile=l.absolute().split(-1)
           ldir.chdir()    # Now we switch to the link's directory.
           t=self.target.relative() # This is our relative link.
@@ -514,10 +507,6 @@ class File(Target):
           if not l.exists():
             if options.verb & V.OPS: print(f"{l} --> {t}")
             if not options.dryrun: os.symlink(t,l)
-      finally:
-        # TODO: Make Path.getCwD and Path.chdir() viable Python context
-        # managers so we can get away from the try ... finally pattern.
-        org_dir.chdir()   # Restore our original CWD.
 
     return self
 
@@ -557,7 +546,7 @@ class File(Target):
     Return a referece to this File object."""
 
     s=source if isinstance(source,(Path,Target)) else Path(source)
-    if not s.isAbs():
+    if not s.isAbsolute():
       s=(options.sdir/s).normal()
     self.deps=[s] # Make sure our source file is a dependency.
     self.source=s

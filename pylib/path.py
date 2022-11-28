@@ -72,9 +72,10 @@ __all__=[
   '__version__',
 ]
 __author__='Jeff Clough, @jeffclough@mastodon.social'
-__version__='0.1.1-2022-11-24'
+__version__='0.2.0-2022-11-27'
 
 import os,re
+from contextlib import contextmanager
 from datetime import datetime
 
 # Splitting paths needs to be able to split on colons (for drive or volume
@@ -166,7 +167,27 @@ class Path(str):
     return [Path(x) for  x in items]
 
   # Steal some functionality from os and os.path.
-  def absolute(self): return Path(os.path.abspath(str(self)))
+  def absolute(self,reference=None):
+    """Unless this is already an absolute (rooted) path, compute and
+    return this Path instance's absolute path. If the "reference"
+    argument is given, it will be used (rather than the current working
+    directory) as the base directory _this_ directory is relative to."""
+
+    if self.isAbsolute():
+      return self
+
+    # Get the path _this_ path is relative to.
+    if reference:
+      if isinstance(reference,Path):
+        p=reference
+      else:
+        p=Path(str(reference))
+    else:
+      p=self.getCwd()
+
+    # Return the absolute path.
+    return (p/self).normal()
+
   def relative(self,start=os.curdir): return Path(os.path.relpath(str(self),str(start)))
   def normal(self): return Path(os.path.normpath(str(self)))
   def real(self): return Path(os.path.realpath(str(self)))
@@ -179,7 +200,7 @@ class Path(str):
   def expandVars(self): return Path(os.path.expandvars(str(self)))
 
   def exists(self): return os.path.exists(str(self))
-  def isAbs(self): return os.path.isabs(str(self))
+  def isAbsolute(self): return os.path.isabs(str(self))
   def isDir(self): return os.path.isdir(str(self))
   def isFile(self): return os.path.isfile(str(self))
   def isLink(self): return os.path.islink(str(self))
@@ -203,13 +224,25 @@ class Path(str):
 
     return cls(os.getcwd())
 
+  @contextmanager
   def chdir(self):
-    """Set this Path as the current directory. Return the previously
-    current directory as a Path object."""
+    """This method changes the current directory to this directory. It
+    can also be used as a context manager, in which case the previously
+    current directory is restored after the "with" block. Example:
 
-    prev=Path.getCwd()
-    os.chdir(str(self))
-    return prev
+        with Path('/some/dir').chdir() as d:
+          # Path d is now the CWD.
+          ...
+
+        # Now the previous CWD is in effect.
+    """
+
+    prev=Path.getCwd()  # Remember the previous directory.
+    os.chdir(str(self)) # Change to the new directory.
+    try:
+      yield self        # "Return" this Path instance.
+    finally:
+      prev.chdir()      # Restore the previous current directory.
 
   def touch(self,*,atime=None,mtime=None,ref=None):
     """Set the atime and mtime of this file. Return a reference to this
