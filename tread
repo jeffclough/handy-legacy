@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
 
-# Turn on "true" division, the default in 3.0+, for /. Use the // operator
-# to force "floor" divsion, which is classical integer division. But be
-# aware that 1.0//2 == 0.0 under "true" division.
-
-
 import copy,optparse,os,re,stat,sys,time,traceback
 from OptionParserFormatters import IndentedHelpFormatterWithNL
 from collections import namedtuple
@@ -20,7 +15,7 @@ def die(msg,rc=1):
 #  if opt.debug:
 #    sys.stderr.write(os.path.basename(sys.argv[0])+' D: '+msg+'\n')
 
-debug=DebugChannel(line_fmt='{label:.1s}: {basename}:{function}:{line}: {indent}{message}\n')
+debug=DebugChannel(fmt='{label:.1s}: {basename}:{function}:{line}: {indent}{message}\n')
 #debug(f"debug.fmt={debug.fmt!r}")
 
 if sys.version_info>=(2,6):
@@ -160,14 +155,8 @@ def unique(seq,key=None,copy_depth=None):
   elif isinstance(seq,bytearray): ret=bytearray(ret)
   return ret
 
-# Make sure we can get total_seconds() for a timedelta object, even if we're
-# running on a pre-2.7 version of Python.
-if sys.version_info<(2,7):
-  def total_seconds(td):
-    return (td.microseconds+(td.seconds+td.days*24*3600)*10**6)//10**6
-else:
-  def total_seconds(td):
-    return td.total_seconds()
+def total_seconds(td):
+  return td.total_seconds()
 
 class TimeZone(tzinfo):
   "Make creating tzinfo objects simple and easy."
@@ -299,9 +288,9 @@ epoch_names=sorted(epochs.keys())
 op=optparse.OptionParser(
   formatter=IndentedHelpFormatterWithNL(2,8),
   usage="%prog [OPTIONS] [arguments expressing date and time]",
-  description="""The tread script (pronounced "T-read") reads a time expression in any of several formats and outputs it in a given (or default "YYYY-MM-DD hh:mm:ss") format.
+  description="""The tread script (pronounced "T-read") reads a time expression in any of several formats and outputs it in the given (or default "YYYY-MM-DD hh:mm:ss") format.
   
-%prog looks for the time to be parsed on the command line first and assumes that all arguments are part of a single time expression. If there are no command line arguments, but standard input is being redirected or piped, each line is parsed for a time. Failing that, the current time is used. Parsing from standard input is the only scenario that might output more than one time expression.
+%prog looks for the time to be parsed on the command line first and assumes all arguments are part of a single time expression. If there are no command line arguments, but standard input is being redirected or piped, each line is parsed for a time. Failing that, the current time is used. Parsing from standard input is the only scenario that might output more than one time expression.
   
 See the options below for output format help, including expressing time in various epochs and performing age calculations.""",
   epilog="""
@@ -346,7 +335,7 @@ op.add_option('--future',dest='assume_past',action='store_false',default=True,he
 op.add_option('-t',metavar='TZ',dest='transpose',action='store',default=None,help="Transpose the parsed time to a new time zone. \"local\" may be used to identify the local time zone. This option does NOT transpose between standard time and DST, only between time zones. Note also and UTC is ALWAYS on standard time.")
 op.add_option('--tzlist',dest='tzlist',action='store_true',default=False,help="Show a list of time zones this program knows about and quit.")
 op.add_option('--allow-bad-data',dest='allow_bad_data',action='store_true',default=None,help="Output lines containing no discernible time value.")
-op.add_option('--where',dest='where',type='choice',choices=('beginning','start','whole','end'),default=None,help="""Say where to allow the date and time to appear in the given text. This can be any one of "start", "beginning", "whole", or "end". "start" and "beginning" are synonymous, and "whole" means that ONLY the date and time may appear in the given text.""")
+op.add_option('--where',dest='where',type='choice',choices=('beginning','start','whole','end'),default=None,help="""Say where to allow the date and time to appear in the given text. This can be any one of "start", "beginning", "whole", or "end". "start" and "beginning" are synonymous, and "whole" means ONLY the date and time may appear in the given text.""")
 op.add_option('--debug',dest='debug',action='store_true',help="Presents output only a developer could love.")
 opt,args=op.parse_args()
 
@@ -512,7 +501,6 @@ class DateTimeParser(ParserBase):
             dt.microsecond,dt.tzinfo
           )
       if no_year and opt.assume_past and dt>datetime.now(d.tz):
-        # Re-interpret of Feb 29 validation.
         debug('subtracting one year ...')
         dt=datetime(
           d.year-1,d.month,d.day,
@@ -723,11 +711,11 @@ def parse_time(time_string):
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 def get_input():
-  """This is a generator function that returns the string of
-  concatenated command line arguments. Failing that, it returns each
-  line of standard input (one at a time). Failing that, it returns the
-  current time in "YYYY-mm-dd HH:MM:SS TZ" format. Only reading from
-  standard input can ever yield more than one input string."""
+  """This generator function returns the string of concatenated command
+  line arguments. Failing that, it returns each line of standard input
+  (one at a time). Failing that, it returns the current time in
+  "YYYY-mm-dd HH:MM:SS TZ" format. Only reading from standard input can
+  ever yield more than one output string."""
 
   if args:
     # Use command line arguments if available.
@@ -784,7 +772,7 @@ for time_string in get_input():
       print(output)
     else:
       ##
-      ## Output the reformated time that we've parsed.
+      ## Output the reformated time we've parsed.
       ##
       if opt.transpose:
         #debug('pt.dt=%r'%(pt.dt,))

@@ -30,7 +30,7 @@ ap.add_argument('--test',action='store_true',help="This runs a self-test and is 
 ap.add_argument('args',nargs='*',help="See forms 1 and 2 above under usage.")
 opt=ap.parse_args()
 
-dc=DebugChannel(opt.debug,label='D',line_fmt='{label}: {basename}({function},{line}): {indent}{message}\n')
+dc=DebugChannel(opt.debug,label='D',fmt='{label}: {basename}({function},{line}): {indent}{message}\n')
 
 def die(msg,rc=0):
   print(f"{sys.argv[0]}: {msg}",file=sys.stderr)

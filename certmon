@@ -171,7 +171,7 @@ log=loggy.get_logger(facility=opt.log_facility,level=opt.log_level)
 dc=DebugChannel(
   opt.log_level=='debug',
   stream=loggy.LogStream(logger=log),
-  line_fmt='{function}:{line} - {indent}{message}'
+  fmt='{function}:{line} - {indent}{message}'
 )
 
 # Get our saved config data if it's available.
