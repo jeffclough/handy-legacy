@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import fcntl,fnmatch,os,pipes,re,struct,sys,termios
+import fcntl,fnmatch,os,re,shlex,struct,sys,termios
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -400,12 +400,12 @@ def shellify(val):
   """
 
   if val==None:
-    return "''"
-  if isinstance(val,int) or isinstance(val,float):
-    return val
-  if not isinstance(val,str):
-    val=str(val)
-  return pipes.quote(val)
+    s=''
+  elif not isinstance(val,str):
+    s=str(val)
+  else:
+    return shlex.quote(val)
+  return shlex.quote(s)
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -449,7 +449,7 @@ class ProgInfo(object):
     # A decent choice of temp file or directory for this program, if
     # needed.
     self.tempdir=self.findMainTempDir()
-    self.temp=os.path.join(self.tempdir,os.sep,'%s.%d'%(self.name,self.pid))
+    self.temp=os.path.join(self.tempdir,'%s.%d'%(self.name,self.pid))
 
     # Get the terminal width and and height, or default to 25x80.
     self.getTerminalSize()
@@ -503,9 +503,9 @@ class ProgInfo(object):
 
   def findMainTempDir(self,perms=None):
     """Return the full path to a reasonable guess at what might be a
-    temp direcory on this system, creating if necessary using the given
-    permissions. If no permissions are given, we'll base the perms on
-    the current umask."""
+    temp direcory on this system, creating it if necessary using the
+    given permissions. If no permissions are given, we'll base the perms
+    on the current umask."""
 
     # Let the environment tell us where our temp directory is, or ought
     # to be, or just use /tmp if the enrionment lets us down.
