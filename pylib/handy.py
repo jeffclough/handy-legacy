@@ -439,12 +439,9 @@ class ProgInfo(object):
     # script was run.
     self.dir=os.path.abspath(os.path.dirname(sys.argv[0]))
 
-    # Like name, but this follows any symlinks to find the real name.
-    self.real_name=os.path.realpath(sys.argv[0])
-
-    # Like dir, but this follows any symlinks to find the real directory
-    # and also returns the full, absolute path.
-    self.real_dir=os.path.dirname(os.path.realpath(sys.argv[0]))
+    # Like name and dir, but these follow any symlinks to find the real name.
+    # Also, real_dir holds the full, absolute path.
+    self.real_dir,self.real_name=os.path.split(os.path.realpath(sys.argv[0]))
 
     # A decent choice of temp file or directory for this program, if
     # needed.
