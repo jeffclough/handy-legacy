@@ -436,6 +436,9 @@ if __name__=='__main__':
   from debug import DebugChannel
   from doctest import testmod
   from english import nounf
+  from handy import ProgInfo,die
+
+  prog=ProgInfo()
 
   def grep(opt):
     "Find all matching conent according to the given argparse namespace."
@@ -453,47 +456,50 @@ if __name__=='__main__':
           print((repr(m.groups())))
         if opt.dict:
           print(('{%s}'%', '.join([
-            '"%s": "%s"'%(k,v) for k,v in sorted(dgroups.items())
+            f'"{k}": "{v}"' for k,v in sorted(dgroups.items())
           ])))
         if show_filename:
-          print(('%s: %s'%(fn,line)))
+          print(f"{fn}: {line}")
         else:
           print(line)
 
     opt.re_flags=0
     if opt.ignore_case:
       opt.re_flags|=re.IGNORECASE
-    if bug:
-      bug('Options').indent(1)
-      bug('count=%r'%(opt.count,))
-      bug('fmt=%r'%(opt.fmt,))
-      bug('tuple=%r'%(opt.tuple,))
-      bug('dict=%r'%(opt.dict,))
-      bug('ignore_case=%r'%(opt.ignore_case,))
-      bug('invert=%r'%(opt.invert,))
-      bug('ext=%r'%(opt.ext,))
-      bug('extensions=%r'%(opt.extensions,))
-      bug('re_flags=%r'%(opt.re_flags,))
-      bug.indent(-1)('Aguements').indent(1)
-      bug('args=%r'%(opt.args,))
-      bug.indent(-1)
+    if dc:
+      dc('Options').indent(1)
+      dc('count=%r'%(opt.count,))
+      dc('fmt=%r'%(opt.fmt,))
+      dc('tuple=%r'%(opt.tuple,))
+      dc('dict=%r'%(opt.dict,))
+      dc('ignore_case=%r'%(opt.ignore_case,))
+      dc('invert=%r'%(opt.invert,))
+      dc('ext=%r'%(opt.ext,))
+      dc('extensions=%r'%(opt.extensions,))
+      dc('re_flags=%r'%(opt.re_flags,))
+      dc.indent(-1)('Aguements').indent(1)
+      dc('pattern=%r'%(opt.pattern,))
+      dc('filenames=%r'%(opt.filenames,))
+      dc.indent(-1)
 
     all_matches=0 # Total matches over all scanned input files.
-    pat=compile(opt.args.pop(0),opt.re_flags)
-    opt.args=[a for a in opt.args if not os.path.isdir(a)]
+    if not opt.pattern:
+      die("No regular expression given.")
+    pat=compile(opt.pattern,opt.re_flags)
+    opt.filenames=[a for a in opt.filenames if not os.path.isdir(a)]
     show_filename=False
-    if len(opt.args)<1:
-      opt.args.append('-')
-    elif len(opt.args)>1 and not opt.one:
+    if len(opt.filenames)<1:
+      opt.filenames.append('-')
+    elif len(opt.filenames)>1 and not opt.one:
       show_filename=True
 
-    for fn in opt.args:
+    for fn in opt.filenames:
       matches=0 # Matches found in this file.
       if fn=='-':
         fn='stdin'
         f=sys.stdin
       else:
-        f=file(fn)
+        f=open(fn)
       for line in f:
         if line[-1]=='\n':
           line=line[:-1]
@@ -513,7 +519,7 @@ if __name__=='__main__':
         elif opt.list:
           print(fn)
       all_matches+=matches
-      if fn!='-':
+      if fn!='stdin':
         f.close()
 
     sys.exit((0,1)[all_matches==0])
@@ -730,36 +736,50 @@ if __name__=='__main__':
 
    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
   # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-  # Parse our command line.
+  # Parse our command line using an ArgumentParser instance with subparsers. If
+  # This command was symlinked to the name of one of the subparsers, then allow
+  # only the options for that subparser.
+
+  dc=DebugChannel(label='D',enabled=True)
+
   ap=argparse.ArgumentParser()
-  ap.add_argument('-d',dest='debug',action='store_true',help="Turn on debug messages.")
+  ap.add_argument('--debug',action='store_true',help="Turn on debug messages.")
   ap.add_argument('-x',dest='ext',action='append',default=[],help="""Add a "name=pattern" RE extension. Use as many -x options as you need.""")
   ap.add_argument('--extensions',action='store_true',help="List our RE extensions.")
-  sp=ap.add_subparsers()
 
-  ap_find=sp.add_parser('grep',description="This works a lot like grep.")
-  ap_find.set_defaults(func=grep)
-  ap_find.add_argument('-1',dest='one',action='store_true',help="Do not output names of files containing matches, even if more than one file is to be scanned.")
-  ap_find.add_argument('-c',dest='count',action='store_true',help="Output only the number of matching lines of each file scanned.")
-  ap_find.add_argument('-f',dest='fmt',action='store',help="Use standard Python template syntax to format output.")
-  ap_find.add_argument('-g',dest='tuple',action='store_true',help='Output the tuple of matching groups above each matching line.')
-  ap_find.add_argument('-G',dest='dict',action='store_true',help='Output the dictionary of matching groups above each matching line.')
-  ap_find.add_argument('-i',dest='ignore_case',action='store_true',help="Ignore the case of alphabetic characters when scanning.")
-  ap_find.add_argument('-l',dest='list',action='store_true',help="Output only the name of each file scanned. (Trumps -1.)")
-  ap_find.add_argument('-v',dest='invert',action='store_true',help="Output (or count) non-matching lines rather than matching lines.")
-  ap_find.add_argument('args',action='store',nargs='+',help="A regular expression, optionally followed by one or more names of files to be scanned.")
-
-  ap_test=sp.add_parser('test',description="Just run internal tests and report the result.")
-  ap_test.set_defaults(func=test)
+  if prog.name==prog.real_name:
+    sp=ap.add_subparsers()
+    ap_find=sp.add_parser('grep',description="This works a lot like grep.")
+    ap_test=sp.add_parser('test',description="Just run internal tests and report the result.")
+  elif prog.name=='pygrep':
+    ap_find=ap # Add "find" subparser's opttions to the main parser.
+    ap_find.description="This works a lot like grep (but without so many features."
+  elif prog.name=='test':
+    ap_test=ap
+  
+  if prog.name in (prog.real_name,'pygrep'):
+    ap_find.set_defaults(func=grep)
+    ap_find.add_argument('-1',dest='one',action='store_true',help="Do not output names of files containing matches, even if more than one file is to be scanned.")
+    ap_find.add_argument('-c',dest='count',action='store_true',help="Output only the number of matching lines of each file scanned.")
+    ap_find.add_argument('-f',dest='fmt',action='store',help="Use standard Python template syntax to format output.")
+    ap_find.add_argument('-g',dest='tuple',action='store_true',help='Output the tuple of matching groups above each matching line.')
+    ap_find.add_argument('-G',dest='dict',action='store_true',help='Output the dictionary of matching groups above each matching line.')
+    ap_find.add_argument('-i',dest='ignore_case',action='store_true',help="Ignore the case of alphabetic characters when scanning.")
+    ap_find.add_argument('-l',dest='list',action='store_true',help="Output only the name of each file scanned. (Trumps -1.)")
+    ap_find.add_argument('-v',dest='invert',action='store_true',help="Output (or count) non-matching lines rather than matching lines.")
+    ap_find.add_argument('pattern',metavar='RE',action='store',nargs='?',help="A regular expression of the Python dialect, which can also include RE extensions.")
+    ap_find.add_argument('filenames',metavar='FILENAME',action='store',nargs='*',help="Optional filenames to scan for the given pattern.")
+  if prog.name in (prog.real_name,'test'):
+    ap_test.set_defaults(func=test)
 
   #from pprint import pprint
   #pprint(ap.__dict__)
   opt=ap.parse_args()
-  bug=DebugChannel(enabled=opt.debug,label='D')
+  dc.enable(opt.debug)
   
   for x in opt.ext:
     name,pat=x.split('=',1)
-    bug('Registering RE %r as "%s"'%(name,pat))
+    dc('Registering RE %r as "%s"'%(name,pat))
     extend(name,pat)
   if opt.extensions:
     print(('\n'.join(['%s=%s'%(n,p) for n,p in sorted(_extensions.items())])))
