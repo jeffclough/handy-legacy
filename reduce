@@ -32,11 +32,11 @@ ap=argparse.ArgumentParser(
   formatter_class=argparse.RawDescriptionHelpFormatter,
   description="""\
 This command works much like Python's reduce() function. It is, in fact, a
-fairly simple wrapper for that function. It basically applies a function of
-two variables cumulatively to a list of values. Values are computed from
-Python expressions given as command line arguments and/or on standard input
-(one value per line). The command line options precede the standard input
-value if both are given.""",
+fairly simple wrapper for that function. It basically applies a function of two
+variables cumulatively to a list of values. Values are computed from Python
+expressions given as command line arguments and/or on standard input (one value
+per line). The command line options precede the standard input value if both are
+given.""",
   epilog="""
 All the functions in Python's math module (ceil, floor, exp, factorial, etc.)
 are imported so you'll have access to them. The %(prog)s command also imports
@@ -67,9 +67,9 @@ Examples:
     $ %(prog)s --func 'lambda a,b:a*b' 2 4 6 8
     384
 
-   The "a,b" before the colon tells lambda what the arguments the function
-   are. The "a*b" expression after the colon tells lambda how to compute the
-   return value.
+   The "a,b" before the colon tells lambda what the arguments the function are.
+   The "a*b" expression after the colon tells lambda how to compute the return
+   value.
 
 3) The input items are actually Python expressions, so so you can (for
    instance) add up the differences between pairs of values.
@@ -77,7 +77,7 @@ Examples:
     $ %(prog)s 10-2 6-4 6-20 5-8
     -7
 
-4) %(prog)s runs the MAP function on each list item before cumulatively
+4) %(prog)s runs the MAP function on each list item before cumulatively calling
    calling FUNC on list items. This lets us, for instance, replace the list's
    items with their absolute values, so we can do the same thing as above, but
    now we're summing the absolute values of those differences.
@@ -86,8 +86,8 @@ Examples:
     27
 
    The preperatory function abs(x) is applied to each expression before the
-   reduce operation is performed. Summing the square of the differences is
-   just as easy. Just use the provided sqr(x) function rather than abs(x).
+   reduce operation is performed. Summing the square of the differences is just
+   as easy. Just use the provided sqr(x) function rather than abs(x).
 
 5) You can filter out input items that fail to meet some criterion. Say you
    want to use only the expressions that result in a positive value in the
@@ -104,8 +104,8 @@ Examples:
     $ %(prog)s --map 'lambda x:1' these values do not matter
     %(prog)s: name 'these' is not defined: 'these'
 
-   Woops! Remember that our input "values" MUST be valid Python expressions.
-   Let's try again.
+   Woops! Remember our input "values" MUST be valid Python expressions. Let's
+   try again.
 
     $ %(prog)s --map 'lambda x:1' "'these'" "'values'" "'do'" "'not'" "'matter'"
     5
@@ -117,28 +117,31 @@ Examples:
     $ %(prog)s --eval str --map 'lambda x:1' these values do not matter
     5
 
-   The default EVAL function is evaluate(x), which requires that x be a valid
-   Python expression. By replacing that with str(x), all that's required of
-   each list item is that the argument can be expressed within a Python
-   string. Now that we know this, we can be even more brief with our argument
-   counter:
+   The default EVAL function is evaluate(x), which requires x to be a valid
+   Python expression. By replacing that with str(x), all that's required of each
+   list item is that the argument can be expressed as a Python string. Now that
+   we know this, we can be even more brief with our argument counter:
 
     $ %(prog)s --eval 'lambda x:1' these values do not matter
     5
 
-   Since we don't care about the value of our arguemnts, we just let each one
+   Since we don't care about the values of our arguemnts, we just let each one
    "evaluate" to 1, and then add up all the 1s.
 
-   But all that's just to demonstrate --eval and --map. If all you want to do
-   is count what are already valid python expressions, just output the
-   variable n, which is availble to the FUNC and POST functions.
+   But all that's just to demonstrate --eval and --map. If all you want to do is
+   count what are already valid python expressions, just output the variable n,
+   which is availble to the FUNC and POST functions.
 
     $ %(prog)s --post 'lambda x:n' <data
     87
 
-8) As hinted at above, the POST function accepts and returns one value and
-   lets you "post-process" whatever FUNC ends up returning. Use this for
-   rounding, formatting, or whatever.
+    n is simply the number of ARG values on the command line plus the number of
+    entries read from standard input, which is why it's only available
+    once all the data have been read.
+
+8) As hinted at above, the POST function accepts and returns one value and lets
+   you "post-process" whatever FUNC ends up returning. Use this for rounding,
+   formatting, or whatever.
 
     $ %(prog)s --post 'lambda x:"$%%0.2f"%%(x/3)' 22.21 15.21 14.65 20.05 18.96
     $30.36
@@ -146,10 +149,10 @@ Examples:
    Something like this could be useful if you have to add up Uber payments and
    then split the total three ways. :-)
 
-9) One last feature is that the variable n is available to both the FUNC and
-   POST functions. It is set to the total number of expressions given on the
-   command line and standard input. So you can use that for computing things
-   like averages or standard deviations (albeit in two passes).
+9) As mentioned above, the variable n is available to both the FUNC and POST
+   functions and is set to the total number of expressions given on the command
+   line and standard input. So you can use that for computing things like
+   averages or standard deviations (albeit in two passes).
 
     m=$(%(prog)s --post 'lambda x:x/n' <values)
     %(prog)s --map "lambda x:(x-$m)**2" --post 'lambda x:"$%%0.2f"%%sqrt(x/n)' <values
@@ -163,7 +166,7 @@ Examples:
    from example 8.
 """
 )
-ap.add_argument('--eval','-e',dest='eval',action='store',default='evaluate',help="""A Python function of one argument, returning the actual value to be processed. EVAL is typically for regularizing the type of values (e.g. string to numeric) in the given data. (default: %(default)s)""")
+ap.add_argument('--eval','-e',action='store',default='evaluate',help="""This and the options below are applied in the order given here. EVAL is function of one argument, returning the actual value to be processed. EVAL is typically for regularizing the type of values (e.g. string to numeric) in the given data. (default: %(default)s, which evaluates its argument as a Python expression and returns the result, or it gives a helpful error message and terminates %(prog)s in error if the expression is invalid.)""")
 ap.add_argument('--map',dest='map',action='store',default='noop',help="""A Python function of one argument, returning some computed value from each given value, replacing each value in the given data. These preprocessed values are what get fed to FUNC (below). The default (%(default)s) is a function that performs no operation at all, simply returning the value it was given. Since squaring numeric input is sometimes desirable, there's also a an sqr function that will do this (e.g. "--map sqr").""")
 ap.add_argument('--filter',dest='filter',action='store',default='None',help="""A Python function of one argument that returns True for each input value to be kept and False for any other value. If given, the FILTER funciton is applied immediately after processing with MAP (above), before FUNC is cumulatively applied to the given values. For example, "--filter 'lambda a:a>0'" allows only positive numeric values to participate in the reduce operation.""")
 ap.add_argument('--intermediate',dest='intermediate',action='store_true',default=False,help="Output all arguments after running any EVAL, MAP, and/or FILTER functions on them. This is the list of values the reduce operation (FUNC) is performed on.")

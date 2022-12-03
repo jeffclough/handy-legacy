@@ -70,7 +70,7 @@ def parse_range(s):
 #
 
 ap=argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
-  usage="""Usage:
+  usage="""
   Form 1: %(prog)s [OPTIONS] [value-1 ... value-n]
     Input MUST be formatted as parsable CSV.
 
@@ -82,17 +82,18 @@ ap=argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
   description="""\
 This command reads data from standard input in either CSV (by default), Excel,
 or shell format and writes it to standard output as CSV (by default), shell, or
-either of two tabular format: table and markdown. The CSV dialects used for
-reading and writing need not be the same and can be specified using the
+either of two tabular formats: table and markdown. The CSV dialects used for
+reading and writing needn't be the same and can be specified using the
 --reader (in the case of Form 1) and --writer options.
 
-Regardless of which usage form is used, data values may be given as command
-line arguments to supply a row of data that will be appear as the first line of
-output. Typically, this is used to output column headings, (e.g.: 'First name'
-Last\\ name email account zipcode), but it could just as easily be a row of
-actual data. Just in case it's not obvious, any data given on the command line
-in this way is not CSV-formatted. It is parsed by your shell, so use proper
-escapes and quoting to distinguish one argument (data value) from another.
+Regardless of which usage form is used, any data values given as command
+line arguments supply a row of data that will be appear as the first
+line of output. This is typically used to output column headings, (e.g.:
+'First name' Last\\ name email account zipcode), but it could just as
+easily be a row of actual data. Just in case it's not obvious, any data
+given on the command line in this way is not CSV-formatted. It is parsed
+by your shell, so use proper escapes and quoting to distinguish one
+argument (data value) from another.
 
 The output format defaults to CSV (--outfmt=csv), but it can also be set to
 shell, table, or markdown. If shell, each line of output is a list of
@@ -106,11 +107,17 @@ characters or normal ASCII characters are used to separate one column from
 another and heading rows from data rows. --outfmt=markdown is just like table
 output, but output is Markdown-formatted.
 
-CSV DIALECT SYNTAX
+FIELDSPEC Syntax:
+A FIELDSPEC is made up of one or more ranges separated by commas. Each
+range is one of "N" (the Nth field), "N-" (from the Nth to the last
+field), or "N-M" (from the Nth to the Mth field, inclusive). Fields are
+counted beginning with 1.
+
+CSV Dialect Syntax:
 %s"""%(csv.CSV_DIALECT_DESCRIPTION,))
 
-ap.add_argument('--join',metavar='JOINSPEC',dest='join_fields',action='store',help="""Join the given field range into a single field separated by a single character. The first character of the JOINSPEC value is the field separator. The remainder of JOINSPEC is the same field range syntax (FIELDSPEC) described below for --keep. Also, --join renumbers fields as they are joined. So if "--join ' 1-2'" is given, fields 1 and 2 are joined as field 1, and any subsequent fields are renumbered beginning with 2. This is important to remember if you're also using the --keep option because --keep is evaluated after --join.""")
-ap.add_argument('--keep',metavar='FIELDSPEC',action='store',help="""Output only these fields. FIELDSPEC is made up of one or more ranges separated by commas. Each range is one of "N" (the Nth field), "N-" (from the Nth to the last field), or "N-M" (from the Nth to the Mth field, inclusive). Fields are counted beginning with 1. By default, all fields are kept (of course).""")
+ap.add_argument('--join',metavar='JOINSPEC',dest='join_fields',action='store',help="""Join the given field range into a single field separated by a single character. The first character of the JOINSPEC value is the field separator. The remainder of JOINSPEC is the same field range syntax (FIELDSPEC) described above. Also, --join renumbers fields as they are joined. So if "--join ' 1-2'" is given, fields 1 and 2 are joined as field 1, and any subsequent fields are renumbered beginning with 2. This is important to remember if you're also using the --keep option because --keep is evaluated after --join.""")
+ap.add_argument('--keep',metavar='FIELDSPEC',action='store',help="""Output only these fields. See the "FIELDSPEC Syntax" section above. By default, all fields are kept (of course).""")
 ap.add_argument('--headings',dest='heading_lines',action='store',type=int,default=0,help="Specify how many rows (lines) of heading data are in the input. (default: %(default)r)")
 ap.add_argument('--infmt',dest='infmt',action='store',choices=('csv','excel','shell'),default='csv',help="Specify either csv, excel, or shell as the input format. See the usage and description above for details. (default: %(default)r)")
 ap.add_argument('--reader',dest='reading',metavar='DIALECT',action='store',default=csv.DEFAULT_DIALECT_SPEC,help="""Specify the CSV reader's dialect. See CSV DIALECT SYNTAX above. (default: %(default)r""")
