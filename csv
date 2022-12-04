@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import argparse,os,pipes,re,shlex,sys
+import argparse,contextlib,os,pipes,re,shlex,sys
 from functools import reduce
 
 # Make sure we'll find our "handy" modules, regardless of our shell's
@@ -34,7 +34,7 @@ def numeric(x):
   'testing'
   """
 
-  y=str(x)
+  y=x if isinstance(x,str) else str(x)
   with contextlib.suppress(ValueError): return int(y)
   with contextlib.suppress(ValueError): return float(y)
   return x
