@@ -5,16 +5,23 @@ from functools import reduce
 
 # Make sure we'll find our "handy" modules, regardless of our shell's
 # PYTHONPATH value (or lack thereof), or die with a helpful message.
-for p in [os.path.abspath(os.path.join(os.path.abspath(os.path.dirname(sys.argv[0])),x)) for x in (os.path.join('..','lib','python'),'pylib')]:
+d=os.path.dirname(os.path.realpath(sys.argv[0]))
+for p in [
+  os.path.normpath(os.path.join(d,x))
+    for x in (os.path.join('..','lib','python'),'pylib')
+]:
   if os.path.isdir(p):
     if p in sys.path:
       break
     sys.path.insert(0,p)
     break;
 else:
-  print("%s: ERROR - Can't find Jeff's \"handy\" modules! (Who installed this?)"%(sys.argv[0],),file=sys.stderr)
+  print(
+    f"{sys.argv[0]}: ERROR - Can't find Jeff's \"handy\" modules! (Who installed this?)",
+    file=sys.stderr
+  )
   sys.exit(1)
-del p
+del d,p
 
 import CSV as csv
 from handy import die,shellify
@@ -38,6 +45,16 @@ def numeric(x):
   with contextlib.suppress(ValueError): return int(y)
   with contextlib.suppress(ValueError): return float(y)
   return x
+
+def width(x):
+  "Return the number of characters required to express this value."
+
+  if isinstance(x,str):
+    w=len(x)
+  else:
+    w=len(str(x))
+
+  return w
 
 def parse_range(s):
   '''Convert string list of ranges into a list of (n,m) range tuples.'''
@@ -117,6 +134,7 @@ CSV Dialect Syntax:
 %s"""%(csv.CSV_DIALECT_DESCRIPTION,))
 
 ap.add_argument('--join',metavar='JOINSPEC',dest='join_fields',action='store',help="""Join the given field range into a single field separated by a single character. The first character of the JOINSPEC value is the field separator. The remainder of JOINSPEC is the same field range syntax (FIELDSPEC) described above. Also, --join renumbers fields as they are joined. So if "--join ' 1-2'" is given, fields 1 and 2 are joined as field 1, and any subsequent fields are renumbered beginning with 2. This is important to remember if you're also using the --keep option because --keep is evaluated after --join.""")
+ap.add_argument('--lambda',dest='func',action='store',default=None,help="""Give a lambda expression (minus the "lambda" keyword) accepting two arguments, row number (starting with 1) and row (as a list). The function must return either the row, possibly modified, or None, in which case the current row is discarded entirely, and processing continues with the new row.""")
 ap.add_argument('--keep',metavar='FIELDSPEC',action='store',help="""Output only these fields. See the "FIELDSPEC Syntax" section above. By default, all fields are kept (of course).""")
 ap.add_argument('--headings',dest='heading_lines',action='store',type=int,default=0,help="Specify how many rows (lines) of heading data are in the input. (default: %(default)r)")
 ap.add_argument('--infmt',dest='infmt',action='store',choices=('csv','excel','shell'),default='csv',help="Specify either csv, excel, or shell as the input format. See the usage and description above for details. (default: %(default)r)")
@@ -136,6 +154,8 @@ if opt.join_fields:
   opt.join_fields.reverse() # Field joining is performed from right to left.
 else:
   opt.join_fields=[]
+if opt.func:
+  opt.func=eval(f"lambda {opt.func}")
 if opt.keep:
   opt.keep=parse_range(opt.keep)
 if opt.outfmt.startswith('table'):
@@ -163,7 +183,6 @@ if dc:
   dc(f"worksheet={opt.worksheet!r}")
   dc(f"test={opt.test!r}")
   dc(f"args={opt.args!r}")
-  
 
 if opt.worksheet!=None:
   if opt.infmt!='excel':
@@ -225,7 +244,7 @@ class ShellWriter(object):
       self.writerow(row)
 
 def tabfmt(val,width):
-  if isinstance(val,int) or isinstance(val,float):
+  if isinstance(val,(int,float)):
     return '%*g'%(width,val)
   return '%-*s'%(width,str(val))
 
@@ -293,7 +312,7 @@ class TableWriter(object):
       else:
         # Compute the width each column requires.
         wid=[
-          reduce(max,[len(self.data[r][c]) for r in range(len(self.data))])
+          reduce(max,[width(self.data[r][c]) for r in range(len(self.data))])
             for c in range(len(self.data[0]))
         ]
         # Write out tabular data.
@@ -387,8 +406,15 @@ if opt.args:
   writer.writerow(opt.args)
 
 # Read from the reader and write to the writer.
+i=0
 for row in reader:
-  #print(f"D: row={row!r}")
+  i+=1
+  row=[numeric(v) for v in row]
+  if opt.func:
+    row=opt.func(i,row)
+    if row==None:
+      continue
+  dc(f"row={row!r}")
   for n,m in opt.join_fields:
     row[n:m]=[opt.joinchar.join([x for x in row[n:m] if x])]
   if opt.keep:
