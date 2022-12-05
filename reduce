@@ -30,6 +30,10 @@ default_format="{result}"
 
 ap=argparse.ArgumentParser(
   formatter_class=argparse.RawDescriptionHelpFormatter,
+  usage="""\
+This is a test of a bugus-but-helpful-for-the-experiment-at-hand usage statement.
+Let's see what it looks like.
+""",
   description="""\
 This command works much like Python's reduce() function. It is, in fact, a
 fairly simple wrapper for that function. It basically applies a function of two
