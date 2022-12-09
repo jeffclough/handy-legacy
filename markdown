@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
 """
-Read markdown and output formatted text.
+Read markdown and output formatted text. I'm using this page to guide my
+choices: https://www.markdownguide.org/basic-syntax
 """
 
 import _io,os,sys
