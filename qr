@@ -9,7 +9,7 @@ except ImportError:
   die('Failed to import pyqrcode module. Consider running "pip install pypng pyqrcode".')
 
 
-formats=('show','png','svg','terminal')
+formats=('text','show','png','terminal')
 rgba1=re.compile(r'(?P<r>[0-9A-Fa-f])(?P<g>[0-9A-Fa-f])(?P<b>[0-9A-Fa-f])(?P<a>[0-9A-Fa-f])?')
 rgba2=re.compile(r'(?P<r>[0-9A-Fa-f]{2})(?P<g>[0-9A-Fa-f]{2})(?P<b>[0-9A-Fa-f]{2})(?P<a>[0-9A-Fa-f]{2})?')
 
@@ -35,7 +35,26 @@ def get_color_tuple(color):
   raise ValueError("Bad RGB[A] value: %r"%(color,))
 
 # Handle command line stuff.
-ap=argparse.ArgumentParser()
+ap=argparse.ArgumentParser(
+  formatter_class=argparse.RawDescriptionHelpFormatter,
+  epilog="""
+Create or output the QR code containing the text on the command line.
+
+Output Formats:
+    text: This is the default output format and writes Unicode block
+          characters to the terminal. This is similar to the "terminal" output
+          format, but about half the size.
+
+    show: Creates a temporary PNG file and opens it in the default image
+          viewer.
+
+    png: Create a PNG file named according to the text on the command line if
+         no --filename option is given.
+
+    terminal: Writes a big "██" block (2 characters) and spaces for light and
+              dark pixes to standard output.
+"""
+)
 ap.add_argument('--file',action='store',default=None,help="""Write the QR code to this file. If it has no file extension, append ".png".""")
 ap.add_argument('--force',action='store_true',default=False,help="""Overwrite the output file if it exists. No warning will be given.""")
 ap.add_argument('--format',metavar='FMT',default=formats[0],choices=formats,help="""Output the QR code in this format. Choices are %s. Default is %s."""%(english.join(formats,'or'),formats[0]))
@@ -58,7 +77,7 @@ opt.background=get_color_tuple(opt.background)
 opt.text=' '.join(opt.text[0])
 
 # Make sure we have a filename if we need a filename.
-if opt.format in ('png','svg'):
+if opt.format in ('png'):
   if not opt.file:
     if any([x in opt.text for x in '.:/']):
       opt.file=urllib.parse.quote_plus(opt.text,'')
@@ -90,9 +109,20 @@ if False:
 code=qr.create(opt.text)
 if opt.format=='png':
   code.png(opt.file,scale=opt.scale,module_color=opt.foreground,background=opt.background,quiet_zone=opt.margin)
-elif opt.format=='svg':
-  code.svg(opt.file,scale=opt.scale,module_color=opt.foreground,background=opt.background,quiet_zone=opt.margin)
 elif opt.format=='show':
   code.show(scale=opt.scale,module_color=opt.foreground,background=opt.background,quiet_zone=opt.margin)
-#elif opt.format=='show':
-#  code.terminal(module_color=opt.foreground,background=opt.background,quiet_zone=opt.margin)
+elif opt.format=='terminal':
+  print(code.terminal())
+elif opt.format=='text':
+  blocks=' ▀▄█'
+  grid=code.text(quiet_zone=opt.margin).split()
+  if len(grid)%2:
+    # We need an even number of rows.
+    grid.append(grid[-1])
+  sys.stdout.write('\x1b[7m') # Invert foreground and background.
+  for y in range(0,len(grid),2):
+    print(''.join([
+      blocks[(grid[y][x]=='1')+(grid[y+1][x]=='1')*2]
+        for x in range(len(grid[y]))
+    ]))
+  sys.stdout.write('\x1b[0m') # Normal text.
