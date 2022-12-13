@@ -86,6 +86,7 @@ if opt.test:
 # Make sure we have someplace to install these files.
 target_dir=Folder(options.tdir)()
 bin_dir=Folder(options.tdir/'bin')()
+venv_dir=Folder(options.tdir/'venvs')()
 Folder(options.tdir/'etc')()
 Folder(options.tdir/'include')()
 Folder(options.tdir/'lib')()
@@ -213,6 +214,46 @@ scripts=[
 # Copy our scripts.
 for f in scripts:
   File(bin_dir/f).copy(f)()
+
+class VirtualEnv(Target):
+  def __init__(self,cmd,*deps):
+    """Prepare to create a Python virtual environment for command cmd,
+    which depends on the pip-installable packages named in the "deps"
+    arguments (if any)."""
+
+    super().__init__(venv_dir/cmd)
+    self.cmd=cmd
+    self.deps=list(deps)
+
+  def __call__(self):
+    """Create our virtual environment if needed, and set up our command
+    to run from there."""
+
+    # Create and initialize our Python virtual environment for this command.
+    if not self.target.isDir():
+      script=f"""\
+#!/bin/bash"
+cd {venv_dir}
+python3 -m venv {cmd}
+"""
+      if self.deps:
+        modules=' '.join(deps)
+        script+="""\
+cd {cmd}
+source ./bin/activate
+pip install {modules}"""
+      res=ShellCommand(cmd,stdout=PIPE,stderr=PIPE)()
+
+    # Copy "runner" to our new venv directory, and symlink cmd to it from our bin directory.
+    File(venv_dir/self.cmd/'runner').copy('runner').link(bin_dir/self.cmd)()
+
+
+# Create and set up our Python virtual environments.
+for cmd,mods in ( # A list of venvs and the modules to be installed within them.
+    ('j2p',('javalang','six')),
+    ('qr',('PyQRCode',)),
+  ):
+  VirtualEnv(cmd,*mods)()
 
 dc(f"platform.system={platform.system}")
 if platform.system=='Darwin':
