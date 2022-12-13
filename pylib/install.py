@@ -7,7 +7,7 @@ executables.
 
 """
 __author__='Jeff Clough, @jeffclough@mastodon.social'
-__version__='0.1.1-2022-11-27'
+__version__='0.1.2-2022-12-12'
 
 __all__=[
   'DEVNULL',
@@ -19,7 +19,9 @@ __all__=[
   'Target',
   'File',
   'Folder',
+  'NamedTemporaryFile',
   'Path',
+  'ShellScript',
   'V',
   'dc',
   'dir_mode',
@@ -33,6 +35,7 @@ import os,platform,re,shlex,shutil,stat,sys,time
 from enum import Flag,auto
 from functools import reduce
 from subprocess import run,DEVNULL,PIPE,STDOUT,CompletedProcess
+from tempfile import NamedTemporaryFile
 from path import Path
 from debug import DebugChannel
 
@@ -327,6 +330,9 @@ def getmod(path,dir_fd=None,follow_symlinks=True):
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 class Command(object):
+  """The Command class wraps subprocess.run() and makes running external
+  processes more pythonic."""
+
   def __init__(self,cmd,stdin=None,stdout=None,stderr=None,quiet=False):
     "Initialize this Command instance."
 
@@ -375,6 +381,25 @@ class Command(object):
       if self.result:
         raise Error(f"Non-zero return code ({self.result}): {shlex.join(self.cmd+args)}")
     return self
+
+class ShellScript(Command):
+  """The ShellScript class subclasses Command, allowing multi-line
+  scripts to be run in the shell with full #! support."""
+
+  def __init__(self,script,stdin=None,stdout=None,stderr=None,quiet=False):
+    """Create our shell script in a temp file and prepare to run it as
+    a Command instance."""
+
+    t=NamedTemporaryFile(mode='w+',delete=False)
+    print(script,file=t.file)
+    t.file.close()
+    super().__init__(t.name,stdin=stdin,stdout=stdout,strerr=stderr,quiet=quiet)
+  
+  def __call__(self,*args,**kwargs):
+    """Run the shell script the caller has set up. Return this
+    ShellScript instance."""
+
+    return super().__call__(*args,**kwargs)
 
 class Target(object):
   """Target is an abstract base class of classes that know how to
