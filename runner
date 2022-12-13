@@ -1,0 +1,32 @@
+#!/bin/bash
+
+#
+# This little script makes running commands installed in Python virtualenvs as
+# easy as running any other command. Just copy it into the venv directory and
+# symlink to it.
+#
+# Example:
+#   cd ~/venvs
+#   python3 -m venv $CMD
+#   cd $CMD
+#   . ./bin/activate
+#   pip install whatever packages you need in this environment
+#   cp ~/src/handy/runner .
+#   ln -s "$PWD/runner" ~/my/bin/$CMD
+#
+# If there's more than one command under that virtualenv directory, crate more
+# than one symlink. Then, enter lotus position and breath deeply. Your life is
+# now perfect.
+#
+
+# Get name of command to run.
+cmd="$(basename "$0")"
+
+# Get the virtualenv directory.
+V="$(dirname "$(readlink -f "$0")")"
+
+# Initialize the virtual environment.
+source "$V/bin/activate"
+
+# Run the command.
+"$V/$cmd" "$@"
