@@ -20,7 +20,7 @@ ap=argparse.ArgumentParser(
   description=f"""\
 Install the "handy" scripts to the given (with --dir) or default ({options.tdir}) base directory.
 
-The --verbosity (-v) flags are any of quiet, ops, deps, time, debug, and full. The "quiet" flag turns all the others off. "full" turns them all on. Flags can be combined with + or - characters to add or remove those flags. The first flag listed is assumed to be added unless preceded by -. There are no spaces in --verbosity's value. E.g. "./install -v ops+time ..." or "./install -v full-debug".
+The --verbosity (-v) flag valuess are any of quiet, ops, deps, time, debug, and full. The "quiet" flag turns all the others off. "full" turns them all on. Flags can be combined with + or - characters to add or remove those flags. The first flag listed is assumed to be added unless preceded by -. There are no spaces in --verbosity's value. E.g. "./install -v ops+time" or "./install -v full-debug".
 """
 )
 ap.add_argument('--dir',dest='tdir',action='store',default=options.tdir,help="Set the base of the target directory structure. Subdirectories like bin, doc, etc, include, lib, man, and sbin will be created here if and when needed. (default: %(default)r)")
@@ -224,36 +224,50 @@ class VirtualEnv(Target):
     super().__init__(venv_dir/cmd)
     self.cmd=cmd
     self.deps=list(deps)
+    self.links=[]
+    self.link_dir=None
+    self.force_links=False
 
-  def __call__(self):
+  def link(self,*args,link_dir=None,force=None):
+    """Add one or more symlinks to this virtual environment's runner
+    script."""
+
+    self.links.extend(args)
+    if link_dir is not None: self.link_dir=link_dir
+    if force is not None: self.force_links=force
+
+    return self
+
+  def __call__(self,*args):
     """Create our virtual environment if needed, and set up our command
     to run from there."""
 
     # Create and initialize our Python virtual environment for this command.
     if not self.target.isDir():
       script=f"""\
-#!/bin/bash"
+#!/bin/bash
 cd {venv_dir}
 python3 -m venv {cmd}
 """
       if self.deps:
-        modules=' '.join(deps)
-        script+="""\
+        modules=' '.join(self.deps)
+        script+=f"""\
 cd {cmd}
 source ./bin/activate
 pip install {modules}"""
-      res=ShellCommand(cmd,stdout=PIPE,stderr=PIPE)()
+      res=ShellScript(script,stdout=PIPE,stderr=PIPE)()
 
     # Copy "runner" to our new venv directory, and symlink cmd to it from our bin directory.
-    File(venv_dir/self.cmd/'runner').copy('runner').link(bin_dir/self.cmd)()
+    runner=File(venv_dir/self.cmd/'runner').copy('runner')
+    runner.link(*self.links,link_dir=self.link_dir,force=self.force_links)
+    runner()
+
+    return self
 
 
 # Create and set up our Python virtual environments.
-for cmd,mods in ( # A list of venvs and the modules to be installed within them.
-    ('j2p',('javalang','six')),
-    ('qr',('PyQRCode',)),
-  ):
-  VirtualEnv(cmd,*mods)()
+VirtualEnv('j2p','javalang','six').link('j2p')()
+VirtualEnv('qr','PyQRCode').link('qr')()
 
 dc(f"platform.system={platform.system}")
 if platform.system=='Darwin':
@@ -266,7 +280,7 @@ if platform.system=='Darwin':
       [re_say_parser.match(l) for l in say.stdout.split('\n')]
     if m and m.group(2).startswith('en_') and m.group(1).lower()!='alex'
   ]
-  dc(f"Found voices: {voices}")
+  #dc(f"Found voices: {voices}")
   # Install our "alex" script and set up its symlinks.
   File(bin_dir/'alex').copy('alex').link(*voices)()
 

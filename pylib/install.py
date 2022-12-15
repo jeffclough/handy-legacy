@@ -306,7 +306,7 @@ def chmod(path,mode,dir_fd=None,follow_symlinks=True):
   0001  For files, allow execution by others. For directories allow
         others to search in the directory."""
 
-  os.chmod(path,stat_mode(mode),dir_fd=dir_fd,follow_symlinks=follow_simlinks)
+  os.chmod(path,stat_mode(mode),dir_fd=dir_fd,follow_symlinks=follow_symlinks)
 
 def getmod(path,dir_fd=None,follow_symlinks=True):
   """Return the Unix shell mode of the given file (which might be a
@@ -333,7 +333,7 @@ class Command(object):
   """The Command class wraps subprocess.run() and makes running external
   processes more pythonic."""
 
-  def __init__(self,cmd,stdin=None,stdout=None,stderr=None,quiet=False):
+  def __init__(self,cmd,stdin=None,stdout=None,stderr=None,shell=False,quiet=False):
     "Initialize this Command instance."
 
     if isinstance(cmd,str):
@@ -346,12 +346,15 @@ class Command(object):
     self.stdout=stdout
     self.stderr=stderr
     self.result=None
+    self.shell=shell
     self.quiet=quiet
 
-  def __call__(self,*args,quiet=None):
+  def __call__(self,*args,shell=None,quiet=None):
     """Run the command the caller has set up. Return this Command
     instance."""
 
+    if shell is None:
+      shell=self.shell
     if quiet is None:
       quiet=self.quiet
 
@@ -370,8 +373,8 @@ class Command(object):
       r=CompletedProcess(self.cmd+args,0,"","")
     else:
       # Run our command, capturing it stdout and stderr output as string values.
-      dc(f"run({self.cmd+args},text=True,stdin={self.stdin},stdout={self.stdout},stderr={self.stderr})")
-      r=run(self.cmd+args,text=True,stdin=self.stdin,stdout=self.stdout,stderr=self.stderr)
+      dc(f"run({self.cmd+args},text=True,stdin={self.stdin},stdout={self.stdout},stderr={self.stderr},shell={shell})")
+      r=run(self.cmd+args,text=True,stdin=self.stdin,stdout=self.stdout,stderr=self.stderr,shell=shell)
     self.result=r.returncode
     self.stdout=r.stdout
     self.stderr=r.stderr
@@ -393,7 +396,9 @@ class ShellScript(Command):
     t=NamedTemporaryFile(mode='w+',delete=False)
     print(script,file=t.file)
     t.file.close()
-    super().__init__(t.name,stdin=stdin,stdout=stdout,strerr=stderr,quiet=quiet)
+    chmod(t.name,0o700) # Make our shell script executable.
+    #dc(script)
+    super().__init__(t.name,stdin=stdin,stdout=stdout,stderr=stderr,shell=True,quiet=quiet)
   
   def __call__(self,*args,**kwargs):
     """Run the shell script the caller has set up. Return this
@@ -558,8 +563,8 @@ class File(Target):
     return self
 
   def link(self,*args,link_dir=None,force=None):
-    """Prepare to create one or more symlinks (args_ to this target
-    file. Non-absolute paths are relative to link_dir if given, or our
+    """Prepare to create one or more symlinks (args to this target file.
+    Non-absolute paths are relative to link_dir if given, or our
     target's directory otherwise.
 
     The force argument defaults to None but is interpreted as boolean if
