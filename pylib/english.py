@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-This module makes outputting sensible, correct english sentences much
+This module makes outputting sensible, correct English sentences much
 more practical. For instance, as programmers, it's way too easy to write
 code of this form:
 
@@ -26,9 +26,8 @@ or
     'customer',new_cust,fmt="%(count)d new %(noun)s"
   ))
 
-That's simple enough to do that even crusty old coders (like me) might
-find themselves inclined to write code that outputs more standard
-english.
+That's so simple to do, even crusty old coders (like me) might find
+themselves inclined to write code that outputs more standard English.
 
 That's the idea behind this module. I think we (lazy) programmers would
 be happy to write better code if it were just easier.
@@ -56,7 +55,7 @@ class Suffixer(object):
   that know 1) how to reconize when a given word is suitable for the
   rule, and 2) how to apply either the singular or plural suffix to that
   word, depending on a given count. For example, here's a very simple
-  rule set that will work on a surprising range of english nouns:
+  rule set that will work on a surprising range of English nouns:
 
     rules=[
       Suffixer('','es',
@@ -92,7 +91,7 @@ class Suffixer(object):
   function that always returns True. So that rule is willing to be
   applied to any root you give it. (And that's why it comes last.)
 
-  Here's how we might express those rules in english:
+  Here's how we might express those rules in English:
   0. A word ending with "s", "sh", "ch", or "x" becomes plural by ending
      "es" instead.
   1. A word ending with y becomes plural by ending with ies instead,
@@ -138,7 +137,7 @@ class Suffixer(object):
     test: This optional function takes the root as its argument and
     returns true if this suffixing rule applies to that root.
 
-    desc: This optional string is the english description of this
+    desc: This optional string is the English description of this
     suffixing rule. If not given, the Suffixer instance will do its best
     to compose its own description."""
 
@@ -203,8 +202,7 @@ class Suffixer(object):
     #  self.__class__.__name__,self.singular,self.plural,self.replace,self.test,self.desc
     #)
 
-    return
-    f"{self.__class__.__name__}({self.singular!r},{self.plural!r},replace={self.replace},test={self.test},desc={self.desc})"
+    return f"{self.__class__.__name__}({self.singular!r},{self.plural!r},replace={self.replace},test={self.test},desc={self.desc})"
 
   def __str__(self):
     """Return this object's desc value, the one it was created with or,
@@ -213,6 +211,10 @@ class Suffixer(object):
     return self.desc
 
   def matchCapitalization(self,root,word):
+    """Return word with the same capitalization as root, both of which
+    must be non-empty strings. NounSuffixer.__call__() calls this
+    method so you don't have to."""
+
     if root[0].isupper() and not word[0].isupper():
       word=word[0].upper()+word[1:]
     return word
@@ -471,7 +473,7 @@ def nounf(root,count,pos=False,fmt=None,formatter=None):
 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# Other, english-related functions that don't fit elsewhere.
+# Other, English-related functions that don't fit elsewhere.
 
 def join(seq,con=None,sep=None):
   """Return the string values in the given sequence as an English
@@ -1348,7 +1350,7 @@ if __name__=='__main__':
   ap.add_argument('--con',action='store',help="The conjunction to use with --join.")
   ap.add_argument('--count',action='store',default=1,help="Use this number when deciding whether a word should be singular or plural.")
   ap.add_argument('--debugger',action='store_true',help="Engage pdb within this script once we get through the setup. This is not for the uninitiated. See https://docs.python.org/3/library/pdb.html#debugger-commands for a command summary.")
-  ap.add_argument('--join',action='store_true',help="Join our WORDs into an english list.")
+  ap.add_argument('--join',action='store_true',help="Join our WORDs into an English list.")
   ap.add_argument('--noun',action='store_true',help="One or more (separated by spaces or commas) nouns to test.")
   ap.add_argument('--noun-phrase',action='store_true',help="Use --count and (optionally) --obj to output the corresponding noun phrase for every WORD argument on the command line.")
   ap.add_argument('--noun-rules',action='store_true',help="List the rules for making plural nouns.")
