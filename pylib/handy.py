@@ -1,13 +1,39 @@
 #!/usr/bin/env python3
-import fcntl,fnmatch,os,re,shlex,struct,sys,termios
+import fcntl,fnmatch,os,re,shlex,struct,sys,termios,warnings
 
- # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-#
-#   Some lawyerly classes. They tell strings they have no case. :-)
+class AsciiString(str):
+  """This is just like str, but any non-ASCII characters are converted
+  (if possible) to ASCII.
+
+  >>> AsciiString('Ábhinav Ñavülurí')
+  'Abhinav Navuluri'
+  >>> AsciiString('Maxine Petrosíño')
+  'Maxine Petrosino'
+  >>> AsciiString('Spéncer Chrístensen')
+  'Spencer Christensen'
+  >>> AsciiString('Spéncer ▀Chrístensen')
+  'Spencer ▀Christensen'
+  """
+
+    # This is a Unicode-to-ASCII translator.
+  utoa=str.maketrans(
+    'ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿĂăŃńŠšūŽžƒȘșȚț',
+    'AAAAAAACEEEEIIIIJNOOOOOOUUUUYBsaaaaaaaceeeeiiiionoooooouuuuybyAaNnSsuZzfSsTt'
+  )
+
+  def __new__(cls,val):
+    return str.__new__(cls,val.translate(cls.utoa))
+    #if not s.isascii():
+    #  warnings.warn(
+    #  f"{cls.__name__} instance contains non-ASCII content: {s!r}",
+    #  UnicodeWarning,
+    #  stacklevel=2
+    #)
+    #return s
 
 class CaselessString(str):
-  """This is just like str, but hashing and comparison ignore case.
+  """This is kind of a lawyerly class for strings. They have no case! :)
+  This is just like str, but hashing and comparison ignore case.
 
   >>> alpha=CaselessString('alpha')
   >>> bravo=CaselessString('Bravo')
@@ -175,8 +201,11 @@ class CaselessDict(dict):
 #   Generally useful stuff.
 
 def first_match(s,patterns):
-  """Find the first pattern in the patterns sequence that matches s. If
-  found, return the (pattern,match) tuple. If not, return (None,None).
+  """Find the first matching pattern. If found, return the (pattern,
+  match) tuple. If not, return (None,None). The "patterns" arugment is
+  an itterable of compiled regular expressions, but see the
+  compile_filename_patterns() function also in this module for a way to
+  make this far more general.
 
   >>> pats=['2019-*','re:^abc[0-9]{4}.dat$','X*.txt','*.txt',r're:^.*\.doc$']
   >>> pats=compile_filename_patterns(pats)
@@ -310,7 +339,7 @@ def file_walker(root,**kwargs):
                  distinguish them from filenames. If the directory is
                  not descended into because of depth-limiting or
                  pruning, that directory will not appear in this
-                 iterator's values at all. The default is False, so that
+                 iterator's values at all. The default is False, meaning
                  only non-directory entries are included."""
 
   # Get our keyword argunents, and do some initialization.
@@ -573,130 +602,6 @@ def gripe(msg,output=sys.stderr,progname=prog.name):
 
   die(msg,output,progname,rc=None)
 
-def decline_deprecated(root,n,suffixes=None,fmt=None):
-  """
-  ---------------------------------------------------------------------
-  |
-  | DEPRECATION WARNING:
-  |
-  | THIS FUNCTION IS GOING AWAY AT SOME POINT. CONVERT YOUR CODE TO USE
-  | THE MUCH BETTER english.py MODULE'S nouner() and nounf() FUNCTIONS
-  | INSTEAD.
-  |
-  | It's an easy transition:
-  |
-  |   decline_deprecated('rabbit',1) ==> 'rabbit'
-  |   decline_deprecated('rabbit',5) ==> 'rabbits'
-  |   decline_deprecated('rabbit',5,fmt='%(count)d %(word)s') ==> '5 rabbits'
-  |
-  |   nouner('rabbit',1) ==> 'rabbit'
-  |   nouner('rabbit',5) ==> 'rabbits'
-  |   nouner('rabbit',5,fmt='%(count)d %(noun)s') ==> '5 rabbits'
-  |
-  |   ... meh. But then look at this ...
-  |
-  |   nounf('rabbit',1) ==> '1 rabbit'
-  |   nounf('rabbit',5) ==> '5 rabbits'
-  |   nounf('rabbit',1,'tail') ==> "1 rabbit's tail"
-  |   nounf('rabbit',5,'tail') ==> "5 rabbits' tails"
-  |
-  |   "I stepped on %s."%nounf('person',3,'foot') evaluates to
-  |
-  |         "I stepped on 3 people's feet."
-  |
-  | NOW YOU SEE. MAKE THE SWITCH TO english.py!
-  |
-  ---------------------------------------------------------------------
-
-  This is all about performing numeric declension in English, though
-  it's versatile enough to exceed that charter just a bit. For example,
-  decline_deprecated('box',2) returns 'boxes'.
-
-  Arguments:
-    root     - The root of the word whose proper declension is to be
-               computed.
-    n        - The number of the item in question.
-    suffixes - An optional 2-element sequence of suffixes to be appended
-               to root, depending on n's value. The sequence must be in
-               (singular, plural) order. If no sequence is given, we'll
-               take a guess base on some very coarse rules about making
-               nouns plural in English. (If root is a verb, we're going
-               to guess wrong, so supply your own suffix values for
-               verbs.)
-    fmt      - A map-based format string that produces this function's
-               return value. The default format is simply "%(word)s",
-               but a "count" value is also available. For example:
-
-                   decline_deprecated('rabbit',5)
-
-               simply returns 'rabbits', but
-
-                   decline_deprecated('rabbit',5,fmt='%(count)d %(word)s')
-
-               returns '5 rabbits'.
-  
-  >>> decline_deprecated('gram',5)
-  'grams'
-  >>> decline_deprecated('gram',1)
-  'gram'
-  >>> decline_deprecated('gram',0)
-  'grams'
-  >>> decline_deprecated('tree',2)
-  'trees'
-  >>> decline_deprecated('bush',2)
-  'bushes'
-  >>> decline_deprecated('bench',2)
-  'benches'
-  >>> decline_deprecated('bunny',1,fmt='%(count)d %(word)s')
-  '1 bunny'
-  >>> decline_deprecated('bunny',2,fmt='%(count)d %(word)s')
-  '2 bunnies'
-  >>> decline_deprecated('',5,suffixes=('person','people'))
-  'people'
-  >>> decline_deprecated('',1,suffixes=('person','people'))
-  'person'
-  >>> decline_deprecated('',0,suffixes=('person','people'))
-  'people'
-  >>> decline_deprecated('gram',5,fmt='%(count)d %(word)s')
-  '5 grams'
-  >>> decline_deprecated('gram',1,fmt='%(count)d %(word)s')
-  '1 gram'
-  >>> decline_deprecated('gram',0,fmt='%(count)d %(word)s')
-  '0 grams'
-  >>> decline_deprecated('pe',5,suffixes=('rson','ople'),fmt='%(count)d %(word)s')
-  '5 people'
-  >>> decline_deprecated('pe',1,suffixes=('rson','ople'),fmt='%(count)d %(word)s')
-  '1 person'
-  >>> decline_deprecated('pe',0,suffixes=('rson','ople'),fmt='%(count)d %(word)s')
-  '0 people'
-  >>> decline_deprecated('pe',5,suffixes=('rson','ople'),fmt='%(word)s (%(count)d)')
-  'people (5)'
-  """
-
-  # Return an empty string if that's what we've been given for a root value.
-  if not root and not suffixes:
-    return ''
-  # If this isn't a string value, make it one or raise an exception.
-  if not isinstance(root,str):
-    try:
-      root=str(root)
-    except:
-      raise TypeError("Value %r is not a string and cannot be made into one."%(root,))
-  # If the caller supplied no suffixes, take a guess.
-  if suffixes==None:
-    if any([root.endswith(x) for x in ('s','sh','ch','x')]):
-      suffixes=('','es')
-    elif len(root)>=2 and root[-1]=='y' and root[-2] not in 'aeiou':
-      suffixes=('y','ies')
-      root=root[:-1]
-    else:
-      suffixes=('','s')
-  # Apply the suffix to the root.
-  s=root+suffixes[n!=1]
-  if not fmt:
-    fmt='%(word)s'
-  return fmt%dict(word=s,count=n)
-
 class Spinner(object):
   """Instantiate this class with any sequence, the elements of which
   will be returned iteratively every time that instance is called.
@@ -721,7 +626,7 @@ class Spinner(object):
     from handy import Spinner
     spinner=Spinner()
     while True:
-      sys.stderr.write(" It won't stop! (%s) \r"%spinner())
+      sys.stderr.write(" It won't stop! (%s) \\r"%spinner())
       time.sleep(0.1)
 
   It's a cheap trick, but it's fun. (Use ^C to stop it.)
@@ -736,12 +641,12 @@ class Spinner(object):
     from handy import Spinner
     spinner=Spinner(Spinner.cylon,True)
     while True:
-      sys.stderr.write(" The robots [%s] are coming. \r"%spinner())
+      sys.stderr.write(" The robots [%s] are coming. \\r"%spinner())
       time.sleep(0.1)
 
-  Bear in mind that instantiating Spinner with a mutable sequence (like
-  a list) means you can modify that last after the fact. This raises
-  some powerful, though not necessarily intended, possibilities.
+  Bear in mind instantiating Spinner with a mutable sequence (like a
+  list) means you can modify that last after the fact. This raises some
+  powerful, though not necessarily intended, possibilities.
   """
 
   cylon=tuple('''
@@ -830,9 +735,9 @@ if __name__=='__main__':
   sp_find.set_defaults(cmd='find')
   sp_find.add_argument('path',action='store',default='.',help="The path to be searched.")
   sp_find.add_argument('--depth',action='store',type=non_negative_int,default=sys.maxsize,help="The number of directories to decend below the given path when traversing the directory structure.")
-  sp_find.add_argument('--follow',action='store_true',help="Follow symlinks to directories during recursion. This is done in a way that's safe from symlink loops.")
-  sp_find.add_argument('--ignore',metavar='FILE',action='store',nargs='+',default=[],help="A list of filespecs and/or regular expressions (prefixed with 're:') that itentify files NOT to be reported.")
-  sp_find.add_argument('--prune',metavar='DIR',action='store',nargs='+',default=[],help="A list of filespecs and/or regular expressions (prefixed with 're:') that itentify directories NOT to be recursed into.")
+  sp_find.add_argument('--follow',action='store_true',help="Follow symlinks to directories during recursion. The method used is safe from symlink loops.")
+  sp_find.add_argument('--ignore',metavar='FILE',action='store',nargs='+',default=[],help="A list of filespecs and/or regular expressions (prefixed with 're:') identifying files NOT to be reported.")
+  sp_find.add_argument('--prune',metavar='DIR',action='store',nargs='+',default=[],help="A list of filespecs and/or regular expressions (prefixed with 're:') identifying directories NOT to be recursed into.")
   sp_find.add_argument('--dirs',dest='dirs',action='store',default='False',choices=('true','false','first','last'),help="If 'true' or 'first', output the path (with a %s suffix) immediately before listing the files in that directory. If 'last', output the path immediately after all files and other directories under that path have been output. Directory names are suppressed by default."%os.sep)
 
   sp_test=sp.add_parser('test',help="Run all doctests for this module.")
