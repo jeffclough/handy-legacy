@@ -157,6 +157,7 @@ File(bin_dir/'base').copy('base').link(
   'encode16',
   'encode32',
   'encode64',
+  link_dir=bin_dir,
   force=options.force
 )()
 
@@ -229,8 +230,7 @@ class VirtualEnv(Target):
     self.force_links=False
 
   def link(self,*args,link_dir=None,force=None):
-    """Add one or more symlinks to this virtual environment's runner
-    script."""
+    """Add one or more symlinks to this virtual environment instance."""
 
     self.links.extend(args)
     if link_dir is not None: self.link_dir=link_dir
@@ -256,6 +256,10 @@ cd {cmd}
 source ./bin/activate
 pip install {modules}"""
       res=ShellScript(script,stdout=PIPE,stderr=PIPE)()
+      self.stdout=res.stdout
+      self.stderr=res.stderr
+      self.result=res.result
+      self.script_filename=res.script
 
     # Copy "runner" to our new venv directory, and symlink cmd to it from our bin directory.
     runner=File(venv_dir/self.cmd/'runner').copy('runner')
@@ -264,10 +268,9 @@ pip install {modules}"""
 
     return self
 
-
 # Create and set up our Python virtual environments.
-VirtualEnv('j2p','javalang','six').link('j2p')()
-VirtualEnv('qr','PyQRCode').link('qr')()
+VirtualEnv('j2p','javalang','six').link(bin_dir/'j2p')()
+VirtualEnv('qr','PyQRCode').link(bin_dir/'qr')()
 
 dc(f"platform.system={platform.system}")
 if platform.system=='Darwin':

@@ -37,7 +37,7 @@ from functools import reduce
 from subprocess import run,DEVNULL,PIPE,STDOUT,CompletedProcess
 from tempfile import NamedTemporaryFile
 from path import Path
-from debug import DebugChannel
+from debug import DebugChannel,debug_call
 
 dc=DebugChannel(
   False,
@@ -396,9 +396,16 @@ class ShellScript(Command):
     t=NamedTemporaryFile(mode='w+',delete=False)
     print(script,file=t.file)
     t.file.close()
-    chmod(t.name,0o700) # Make our shell script executable.
+    self.script=t.name
+    chmod(self.script,0o700) # Make our shell script executable.
     #dc(script)
-    super().__init__(t.name,stdin=stdin,stdout=stdout,stderr=stderr,shell=True,quiet=quiet)
+    super().__init__(self.script,stdin=stdin,stdout=stdout,stderr=stderr,shell=True,quiet=quiet)
+
+# Uncomment this code once ShellScript is working.
+#  def __del__(self):
+#    """Remove our tempfile."""
+#
+#    os.unlink(self.script)
   
   def __call__(self,*args,**kwargs):
     """Run the shell script the caller has set up. Return this
@@ -562,6 +569,25 @@ class File(Target):
 
     return self
 
+  def copy(self,source,follow=False):
+    """Prepare to copy the source file to our target file. Non-absolute
+    paths in links are relative to the path in install.options.sdir,
+    which is initially set to the directory the installer script is in.
+    The source file also becomes this target's sole dependency.
+
+    The copy will not be performed until this File instance is called.
+
+    Return a referece to this File object."""
+
+    s=source if isinstance(source,(Path,Target)) else Path(source)
+    if not s.isAbsolute():
+      s=(options.sdir/s).normal()
+    self.deps=[s] # Make sure our source file is a dependency.
+    self.source=s
+    self.follow=follow
+    return self
+
+  #@debug_call
   def link(self,*args,link_dir=None,force=None):
     """Prepare to create one or more symlinks (args to this target file.
     Non-absolute paths are relative to link_dir if given, or our
@@ -585,24 +611,6 @@ class File(Target):
       self.link_dir=link_dir
     if force is not None:
       self.force_links=force
-    return self
-
-  def copy(self,source,follow=False):
-    """Prepare to copy the source file to our target file. Non-absolute
-    paths in links are relative to the path in install.options.sdir,
-    which is initially set to the directory the installer script is in.
-    The source file also becomes this target's sole dependency.
-
-    The copy will not be performed until this File instance is called.
-
-    Return a referece to this File object."""
-
-    s=source if isinstance(source,(Path,Target)) else Path(source)
-    if not s.isAbsolute():
-      s=(options.sdir/s).normal()
-    self.deps=[s] # Make sure our source file is a dependency.
-    self.source=s
-    self.follow=follow
     return self
 
 class Folder(Target):

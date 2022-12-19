@@ -139,9 +139,26 @@ __all__=[
 ]
 __version__='0.1.0'
 
-import inspect,os,sys,traceback
+import functools,inspect,os,sys,traceback
 # Because I need "time" to be a local variable in DebugChannel.write() ...
 from time import gmtime,localtime,strftime,time as get_time
+
+def debug_call(func):
+  """This is a function decorator for debugging how a function is called
+  and what value it returns.
+
+  I haven't worked out how to parameterize a decorator yet, so this one
+  just prints to standard output."""
+
+  @functools.wraps(func)
+  def wrapper_debug(*args, **kwargs):
+    sig=','.join([repr(a) for a in args]+[f"{var}={val!r}" for var,val in kwargs.items()])
+    print(f"{func.__name__}({sig})")
+    res=func(*args, **kwargs)
+    sig='...' if sig else ''
+    print(f"{func.__name__}({sig}) returns {res!r}")
+    return res
+  return wrapper_debug
 
 def line_iter(s):
   """This iterator facilitates stepping through each line of a multi-
