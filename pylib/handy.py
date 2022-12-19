@@ -23,13 +23,6 @@ class AsciiString(str):
 
   def __new__(cls,val):
     return str.__new__(cls,val.translate(cls.utoa))
-    #if not s.isascii():
-    #  warnings.warn(
-    #  f"{cls.__name__} instance contains non-ASCII content: {s!r}",
-    #  UnicodeWarning,
-    #  stacklevel=2
-    #)
-    #return s
 
 class CaselessString(str):
   """This is kind of a lawyerly class for strings. They have no case! :)
