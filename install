@@ -208,6 +208,7 @@ scripts=[
   'title-case',
   'tread',
   'ts',
+  'wrap',
 ]
 
 # Copy our scripts.
