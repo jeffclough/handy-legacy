@@ -210,8 +210,8 @@ class DebugChannel(object):
       enabled=False,
       stream=sys.stderr,
       label='DC',
-      indent_with='  ',
-      fmt='{label}: [{pid}] {basename}:{line}:{function}: {indent}{message}\n',
+      indent_with='    ',
+      fmt='{label}: {basename}:{line}:{function}: {indent}{message}\n',
       date_fmt='%Y-%m-%d',
       time_fmt='%H:%M:%S',
       time_tupler=localtime,
@@ -396,12 +396,42 @@ class DebugChannel(object):
     if lines and any(l.lstrip().startswith('@') for l in lines):
       # We're being called as a decorator.
       def f(*args,**kwargs):
-        s=','.join([repr(a) for a in args]+[f"{k}={v!r}" for k,v in kwargs.items()])
-        self.write(f"Calling {arg.__name__}({s}) ...").indent()
+        # Record how this function is being called.
+        sig=','.join([repr(a) for a in args]+[f"{k}={v!r}" for k,v in kwargs.items()])
+        self.write(f"{arg.__name__}({sig}) ...").indent()
         t0=get_time()
+        # Call the function we're wrapping
         ret=arg(*args,**kwargs)
+        # Record this function's return.
         t1=get_time()
-        self.undent().write(f"Function {arg.__name__} returns {ret!r} after {t1-t0:0.6f} seconds.")
+        sig='...' if sig else ''
+        dt=t1-t0
+        d,dt=divmod(dt,86400) # Days
+        if d:
+          d=f"{int(d)}d"
+        else:
+          d=''
+        h,dt=divmod(dt,3600) # Hours
+        if h:
+          h=f"{int(h)}h"
+        else:
+          h='0h' if d else ''
+        m,dt=divmod(dt,60) # Minutes
+        if m:
+          m=f"{int(m)}m"
+        else:
+          m='0m' if h else ''
+        if m: # Seconds
+          s=f"{int(dt)}s"
+        else:
+          if dt>=1: # Fractional seconds
+            s=f"{dt:0.3f}"
+            s=s[:4].rstrip('0')+'s'
+          elif dt>=0.001: # Milliseconds
+            s=f"{int(dt*1000)}ms"
+          else: # Microseconds
+            s=f"{int(dt*1e6)}µs"
+        self.undent().write(f"{arg.__name__}({sig}) returns {ret!r} after {d}{h}{m}{s}.")
         return ret
       return f
 
