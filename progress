@@ -1,7 +1,16 @@
 #!/usr/bin/env python3
 import os,re,sys
+from datetime import datetime,timedelta
+
+from debug import DebugChannel
 
 prog=os.path.basename(sys.argv[0])
+
+def intdivmod(a,b):
+  "Like regular divmod(), but returns integers."
+
+  a,b=divmod(a,b)
+  return (int(a),int(b))
 
 # Get the character size of this terminal when this module is loaded.
 try:
@@ -31,55 +40,42 @@ class Progress(object):
   print '\\r'+str(progress(i))
   """
 
-  def __init__(self,limit,**kwargs):
+  def __init__(self,limit,fmt='(%d)',trailer='=',mark='>',leader='-',end='|',width=tty_columns,started=None,strict=True):
     """Initialize this object with its limit and any other optional
     arguments the caller might provide.
 
     Arguments:
         limit     The upper limit of the pos argument. This must be
-                  either an int or float. This is the only positional
-                  argument (so it's also mandatory).
+                  either an int or float.
         fmt       Format string for the numeric value of this progress
-                  bar. (default: (%d))
+                  bar.
         trailer   Character to fill in the bar to the left of (trailing
-                  behind) the current position. (default: =)
+                  behind) the current position.
         mark      Character that marks the porgress bar's current
-                  position. (default: >)
+                  position.
         leader    Character to fill in the bar to the right of (leading)
-                  the current position. (default: -)
+                  the current position.
         end       Character that marks the right side of the bar.
-                  (default: |)
         width     The number of characters to fit the progress bar into.
-                  (default: screen character width minus 1)
+                  (default: terminal's character width minus 1)
+        started   The datetime instance marking when whatever we're
+                  monitoring started. If present, this also appends an
+                  estimated time until completion to the end of our
+                  progress output.
         strict    If True, the position is always forced into the
-                  interval [0-limit]. (default: True)
+                  interval [0-limit].
     """
 
-    # The caller MUST pass in at least an upper limit value.
     self.limit=limit
-
-    # Remember our keyword arguments or use their defaults.
-    for var,val in (
-      ('fmt','(%d)'),
-      ('trailer','='),
-      ('mark','>'),
-      ('leader','-'),
-      ('end','|'),
-      ('width',tty_columns-1),
-      ('strict',True),
-    ):
-      if kwargs==None:
-        setattr(self,var,val)
-      else:
-        setattr(self,var,kwargs.get(var,val))
-      if getattr(self,var)==None:
-        if var=='width':
-          width=tty_columns-1
-        else:
-          setattr(self,var,'')
-
-    # Set our starting position to 0.
-    self.position=0
+    self.fmt=fmt
+    self.trailer=trailer
+    self.mark=mark
+    self.leader=leader
+    self.end=end
+    self.width=width
+    self.started=started
+    self.strict=strict
+    self.position=0 # Our start position is 0.
 
   def __call__(self,pos):
     """Accept a new position for this Progress object and return
@@ -92,12 +88,13 @@ class Progress(object):
     "Output a string describing the state of this Progress object."
 
     # Get the string version of our position and remember its length.
-    pos_str=self.positionString()
+    pos_str,eta=self.positionString()
     pos_len=len(pos_str)
+    eta_len=len(eta)
 
     # Compute the ideal position of our marker in the width set up for this
     # object, and use this to start building our return value.
-    pos=int((float(self.position)/self.limit)*self.width)
+    pos=int((self.position/self.limit)*(self.width-eta_len))
     # Crate our trailer position string (if any).
     if pos_str:
       if pos>pos_len:
@@ -117,10 +114,11 @@ class Progress(object):
           # Remove the first leader character and append the position marker.
           s=s[1:]+self.mark
     # Append the leader.
-    s+=self.leader*(self.width-len(s))
+    s+=self.leader*(self.width-eta_len-len(s))
     # Append our end mark if possible.
     if self.end and s[-1] in (self.leader,self.mark):
       s=s[:-1]+self.end
+    s+=eta
 
     # Return our position string.
     return s
@@ -136,22 +134,49 @@ class Progress(object):
     return pos
 
   def positionString(self,pos=None):
-    """Return the string-formatted value of the given position of this
-    Progress object."""
+    """Return a tuple containint the the string-formatted value of the
+    given position (or by default, current the "position" of this
+    instance) of this Progress object and the ETA suffix (or an empty
+    string if none)."""
 
+    if pos is None:
+      pos=self.position
+
+    # Format our position string.
     if self.fmt:
-      if pos==None:
-        pos=self.position
       try:
-        s=self.fmt%(pos,)
+        ps=self.fmt%(pos,)
       except TypeError as e:
         if str(e).startswith('not all arguments'):
-          s=self.fmt
+          ps=self.fmt
         else:
           raise
     else:
-      s=''
-    return s
+      ps=''
+
+    # Format our ETA.
+    if self.started:
+      # Get our elapsed time in seconds.
+      et=datetime.now()-self.started
+      et=int(et.days*86400+et.seconds)
+      # Compute our time remaining from the rate of our progress so far.
+      r=et/pos if et else 1
+      s=round(r*(self.limit-pos)) # Estimated seconds remaining.
+      days,r=intdivmod(s,86400) # Days
+      eta=f"{days}d" if days else ''
+      hours,r=intdivmod(r,3600) # Hours
+      eta+=f"{hours}h" if hours else ''
+      if not days:
+        # Minutes
+        minutes,r=intdivmod(r,60)
+        eta+=f"{minutes}m" if minutes else ''
+        if not hours:
+          # Seconds are left in r.
+          eta+=f"{r}s" if r else ''
+    else:
+      eta=''
+
+    return (ps,eta)
 
 class PercentProgress(Progress):
   """This is just like the Progress class, but the default format is
@@ -163,11 +188,9 @@ class PercentProgress(Progress):
     super(PercentProgress,self).__init__(limit,**kwargs)
 
   def positionString(self,pos=None):
-    if pos==None:
+    if pos is None:
       pos=self.position
-    return super(PercentProgress,self).positionString(
-      float(pos)/self.limit*100
-    )
+    return super().positionString(float(pos)/self.limit*100)
 
 class ByteSizeProgress(Progress):
   """This is just like the Progress class, but the default format is
@@ -196,8 +219,10 @@ class ByteSizeProgress(Progress):
     super(ByteSizeProgress,self).__init__(limit,**kwargs)
 
   def positionString(self,pos=None):
-    if pos==None:
+    if pos is None:
       pos=self.position
+
+    _,eta=super().positionString(pos)
 
     if self.fmt:
       # Figure out which units to use.
@@ -217,7 +242,7 @@ class ByteSizeProgress(Progress):
           raise
     else:
       s=''
-    return s
+    return (s,eta)
 
 if __name__=='__main__':
   try:
@@ -234,18 +259,45 @@ if __name__=='__main__':
     ap.add_argument('--file-last',action='store_true',help="""Just like --file, but the last occurance of the pattern in the file is used for the position.""")
     ap.add_argument('--newline','-n',action='store_true',help="Write a newline character to standard output after every progress bar. By default, only a carriage return is output, returning the cursor to the left-most column of the terminal.")
     ap.add_argument('--fmt','--format',dest='fmt',action='store',default='(%d)',help="Format string for the numeric value of this progress bar. This option is ignored if --bytes is given. (default: %(default)s)")
-    ap.add_argument('--mark',action='store',default='>',help="Character that marks the porgress bar's current position. (default: %(default)s)")
-    ap.add_argument('--trailer',action='store',default='=',help="Character to fill in the bar to the left of (trailing behind) the current position. (default: %(default)s)")
-    ap.add_argument('--leader',action='store',default='-',help="Character to fill in the bar to the right of (leading) the current position. (default: %(default)s)")
-    ap.add_argument('--end',action='store',default='|',help="Character that marks the right side of the bar. (default: %(default)s)")
-    ap.add_argument('--width','-w',action='store',type=int,default=tty_columns-1,help="The number of characters to fit the progress bar into. (default: %(default)s)")
-    ap.add_argument('--test',action='store',type=float,default=0,help="Write all progress bar values to standard output and exit. The optional value of this option is the number of seconds (which may be a floating point value) to delay between each iteration.")
+    ap.add_argument('--mark',metavar='CHAR',action='store',default='>',help="Character that marks the porgress bar's current position. (default: %(default)s)")
+    ap.add_argument('--trailer',metavar='CHAR',action='store',default='=',help="Character to fill in the bar to the left of (trailing behind) the current position. (default: %(default)s)")
+    ap.add_argument('--leader',metavar='CHAR',action='store',default='-',help="Character to fill in the bar to the right of (leading) the current position. (default: %(default)s)")
+    ap.add_argument('--end',metavar='CHAR',action='store',default='|',help="Character that marks the right side of the bar. (default: %(default)s)")
+    ap.add_argument('--width','-w',metavar='W',action='store',type=int,default=tty_columns-1,help="The number of characters to fit the progress bar into. (default: %(default)s)")
+    ap.add_argument('--test',metavar='S',action='store',type=float,default=0,help="Write all progress bar values to standard output and exit. The value of this option is the number of seconds (which may be a floating point value) to delay between each iteration.")
     ap.add_argument('--percent',action='store_true',help="Express progress as a percentage rather than as an absolute value.")
     ap.add_argument('--bytes',action='store_true',help="Express progress as a number of bytes in human-friendly units (B, KB, MB, GB, TB, or EB) according to the number of bytes in question.")
     ap.add_argument('--divisor',action='store',type=int,choices=(1000,1024),default=1000,help="For use with --bytes. This is the value you divide a number by to convert from one unit (like KB) to the next higher unit (like GB). It defaults to 1000, but you can set it to 1024 if you're counting memory bytes rather than filesystem bytes. These are the only two permitted values for the divisor artument.")
+    ap.add_argument('--started',metavar='T',action='store',help="""T is the time matching the "[[YY]YY-MM-DD ] [HH:MM[:SS]" pattern when the process being monitored was started. The presence of this option turns the ETA at the end of the output value.""")
     ap.add_argument('pos',action='store',help="The position you want this progress bar to express.")
     ap.add_argument('limit',action='store',help="The upper limit of the pos argument.")
     opt=ap.parse_args()
+
+    # If --started is given, parse its argument to a datetime value, and use that
+    # together with the current progress position and the current time to
+    # estimate the time the process being monitored will finish.
+    if opt.started:
+      now=datetime.now()
+      m=re.match(r'^\s*((?P<year>\d{2,4})[-/](?P<month>\d{1,2})[-/](?P<day>\d{1,2})(\s+|[Tt]))?(?P<hour>\d{1,2}):(?P<min>\d{1,2})(:(?P<sec>\d{1,2}))?\s*$',opt.started)
+      if m:
+        # Get our time components, make them integers, and put them into an object.
+        d=m.groupdict()
+        d={k:(None if d[k] is None else int(d[k])) for k in d.keys()}
+        opt.started=type('',(),d)
+
+        # Fill in amy missing pieces of our start date and time.
+        if opt.started.year is None: opt.started.year=now.year
+        elif opt.started.year<100: opt.started.year+=(now.year//100)*100
+        elif opt.started.year<1000: opt.started.year+=(now.year//1000)*1000
+        if opt.started.month is None: opt.started.month=now.month
+        if opt.started.day is None: opt.started.day=now.day
+        if opt.started.sec is None: opt.started.sec=0
+
+        # Convert all this to a datetime value.
+        opt.started=datetime(
+          opt.started.year,opt.started.month,opt.started.day,
+          opt.started.hour,opt.started.min,opt.started.sec
+        )
 
     # If --file is given, find the position of the first occurance of the
     # opt.pos RE in the file named by opt.limit.
@@ -289,7 +341,8 @@ if __name__=='__main__':
         trailer=opt.trailer,
         leader=opt.leader,
         end=opt.end,
-        width=opt.width
+        width=opt.width,
+        started=opt.started
       )
     elif opt.bytes:
       p=ByteSizeProgress(
@@ -299,7 +352,8 @@ if __name__=='__main__':
         trailer=opt.trailer,
         leader=opt.leader,
         end=opt.end,
-        width=opt.width
+        width=opt.width,
+        started=opt.started
       )
     else:
       p=Progress(
@@ -309,7 +363,8 @@ if __name__=='__main__':
         trailer=opt.trailer,
         leader=opt.leader,
         end=opt.end,
-        width=opt.width
+        width=opt.width,
+        started=opt.started
       )
 
     if opt.test>0:
