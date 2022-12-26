@@ -168,6 +168,7 @@ class Progress(object):
           # Seconds are left in r.
           eta+=f"{r}s" if r else ''
     else:
+      seconds_remaining=None
       eta=''
 
     return (seconds_remaining,eta)
