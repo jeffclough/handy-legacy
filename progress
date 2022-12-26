@@ -3,7 +3,7 @@ import os,re,sys
 from datetime import datetime
 
 from debug import DebugChannel
-dc=DebugChannel(False)
+#dc=DebugChannel(False)
 
 def intdivmod(a,b):
   "Like regular divmod(), but returns integers."
@@ -413,27 +413,27 @@ if __name__=='__main__':
       print(f"{prog}: Error: {e}",file=sys.stderr)
       sys.exit(2)
 
-    if dc:
-      dc(f"{opt.file=}")
-      dc(f"{opt.file_last=}")
-      dc(f"{opt.newline=}")
-      dc(f"{opt.fmt=}")
-      dc(f"{opt.mark=}")
-      dc(f"{opt.trailer=}")
-      dc(f"{opt.leader=}")
-      dc(f"{opt.end=}")
-      dc(f"{opt.width=}")
-      dc(f"{opt.test=}")
-      dc(f"{opt.percent=}")
-      dc(f"{opt.divisor=}")
-      dc(f"{opt.started=}")
+    #if dc:
+    #  dc(f"{opt.file=}")
+    #  dc(f"{opt.file_last=}")
+    #  dc(f"{opt.newline=}")
+    #  dc(f"{opt.fmt=}")
+    #  dc(f"{opt.mark=}")
+    #  dc(f"{opt.trailer=}")
+    #  dc(f"{opt.leader=}")
+    #  dc(f"{opt.end=}")
+    #  dc(f"{opt.width=}")
+    #  dc(f"{opt.test=}")
+    #  dc(f"{opt.percent=}")
+    #  dc(f"{opt.divisor=}")
+    #  dc(f"{opt.started=}")
 
     # Decide which Progress class the user has called for.
     kwargs={}
     if opt.fmt is not None:
       kwargs['fmt']=opt.fmt
     kwargs.update({k:v for k,v in opt.__dict__.items() if k in ('limit mark trailer leader end width started'.split())})
-    dc(f"{kwargs=}")
+    #dc(f"{kwargs=}")
     if opt.percent:
       p=PercentProgress(**kwargs)
     elif opt.bytes:
