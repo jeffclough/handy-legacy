@@ -51,10 +51,42 @@ them.
     from path import Path
 
     bins_with_etc=[
-      p for p in 
-        [Path(x) for x in os.environ['PATH'].split(':')]
-      if (p.dirName()/'etc').isDir()
+      p for p in [Path(x) for x in os.environ['PATH'].split(':')]
+        if (p.dirName()/'etc').isDir()
     ]
+
+Python doesn't support subtracting one string from another, so I've
+overloaded the subtraction operator so that for Path's A and B, A-B
+computes the relative path from B to A. Matematical sensibilitys would
+like A-B+B to be A, so that works too.
+
+    >>> home=Path.expandUser('~')
+    >>> cwd=Path.getCwd()
+    >>> (home+(cwd-home))==cwd
+    True
+    >>> (cwd+(home-cwd))==home
+    True
+
+Notice addition and subtraction of Path values is NOT associative. This
+is because paths do not have numeric values. They are fundamentally
+strings. Weirdly enough, the addition and division operators work
+exactly the same except for their precidence. Consider this:
+
+    >>> a=Path('A')
+    >>> b=Path('B')
+    >>> c=Path('C')
+    >>> a+b/c
+    Path('A/B/C')
+    >>> a/b+c
+    Path('A/B/C')
+
+The expressions a+b/c and a/b+c give the same result, but they get there
+differently. Don't let this throw you. As a matter of style, it might be
+good to choose either a/b or a+b and stick with it.
+
+CAVEAT: I don't like having / and + do the same thing. I'm thinking of
+removing the division overloading for Path values, so maybe start
+replacing / with + in your code now.
 
 This code is still very new. There are certainly some buggy edge-cases
 to be worked out, but I think the Path class will be very handy for
@@ -72,7 +104,7 @@ __all__=[
   '__version__',
 ]
 __author__='Jeff Clough, @jeffclough@mastodon.social'
-__version__='0.2.0-2022-11-27'
+__version__='0.3.0-2022-12-27'
 
 import os,re
 from contextlib import contextmanager
@@ -83,7 +115,7 @@ from datetime import datetime
 re_splitter=re.compile(f"{os.sep}?[^:{os.sep}]+[:{os.sep}]?")
 
 class Path(str):
-  def __new__(cls,*s):
+  def __new__(cls,*components):
     """
     >>> Path()
     Path('.')
@@ -98,11 +130,9 @@ class Path(str):
     /a/b/c
     """
 
-#    return str.__new__(cls,os.sep.join(
-#      [x.strip(os.sep) if i>0 else x.rstrip(os.sep)
-#        for i,x in enumerate([os.path.normpath(str(y)) for y in s])
-#      ]
-    return str.__new__(cls,os.path.normpath(os.sep.join(s)))
+    return str.__new__(cls,os.path.normpath(os.sep.join(
+      [str(c) for c in components]
+    )))
 
   def __repr__(self):
     return f"{type(self).__name__}({super().__repr__()})"
@@ -118,6 +148,17 @@ class Path(str):
       return m.__get__(self)
     else:
       return super().__getattribute__(meth)
+
+  def __sub__(self,other):
+    """Use the subtaction operator (e.g. A-B) to compute the relative path
+    from B to A."""
+
+    return Path(os.path.relpath(str(self),str(other)))
+
+  def __add__(self,other):
+    """Use the addition operator (e.g. A+B) to create Path(A/B)."""
+
+    return Path(str(self),str(other))
 
   def __truediv__(self,other):
     "Support / operator on Path objects and strings."
@@ -188,7 +229,9 @@ class Path(str):
     # Return the absolute path.
     return (p/self).normal()
 
-  def relative(self,start=os.curdir): return Path(os.path.relpath(str(self),str(start)))
+  def relative(self,start=None):
+    return Path(os.path.relpath(str(self),None if start is None else str(start)))
+
   def normal(self): return Path(os.path.normpath(str(self)))
   def real(self): return Path(os.path.realpath(str(self)))
 
