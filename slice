@@ -1,39 +1,58 @@
 #!/usr/bin/env python3
-import argparse,os,re,stat,traceback,sys
+import argparse,os,stat,traceback,sys
+import RE as re # Use our user-extensible expansion of Python's re module.
 from glob import glob
 from debug import DebugChannel
 
 ap=argparse.ArgumentParser(
-  usage="""
-Form 1: %(prog)s FILESPEC[:[FIRSTLINE][:[LASTLINE]]]
-Form 2: %(prog)s FILESPEC[:[STARTPAT][:[ENDPAT]]]""",
+  add_help=False,
+  usage="""%(prog)s FILE_SPEC[:[START_LINE][:[END_LINE]]]
+
+    LINE_NUMBER ::= INTEGER
+    REGEX       ::= a Python regular expression
+    LINE_SPEC   ::= LINE_NUMBER | REGEX
+    START_LINE  ::= LINE_SPEC
+    END_LINE    ::= [ "+" ] LINE_SPEC""",
   description="""Description:
-FIRSTLINE is the number (starting from 1) of the first line to be output. LASTLINE is the number of the last line to be output. If LASTLINE has a plus sign (+) in front of it, it is the number of lines to be output, beginning with FIRSTLINE. If no FIRSTLINE is given, it defaults to 1. If no LASTLINE is given, output continues to the end of the input file.
+"%(prog)s" is a little like if grep, head, and tail had a baby. It's purpose is to write to standard output a portion of what it reads from its input file. It looks for START_LINE in the input and begins writing to standard output from that point forward until it finds END_LINE, which it writes out and then ignores the remainder of the input. So it outputs a "slice" of the input file.
 
-STARTPAT is a regular expression that, when matched in the input file, starts output. ENDPAT, when matched, ends output. By default, the line matching ENDPAT is included in the output.
+FILE_SPEC may be any file specification, optionally including "~" to indicate the user's home directory, "$VAR" or "${VAR}" to use an environment variable, or wildcard chracters to match more than one file. A filename of "-" may be given if standard input is to be read. (APPOLOGY: I haven't implemented wildcard matching yet.)
 
-Forms 1 and 2 can be mixed, so FILESPEC[:[FIRSTLINE][:[ENDPAT]]] and FILESPEC[:[STARTPAT][:[LASTLINE]]] are also valid arguments. In the latter case, the user is advised to use relative numbering for LASTLINE by prefixing it with a plus sign (+), though this is not required.
-"""
+START_LINE and END_LINE can each be an integer value (interpreted as a line number) or a regular expression (which supports Python's RE syntax). If LAST_LINE gives a line number beginning with a plus (+) sign, it is taken to mean the number of lines to be output beginning with whatever line START_LINE indicates."""
 )
-ap.add_argument('-d',dest='delimeter',action='store',default=':',help="Set the delimiter that separates the components of each command line argument. (default: colon (:))")
+ap.add_argument('-d',dest='delimeter',metavar='CHAR',action='store',default=':',help="Set the delimiter that separates the components of each command line argument. (default: colon (:))")
 #TODO: Implement the -f option.
-ap.add_argument('-f','--follow',dest='follow',action='store_true',default=False,help="Monitor the input file for further content if the LASTLINE or ENDPAT is not found. This is similar to the -f option of tail. (NOT YET IMPLEMENTED!)")
+ap.add_argument('--follow','-f',action='store_true',default=False,help="Monitor the input file for further content if the LASTLINE or ENDPAT is not found. This is similar to the -f option of tail. (NOT YET IMPLEMENTED!)")
 ap.add_argument('-i',dest='case',action='store_false',default=True,help="Ignore case when scanning for regular expressions.")
 ap.add_argument('-l',dest='filenames',action='store_false',default=True,help="Suppress normal output of filename before slices of that file when more than one file is given.")
 # TODO: Implement the --last option.
 ap.add_argument('--last',dest='last',action='store_true',default=False,help="Output only the last matching slice in each file. (NOT YET IMPLEMENTED!)")
-ap.add_argument('-n','--next',dest='next',action='store_true',default=False,help="Keeps ENDPAT from matching the same line STARTPAT matched. This also requires that the line matching ENDPAT not be output and remain available to be matched by STARTPAT. (This option has no effect if LASTLINE is use rather than ENDPAT, and it makes no sense if FIRSTLINE is used rather than STARTPAT.)")
-ap.add_argument('-m','--multi',dest='multi',action='store_true',default=False,help="Output more than one slice per file. Only the first slice is output by default. (This only makes sense if STARTPAT is used.")
-ap.add_argument('--divider',action='store',default=None,help="Print this string between slices if --multi was used. (default: %(default)r)")
+ap.add_argument('--next','-n',action='store_true',default=False,help="Keeps ENDPAT from matching the same line STARTPAT matched. This also requires that the line matching ENDPAT not be output and remain available to be matched by STARTPAT. (This option has no effect if LASTLINE is use rather than ENDPAT, and it makes no sense if FIRSTLINE is used rather than STARTPAT.)")
+ap.add_argument('--multi','-m',action='store_true',default=False,help="Output more than one slice per file. Only the first slice is output by default. (This only makes sense if STARTPAT is used.")
+ap.add_argument('--divider',metavar='D',action='store',help="Print string value D between slices if --multi was used.")
+ap.add_argument('--quiet','-q',action='store_true',help="Warnings, errors, and debug output are normally written to standard error. This turns all that off.")
 ap.add_argument('--debug',action='store_true',help="Turn on debugging output for trouble-shooting purposes.")
 ap.add_argument('--test',action='store_true',help="This runs a self-test and is intended for debugging this program. (No output means everything worked correctly.)")
+ap.add_argument('--help','-h',action='help',help="Show this help message and exit.")
 ap.add_argument('args',nargs='*',help="See forms 1 and 2 above under usage.")
 opt=ap.parse_args()
 
-dc=DebugChannel(opt.debug,label='D',fmt='{label}: {basename}({function},{line}): {indent}{message}\n')
+dc=DebugChannel(opt.debug and not opt.quiet,label='D',fmt='{label}: {basename}({function},{line}): {indent}{message}\n')
 
-def die(msg,rc=0):
-  print(f"{sys.argv[0]}: {msg}",file=sys.stderr)
+EXIT_SUCCESS=0
+EXIT_WARNING=1
+EXIT_ERROR=2
+
+def warning(msg,rc=EXIT_WARNING):
+  if not opt.quiet:
+    print(f"{ap.prog}: Warning: {msg}",file=sys.stderr)
+  if rc is not None:
+    sys.exit(rc)
+
+def die(msg,rc=EXIT_ERROR):
+  if not opt.quiet:
+    
+    print(f"{ap.prog}: Error {msg}",file=sys.stderr)
   sys.exit(rc)
 
 opt.re_flags=0
@@ -100,6 +119,7 @@ def parse_arg(arg):
   if not m:
     die('Bad argument: %r'%arg)
   fs,first,last=m.group('fs','first','last')
+  fs=os.path.expanduser(os.path.expandvars(fs))
   if not first: first=None
   if not last: last=None
   relative=False
@@ -151,7 +171,6 @@ class FileReader(object):
     dc(self.file.name)
     if exc_value!=None:
       traceback.print_exception(exc_type,exc_value,exc_traceback)
-      #print(exc_type,exc_value,exc_traceback,limit=None,sep="\n",file=sys.stderr)
     return True
 
   def __iter__(self):
@@ -207,6 +226,7 @@ def slice(filename,first,last,relative=False):
   """
 
   # Initialization and reality checking.
+  found_start=found_end=False
   with FileReader(filename) as f:
     if opt.next and not f.seekable:
       die("Cannot use -n (--next) option with %s because it can't be rewound."%(filename,))
@@ -216,10 +236,12 @@ def slice(filename,first,last,relative=False):
       if isinstance(first,int):
         for line in f:
           if f.line_number>=first:
+            found_start=True
             break
       else:
         for line in f:
           if first.search(line):
+            found_start=True
             break
 
       # If we're at EOF, there's no need to continue.
@@ -234,6 +256,7 @@ def slice(filename,first,last,relative=False):
           stop+=f.line_number-1
         for line in f:
           if last!=0 and f.line_number>stop:
+            found_end=True
             break
           sys.stdout.write(line)
       else:
@@ -245,6 +268,7 @@ def slice(filename,first,last,relative=False):
             if found:
               if opt.next:
                 f.rewindOneLine() # Set up to re-read this line.
+              found_end=True
               break
 
       # Break out of this loop unless we're looking for multiple slices.
@@ -252,6 +276,9 @@ def slice(filename,first,last,relative=False):
         break
       if opt.divider is not None:
         print(opt.divider)
+
+  return found_start,found_end
+
 
 # If the --test option was given, run our internal tests and quit.
 if opt.test:
@@ -261,7 +288,7 @@ if opt.test:
     optionflags=doctest.ELLIPSIS # Ellipsis matches substrings.
   )
   if failed:
-    sys.exit(1)
+    sys.exit(EXIT_ERROR)
 
   def run(*args):
     "Return (stdout,stderr) from running the given command."
@@ -274,7 +301,7 @@ if opt.test:
   error,stdout,stderr=run(prog,"%s:^aaa:^$")
   
 
-  sys.exit(0)
+  sys.exit(EXIT_SUCCESS)
 
 # Step through our command line arguments:
 for arg in opt.args:
@@ -286,7 +313,22 @@ for arg in opt.args:
   for fn in flist:
     if opt.filenames and (len(opt.args)>1 or len(flist)>1):
       print('\n%s:'%fn)
-    slice(fn,first,last,relative)
+    found_start,found_end=slice(fn,first,last,relative)
+    if not found_start:
+      if isinstance(first,int):
+        warning(f"Starting line number {first} not found.")
+      else:
+        warning(f"Starting pattern {first.pattern} not found.")
+    if not found_end:
+      if isinstance(last,int):
+        if relative:
+          warning(f"Relative ending line number +{last} not found.")
+        else:
+          warning(f"Ending line number {last} not found.")
+      else:
+        warning(f"Ending pattern {last.pattern} not found.")
+
+sys.exit(EXIT_SUCCESS)
 
 """
 THIS IS TEST DATA, USED BY THE THIS FUNCTION'S DOCTESTS.
