@@ -7,7 +7,7 @@ executables.
 
 """
 __author__='Jeff Clough, @jeffclough@mastodon.social'
-__version__='0.1.1-2022-11-27'
+__version__='0.1.2-2022-12-27'
 
 __all__=[
   'DEVNULL',
@@ -377,15 +377,64 @@ class Command(object):
     return self
 
 class Target(object):
-  """Target is an abstract base class of classes that know how to
-  produce a target file from one or more sources. Tilde- or variable-
-  expansion is performed on the target filespec if called for.
+  """Target is an abstract base class of classes that knows how to
+  produce a target file from one or more sources. Tilde- and variable-
+  expansion are performed on the target path if called for.
 
   See the File class for examples."""
 
   # This class attribute holds a list of exceptions that have occurred in an
   # instance of this class or that of any of its subclasses.
   exceptions=[]
+
+  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+  # Define LinkBundle as an interior class of Target.
+
+  class LinkBundle(object):
+    """A LinkBundle instance contains a list of symlink names and the
+    parameters for creating those symlinks.
+
+    Attributes:
+      - links:
+        A list of names of symlinks.
+      - link_dir:
+        The Path value naming the directory where each link is to be
+        created.
+      - force:
+        If True, symlinks are created even if they already exist. The
+        default is False.
+    """
+
+    def __init__(self,links,link_dir=None,force=False):
+      "Initialize this LinkBundle instance."
+
+      self.links=[
+        l if isinstance(l,Path) else Path(l)
+          for l in links
+      ]
+      self.link_dir=link_dir
+      self.force=force
+
+    def linkTo(self,target):
+      "Create the symlinks defined in this LinkBundle."
+
+      with self.link_dir.chdir():
+        # Everthing here has link_dir as the CWD.
+        target=target.relative()
+        for l in self.links:
+          if l.isLink() and l.real==target:
+            continue;
+          if l.exists() and not l.isDir() and self.force:
+            if not options.dryrun:
+              l.remove()
+          if not l.exists():
+            if options.verb & V.OPS:
+              print(f"{l} --> {target}")
+            if not options.dryrun:
+              os.symlink(target,l)
+
+  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+  # Target's code:
 
   def __init__(self,target):
     # Remember the file to be created.
@@ -402,6 +451,7 @@ class Target(object):
     # owner(user='someone',group='some_group') method.
     self.user=None    # Set this with the owner(user='some_account') method.
     self.group=None   # Set this with the owner(group='some_group') method.
+    self.link_bundles=[]
 
   def __fspath__(self):
     "Return the string version of this target."
@@ -411,7 +461,7 @@ class Target(object):
   def __str__(self):
     "Return the string version of this target."
 
-    return self.target
+    return str(self.target)
 
   def dependsOn(self,*args):
     "Configure one or more source files for our target."
@@ -503,58 +553,15 @@ class File(Target):
           if self.user or self.group:
             shutil.chown(self.target,user=self.user,group=self.group)
 
-    if self.links:
-      # Because we do our best to create relative symlinks, we have to change
-      # the current current directory to where the link will be created and
-      # then create using the relative path to our target.
+    # Create symlinks if called for.
+    for lb in self.link_bundles:
+      try:
+        lb.linkTo(self.target)
+      except OSError as e:
+        print(f"\n    {e}\n",file=sys.stderr)
+        self.exception=e
+        self.__class__.exceptions.append(e)
 
-      org_dir=Path.getCwd()
-      for l in self.links:
-        with org_dir.chdir(): 
-          # org_dir must be the current directory for l.absolute() to work.
-          ldir,lfile=l.absolute().split(-1)
-          ldir.chdir()    # Now we switch to the link's directory.
-          t=self.target.relative() # This is our relative link.
-          # Execution ...
-          try:
-            if lfile.isLink() and lfile.real()==self.target:
-              continue
-            if l.exists() and not l.isDir() and self.force_links:
-              dc(f"rm {l}")
-              if not options.dryrun: l.remove()
-            if not l.exists():
-              if options.verb & V.OPS: print(f"{l} --> {t}")
-              if not options.dryrun: os.symlink(t,l)
-          except OSError as e:
-            print(f"\n    {e}\n",file=sys.stderr)
-            self.exception=e
-            __class__.exceptions.append(e)
-
-    return self
-
-  def link(self,*args,link_dir=None,force=None):
-    """Prepare to create one or more symlinks (args_ to this target
-    file. Non-absolute paths are relative to link_dir if given, or our
-    target's directory otherwise.
-
-    The force argument defaults to None but is interpreted as boolean if
-    it's anything else. Normally, symlinks won't replace an existing
-    file or simlink, but force=True means the new symlink will be
-    creeated unless it already exists as a symlink and points to this
-    File object's target.
-
-    The link(s) won't be created until this File instance is called. The
-    link(...) method just sets things up.
-
-    Return a reference to this File object."""
-
-    self.links.extend([
-      x if isinstance(x,(Path,Target)) else Path(x) for x in args
-    ])
-    if link_dir:
-      self.link_dir=link_dir
-    if force is not None:
-      self.force_links=force
     return self
 
   def copy(self,source,follow=False):
@@ -573,6 +580,34 @@ class File(Target):
     self.deps=[s] # Make sure our source file is a dependency.
     self.source=s
     self.follow=follow
+    return self
+
+  def link(self,*linknames,link_dir=None,force=None):
+    """Prepare to create one or more symlinks (linknames) to our target
+    file. Non-absolute paths are relative to link_dir if given, or our
+    target's directory otherwise.
+
+    The force argument defaults to None but is interpreted as boolean if
+    it's anything else. Normally, symlinks won't replace an existing
+    file or simlink, but force=True means the new symlink will be
+    creeated unless it already exists as a symlink and points to this
+    File object's target.
+
+    The link(s) won't be created until this File instance is called. The
+    link(...) method just sets things up.
+
+    Return a reference to this File object."""
+
+    # Use our target's diretory as link_dir if None is given.
+    if link_dir is None:
+      link_dir=self.target.dirName()
+    elif not isinstance(link_dir,Path):
+      link_dir=Path(link_dir)
+
+    # Store these links as new LinkBundle instance to be processed when
+    # this File instance is called.
+    self.link_bundles.append(self.LinkBundle(linknames,link_dir,force))
+
     return self
 
 class Folder(Target):

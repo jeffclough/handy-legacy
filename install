@@ -156,6 +156,7 @@ File(bin_dir/'base').copy('base').link(
   'encode16',
   'encode32',
   'encode64',
+  link_dir=bin_dir,
   force=options.force
 )()
 
