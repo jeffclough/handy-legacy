@@ -1,9 +1,3 @@
-[submodule "externals/addict"]
-	path = externals/addict
-	url = https://github.com/mewwts/addict.git
-[submodule "externals/pyipinfodb"]
-	path = externals/pyipinfodb
-	url = https://github.com/mossberg/pyipinfodb.git
 [submodule "externals/pyparsing"]
 	path = externals/pyparsing
 	url = git@github.com:pyparsing/pyparsing.git
