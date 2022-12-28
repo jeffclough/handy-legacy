@@ -372,8 +372,8 @@ class Command(object):
     if self.result or (options.verb & V.OPS and not quiet):
       if self.stdout: print(self.stdout)
       if self.stderr: print(self.stderr,file=sys.stderr)
-      if self.result:
-        raise Error(f"Non-zero return code ({self.result}): {shlex.join(self.cmd+args)}")
+#   if self.result:
+#     raise Error(f"Non-zero return code ({self.result}): {shlex.join(self.cmd+args)}")
     return self
 
 class Target(object):

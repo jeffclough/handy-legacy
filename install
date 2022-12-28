@@ -18,7 +18,7 @@ os.chdir(SRCDIR)
 ap=argparse.ArgumentParser(
   #formatter_class=argparse.RawDescriptionHelpFormatter,
   description=f"""\
-Install the "handy" scripts to the given (with --dir) or default ({options.tdir}) base directory.
+Install the "handy" scripts and modules to the given (with --dir) or default ({options.tdir}) base directory. It will be created if necessary, along with its subdirectories.
 
 The --verbosity (-v) flags are any of quiet, ops, deps, time, debug, and full. The "quiet" flag turns all the others off. "full" turns them all on. Flags can be combined with + or - characters to add or remove those flags. The first flag listed is assumed to be added unless preceded by -. There are no spaces in --verbosity's value. E.g. "./install -v ops+time ..." or "./install -v full-debug".
 """
@@ -117,7 +117,6 @@ pylibs=[
   'path.py',
   'png.py',
   'prime.py',
-  'pyparsing.py',
   'semver.py',
   'stardate.py',
   'table.py',
@@ -141,6 +140,14 @@ File(lib_dir/'phonetics.py').copy(pylib/'phonetics.py').link(
   *[bin_dir/x for x in ('nato','police','raf','us','wu')],
   force=options.force
 )()
+
+# Use pip to install pyparsing if it's not already there.
+pyparsing=lib_dir/'pyparsing'
+#dc(f"{pyparsing!r}.isDir() returns {pyparsing.isDir()}.")
+if not pyparsing.isDir():
+  #dc("Running pip3 ...")
+  Command(f"pip3 install -t {lib_dir} pyparsing")()
+  #dc("Returned from pip3.")
 
 #TODO: Figure out why forcing links works for "base" below, but not for
 # "timeout" and "phonetics.py" above.
