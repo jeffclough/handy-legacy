@@ -1,3 +1,0 @@
-[submodule "externals/pyparsing"]
-	path = externals/pyparsing
-	url = git@github.com:pyparsing/pyparsing.git
