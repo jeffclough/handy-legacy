@@ -1,1 +1,0 @@
-../externals/pyparsing/src/pyparsing_py3.py
