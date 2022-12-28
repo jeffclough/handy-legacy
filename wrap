@@ -4,9 +4,11 @@ import argparse,os,re,sys
 from textwrap import wrap
 
 ap=argparse.ArgumentParser(
+  add_help=False,
   description="Read text from standard input (one line at a time), wrap it, and write it to standard output. Indenture is preserved, so strip leading whitespace before wrapping if that's what you want. There's also some very minimal support for markdown. Unordered lists are indented and wrapped correctly."
 )
-ap.add_argument('-m','--markdown',action='store_true',help="Enable our very minimal markdown support.")
+ap.add_argument('--markdown','-m',action='store_true',help="Enable our very minimal markdown support.")
+ap.add_argument('--help','-h',action='help',help="Show this help message and exit.")
 ap.add_argument('width',metavar='WIDTH',nargs='?',default=int(os.environ.get('COLUMNS','80')),type=int,help="Number of characters to allow on each line of output.")
 opt=ap.parse_args()
 
@@ -20,6 +22,7 @@ if sys.stdin.isatty():
   ap.print_help()
   print("\nHint: Try piping or redirecting text to this command.\n")
   sys.exit(1)
+
 for line in sys.stdin:
   # Assume no prefix (generally for markdown support).
   prefix=''
