@@ -26,7 +26,7 @@ t.reverse()
 
 t.sort(cmp=None,key-=None,reverse=False)
 
-t.ouput(format='table',stream=sys.stdout,dialect='fixed') <-- the defalt
+t.ouput(format='table',stream=sys.stdout,dialect='box') <-- the defalt
 t.ouput(format='table',stream=sys.stdout,dialect='markdown')
 t.ouput(format='csv',stream=sys.stdout,dialect=',r"mt\\f\n')
 t.ouput(format='json',stream=sys.stdout)
@@ -69,39 +69,39 @@ class Table(list):
         except:
           raise Table.Error('Cannot instantiate Table.Row from %s'%type(data))
         n=len(data)
-        if n>self.table.colcount:
-          raise Table.Error('A %d-column table cannot accommodate a %d-column row!'%(self.table.colcount,n))
-        if n<self.table.colcount:
+        if n>self.owner.colcount:
+          raise Table.Error('A %d-column table cannot accommodate a %d-column row!'%(self.owner.colcount,n))
+        if n<self.owner.colcount:
           # Extend this row to fit the table.
-          data.append([None]*(self.table.colcount-n))
+          data.append([None]*(self.owner.colcount-n))
         list.__init__(self,data)
 
     def append(self,value):
-      if not self.table.internal_change:
+      if not self.owner.internal_change:
         raise Table.Error('Table rows MUST NOT change length.')
 
     def extend(self,iterable):
-      if not self.table.internal_change:
+      if not self.owner.internal_change:
         raise Table.Error('Table rows MUST NOT change length.')
 
     def insert(self,index,value):
-      if not self.table.internal_change:
+      if not self.owner.internal_change:
         raise Table.Error('Table rows MUST NOT change length.')
 
     def pop(self,index=-1):
-      if not self.table.internal_change:
+      if not self.owner.internal_change:
         raise Table.Error('Table rows MUST NOT change length.')
 
     def remove(self,value):
-      if not self.table.internal_change:
+      if not self.owner.internal_change:
         raise Table.Error('Table rows MUST NOT change length.')
 
     def reverse(self):
-      if not self.table.internal_change:
+      if not self.owner.internal_change:
         raise Table.Error('Table rows MUST NOT be reversed.')
 
     def sort(self,cmp=None,key=None,reverse=False):
-      if not self.table.internal_change:
+      if not self.owner.internal_change:
         raise Table.Error('Table rows MUST NOT be sorted.')
 
     def __setslice__(self,i,j,seq):
@@ -115,36 +115,42 @@ class Table(list):
 
   #/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
 
-  def __init__(self,**kwargs):
-    for arg,def_val in (
-        ('colnames',None),
-        ('colcount',None),
-      ):
-      setattr(self,arg,kwargs.get(arg,def_val))
+  def __init__(self,colnames=None,colcount=None):
+
+    self.colnames=colnames
+    self.colcount=colcount
+
     self._validate_columns()
     self._internal_change=False
 
   def _validate_columns(self,set_colcount=None):
     # This is helpful.
-    if self.colcount==None and set_colcount!=None:
+    if self.colcount is None and set_colcount is not None:
       self.colcount=set_colcount
+
     # Ensure colnames makes sense. Initialize colcount from it if needed.
-    if self.colnames!=None:
+    if self.colnames is not None:
       if not isinstance(self.colnames,(tuple,list)):
-        raise Table.Error('colnames argument MUST be a tuple or a list!')
+        raise Table.Error('If given, colnames argument MUST be a tuple or a list!')
       self.colnames=[str(x) for x in self.colnames]
-      if not (self.colcount==None or self.colcount==len(self.colnames)):
-        raise Table.Error('%d column names not compatible with column count of %d!'%(len(self.colnames),self.colcount))
+      if self.colcount is None:
+        self.colcount=len(self.colnames)
+      elif selfcolcounrt!=len(self.colnames):
+        raise Table.Error(f"{len(self.colnames)} column names not compatible with column count of {self.colcount}!")
+
     # Ensure colcount makes sense. Initialize colnames from it if needed.
-    if self.colcount!=None:
+    if self.colcount is not None:
       if not isinstance(self.colcount,int):
         raise Table.Error('colcount argument must be an integer!')
-      #self.colcount=int(self.colcount)
-      if self.colnames==None or len(colnames)==0:
-        self.colnames=['col%d'%(c+1) for c in range(self.colcount)]
+      if not self.colnames:
+        # TODO: Provide logic for more than 26 columns.
+        self.colnames=[f"{ord(65+c)}" for c in range(self.colcount)]
+
     # Ensure we can identify our columns by name or by number.
-    self.colid=dict([(self.colname[c],c) for c in range(self.colcount)])
-    self.colid.update(dict([(c,c) for c in range(self.colcount)]))
+    #self.colid=dict([(self.colnames[c],c) for c in range(self.colcount)])
+    self.colid={self.colnames[c]:c for c in range(self.colcount)}
+    #self.colid.update(dict([(c,c) for c in range(self.colcount)]))
+    self.colid.update({c:c for c in range(self.colcount)})
 
   def append(self,row):
     row=Table.Row(self,row)
@@ -191,8 +197,7 @@ class Table(list):
     """Return this string unmodified if width is None. Otherwise,
     return it formatted in the given width, which must be an integer."""
 
-    if width==None: return val
-    return '%-*s'%(width,val)
+    return val if width is None else '%-*s'%(width,val)
 
   def formatOther(self,val,width=None):
     """Do our best to convert this value to a string and then
@@ -203,28 +208,39 @@ class Table(list):
 
   #//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//
 
-  def formatByType(self,val,width):
+  def formatByType(self,val,width=None):
     if isinstance(val,int): return self.formatInt(val,width)
     if isinstance(val,float): return self.formatFloat(val,width)
     if isinstance(val,str): return self.formatString(val,width)
     return self.formatOther(val,width)
 
-  def output(dialect='fixed',stream=sys.stdout):
-    if dialect=='fixed':
+  def output(self,dialect='box',stream=sys.stdout):
+    if dialect in ('ascii','box'):
+      if dialect=='box':
+        div=' │ '
+        hdiv='─┼─'
+        hline='─'
+      else:
+        div=' | '
+        hdiv='-+-'
+        hline='-'
       # Get the width each column needs.
       widths=[len(self.colnames[c]) for c in range(self.colcount)]
       for c in range(self.colcount):
         widths[c]=max(widths[c],max([len(self.formatByType(row[c])) for row in self]))
       # Write the header lines.
-      stream.write((' | '.join([self.colnames[c].center() for c in range(self.colcount)]))+'\n')
-      stream.write(('-+-'.join(['-'*widths[c] for c in range(self.colcount)]))+'\n')
+      #stream.write((' | '.join([self.colnames[c].center(widths[c]) for c in range(self.colcount)]))+'\n')
+      #stream.write(('-+-'.join(['-'*widths[c] for c in range(self.colcount)]))+'\n')
+      print(div.join([self.colnames[c].center(widths[c]) for c in range(self.colcount)]),file=stream)
+      print(hdiv.join([hline*widths[c] for c in range(self.colcount)]),file=stream)
       # Write the body of this table.
       for row in self:
-        stream.write((' | '.join([self.formatByType(row[c]) for c in self.colcount]))+'\n')
+        #stream.write((' | '.join([self.formatByType(row[c],widths[c]) for c in range(self.colcount)]))+'\n')
+        print(div.join([self.formatByType(row[c],widths[c]) for c in range(self.colcount)]),file=stream)
     elif dialect=='markdown':
       pass
     else:
-      raise Table.Error('Unrecognized Table output dialect: %r'%(dialect,))
+      raise Table.Error(f"Unrecognized Table output dialect: {dialect!r}")
 
 if __name__=='__main__':
   t=Table()
