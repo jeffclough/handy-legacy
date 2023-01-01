@@ -29,6 +29,10 @@ from debug import DebugChannel
 
 dc=DebugChannel(False,label='D')
 
+# The gibberish the first character set is a string of international currency smbols
+# taken from https://economictimes.indiatimes.com/definition/currency-symbol.
+re_numeric=re.compile(r"[$€£¥₣₹دكإ﷼₻₽₾₺₼₸₴₷฿원₫₮₯₱₳₵₲₪₰]?(?P<int>[,0-9]+)?(?:\.(?P<decimal>\d+)?)?$")
+
 def numeric(x):
   """Return the numeric value of x if x can be interpreted as either
   integer or float. Otherwise, return the original value of x.
@@ -39,9 +43,17 @@ def numeric(x):
   3.25
   >>> numeric('testing')
   'testing'
+  >>> numeric('$123,456.789')
+  123456.789
   """
 
   y=x if isinstance(x,str) else str(x)
+  m=re_numeric.match(y)
+  if m:
+    if y.startswith('$'):
+      y=y[1:]
+    if ',' in y:
+      y=y.replace(',','')
   with contextlib.suppress(ValueError): return int(y)
   with contextlib.suppress(ValueError): return float(y)
   return x
@@ -87,6 +99,7 @@ def parse_range(s):
 #
 
 ap=argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
+  add_help=False,
   usage="""
   Form 1: %(prog)s [OPTIONS] [value-1 ... value-n]
     Input MUST be formatted as parsable CSV.
@@ -136,13 +149,14 @@ CSV Dialect Syntax:
 ap.add_argument('--join',metavar='JOINSPEC',dest='join_fields',action='store',help="""Join the given field range into a single field separated by a single character. The first character of the JOINSPEC value is the field separator. The remainder of JOINSPEC is the same field range syntax (FIELDSPEC) described above. Also, --join renumbers fields as they are joined. So if "--join ' 1-2'" is given, fields 1 and 2 are joined as field 1, and any subsequent fields are renumbered beginning with 2. This is important to remember if you're also using the --keep option because --keep is evaluated after --join.""")
 ap.add_argument('--lambda',dest='func',action='store',default=None,help="""Give a lambda expression (minus the "lambda" keyword) accepting two arguments, row number (starting with 1) and row (as a list). The function must return either the row, possibly modified, or None, in which case the current row is discarded entirely, and processing continues with the new row.""")
 ap.add_argument('--keep',metavar='FIELDSPEC',action='store',help="""Output only these fields. See the "FIELDSPEC Syntax" section above. By default, all fields are kept (of course).""")
-ap.add_argument('--headings',dest='heading_lines',action='store',type=int,default=0,help="Specify how many rows (lines) of heading data are in the input. (default: %(default)r)")
-ap.add_argument('--infmt',dest='infmt',action='store',choices=('csv','excel','shell'),default='csv',help="Specify either csv, excel, or shell as the input format. See the usage and description above for details. (default: %(default)r)")
-ap.add_argument('--reader',dest='reading',metavar='DIALECT',action='store',default=csv.DEFAULT_DIALECT_SPEC,help="""Specify the CSV reader's dialect. See CSV DIALECT SYNTAX above. (default: %(default)r""")
-ap.add_argument('--outfmt',dest='outfmt',action='store',default='csv',help="Specify either csv, shell, table, table-ascii, table-box, table-nosep, or markdown as the output format. See the usage and description above for details. (default: %(default)r)")
-ap.add_argument('--writer',dest='writing',metavar='DIALECT',action='store',default=csv.DEFAULT_DIALECT_SPEC,help="Specify the CSV writer's dialect. See CSV DIALECT SYNTAX above. (default: %(default)r)")
+ap.add_argument('--headings',metavar='N',dest='heading_lines',action='store',type=int,default=0,help="Set how many rows (lines) of heading data are in the input. (default: %(default)r)")
+ap.add_argument('--infmt',dest='infmt',action='store',choices=('csv','excel','shell'),default='csv',help="Set the input format. See the usage and description above for details. (default: %(default)r)")
+ap.add_argument('--reader',dest='reading',metavar='DIALECT',action='store',default=csv.DEFAULT_DIALECT_SPEC,help="""Set the CSV reader's dialect. See CSV DIALECT SYNTAX above. (default: %(default)r""")
+ap.add_argument('--outfmt',dest='outfmt',action='store',default='csv',help="Set either csv, shell, table, table-ascii, table-box, table-nosep, or markdown as the output format. See the usage and description above for details. (default: %(default)r)")
+ap.add_argument('--writer',dest='writing',metavar='DIALECT',action='store',default=csv.DEFAULT_DIALECT_SPEC,help="Set the CSV writer's dialect. See CSV DIALECT SYNTAX above. (default: %(default)r)")
 ap.add_argument('--worksheet',dest='worksheet',metavar='NAME_or_NUMBER',action='store',default=None,help="Give the name or number (starting with 0) of the worksheet to read if --excel was used. If not given, the first worksheet will be read.")
 ap.add_argument('--test',dest='test',action='store_true',default=False,help="Run internal tests (for debugging purposes only).")
+ap.add_argument('--help','-h',action='help',help="Show this help message and exit.")
 ap.add_argument('args',action='store',nargs='*',default=[],help="See the usage forms above. Command line arguments' meanings depend on what form is being used.")
 opt=ap.parse_args()
 
@@ -409,11 +423,15 @@ if opt.args:
 i=0
 for row in reader:
   i+=1
-  row=[numeric(v) for v in row]
-  if opt.func:
-    row=opt.func(i,row)
-    if row==None:
-      continue
+  if i>opt.heading_lines:
+    # Leave heading rows in their raw form. For data rows, we do our best to
+    # read numbers as numbers, even if they start with a currency symbol and
+    # have interior commas. We also run any --lambda function on these rows.
+    row=[numeric(v) for v in row]
+    if opt.func:
+      row=opt.func(i,row)
+      if row==None:
+        continue
   dc(f"row={row!r}")
   for n,m in opt.join_fields:
     row[n:m]=[opt.joinchar.join([x for x in row[n:m] if x])]
