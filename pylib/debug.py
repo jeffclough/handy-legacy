@@ -261,9 +261,8 @@ class DebugChannel(object):
     self.time_fmt=time_fmt
     self.time_tupler=time_tupler
     self.callback=callback
-    # So we don't report anything in this module as the caller ...
+    # Do not report functions in this debug module.
     self.ignore={}
-    #self.ignoreModule(str(inspect.stack()[0][1]))
     self.ignoreModule(os.path.normpath(inspect.stack()[0].filename))
 
   def __bool__(self):
@@ -491,7 +490,18 @@ class DebugChannel(object):
       time=self.time
       # Find the first non-ignored stack frame whence we were called.
       pathname,basename,line=None,None,None
-      for frame in inspect.stack():
+      for i,frame in enumerate(inspect.stack()):
+# This is for debugging debug.py. It turns out Python 3.6 has a bug in
+# inspect.stack() that can return outrageous values for frame.index.
+# (So I'm asking for only one line of context, and I've stopped using the
+# frame's untrustworthy index value.)
+#       print(f"""{i}:
+#   frame:        {frame.frame!r}
+#   filename:     {frame.filename!r}
+#   lineno:       {frame.lineno!r}
+#   function:     {frame.function!r}
+#   code_context: {frame.code_context!r}
+#   index:        {frame.index!r}""")
         p=os.path.normpath(frame.filename)
         if p not in self.ignore:
           break
@@ -506,10 +516,9 @@ class DebugChannel(object):
       function=frame.function
       if str(function)=='<module>':
         function='__main__'
-      #code=frame.code_context[frame.index].rstrip()
       code=frame.code_context
       if code:
-        code=code[frame.index].rstrip()
+        code=code[0].rstrip()
       else:
         code=None
       indent=self.indstr*self.indlev
