@@ -357,7 +357,8 @@ class Command(object):
     else:
       raise ValueError(f"Command arguments must be a string or sequence, not {args!r}.")
     if options.verb & V.OPS and not quiet:
-      print(shlex.join(self.cmd+args))
+      # shlex.join() didn't emerge until Python 3.8, so ...
+      print(' '.join(shlex.quote(a) for a in (self.cmd+args)))
     if options.dryrun:
       # Put together a "fake" CompletedProcess result with a return code of 0
       # and empty stdout and stderr values.

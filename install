@@ -141,13 +141,18 @@ File(lib_dir/'phonetics.py').copy(pylib/'phonetics.py').link(
   force=options.force
 )()
 
+# Determine whether our Python supports SSL.
+res=Command(f"python3 -c 'import ssl'",stderr=DEVNULL)
+supports_ssl=res.result==0
+
 # Use pip to install pyparsing if it's not already there.
 pyparsing=lib_dir/'pyparsing'
 #dc(f"{pyparsing!r}.isDir() returns {pyparsing.isDir()}.")
-if not pyparsing.isDir():
-  #dc("Running pip3 ...")
-  Command(f"pip3 install -t {lib_dir} pyparsing")()
-  #dc("Returned from pip3.")
+if supports_ssl:
+  if not pyparsing.isDir():
+    Command(f"pip3 install -t {lib_dir} pyparsing")()
+else:
+  print("WARNING: Skipping pyparsing because pip won't run without SSL support in Python.")
 
 #TODO: Figure out why forcing links works for "base" below, but not for
 # "timeout" and "phonetics.py" above.
