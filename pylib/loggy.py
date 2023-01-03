@@ -108,7 +108,7 @@ def get_logger(
   facility is not given.
   """
 
-  dc(f"{facility=}, {level=}, {name=}, {logfmt=}, {datefmt=}, {child=}")
+  dc(f"facility={facility}, level={level}, name={name!r}, logfmt={logfmt!r}, datefmt={datefmt!r}, child={child!r}")
 
   # If no name is provided, use the name of the current program (minus
   # any file extension).
@@ -155,7 +155,7 @@ def get_logger(
           facility=logging.handlers.SysLogHandler.facility_names[facility]
         else:
           # This string must be a filename, so open it for appending.
-          dc(f"Treating {facility=} as a filename.")
+          dc(f"Treating facility={facility!r} as a filename.")
           facility=os.path.expanduser(os.path.expandvars(facility))
           dc(f"Expanded filename is {facility!r}.")
           if os.path.isfile(facility):
@@ -180,14 +180,14 @@ def get_logger(
             address=('localhost',logging.handlers.SYSLOG_UDP_PORT),
             facility=facility
           )
-        dc(f"Createing logging.Formatter from {logfmt=}")
+        dc(f"Createing logging.Formatter from logfmt={logfmt!r}")
         f=logging.Formatter(logfmt)
       elif isinstance(facility,IOBase):
         dc(f"facility is {facility!r}")
         # This is a stream, so add date and time to the start of our log format.
         h=logging.StreamHandler(facility)
         logfmt='%(asctime)s'+logfmt
-        dc(f"Createing logging.Formatter from {logfmt=}, {datefmt=}")
+        dc(f"Createing logging.Formatter from logfmt={logfmt!r}, datefmt={datefmt!r}")
         f=logging.Formatter(logfmt,datefmt=datefmt)
       else:
         raise ValueError('bad log facility value: %r'%(facility,))
@@ -211,7 +211,7 @@ def get_logger(
     dc(f"Adding handler to logger")
     log.addHandler(h)
   l=_nameToLevel[level]
-  dc(f"{level=}, {_nameToLevel[level]=}")
+  dc(f"_nameToLevel[{level!r}]{_nameToLevel[level]!r}")
   log.setLevel(_nameToLevel[level])
   dc(f"Returning with logger {log!r}")
   return log
@@ -239,7 +239,7 @@ class LogStream(object):
     if logger:
       self.level=logging.getLevelName(logger.level)
       dc(f"{logger.handlers}")
-      dc(f"{self.level=}")
+      dc(f"self.level={self.level!r}")
       self.log=logger
     else:
       self.level=level
