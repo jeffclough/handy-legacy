@@ -28,7 +28,7 @@ from jinja2 import FileSystemLoader,Environment
 from jinja2.exceptions import TemplateError
 
 Version=namedtuple('Version','major minor micro releaselevel,serial')
-version=Version(1,1,0,'beta',2)
+version=Version(1,1,1,'prod',3)
 
 DATE_FMT=DEF_DATE_FMT="%Y-%m-%d"
 TIME_FMT=DEF_TIME_FMT="%H:%M:%S"
@@ -101,13 +101,15 @@ def varval(s):
     pass
   return var,val
 
-ap=argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
-description="""
+ap=argparse.ArgumentParser(
+  add_help=False,
+  formatter_class=argparse.RawDescriptionHelpFormatter,
+  description="""
 Render a Jinga2 template to standard output. Run this command with no
 arguments for a list of variables, Python classes, and functions available
 from within a template file. You can also include your own variables on the
 command line as arguments.""",
-epilog="""
+  epilog=f"""
 These are Python entities for use within templates:
 
   Default date and time formats:
@@ -126,7 +128,7 @@ These are Python entities for use within templates:
     timezone - https://docs.python.org/3/library/datetime.html#timezone-objects
 
   Runtime Environment:
-    env.PWD - the Preset Workign Directory of the Jinja renderer
+    env.PWD - the Preset Working Directory of the Jinja renderer
     env.USER - username of the account running the renderer
     env.TEMPLATE_DIR - directory our template is in
     env.TEMPLATE_NAME - filename of our template
@@ -142,12 +144,12 @@ These are Python entities for use within templates:
     env.JINJA_COMMAND - the command line that rendered this template
 
   Pre-initialized varaibles that might be handy:
-    now=datetime.datetime(2022, 4, 4, 18, 6, 7, 95466)
-    today=datetime.date(2022, 4, 4)
-    name_of_today='Monday'
-    name_of_this_month='April'
+    now:                {variables['now']!r}
+    today:              {variables['today']!r}
+    name_of_today:      {variables['name_of_today']!r}
+    name_of_this_month: {variables['name_of_this_month']!r}
 
-  Functions for working with dates:
+  Functions:
     abspath(path: str) -> str
       Return a normalized absolutized version of the pathname path.
 
@@ -193,13 +195,14 @@ These are Python entities for use within templates:
       strings may differ). Also see the functions dirname() and basename().
 
 """)
-ap.add_argument('--date',action='store',help="Replace toady's date with the given in %r format."%DATE_FMT.replace('%','%%'))
+ap.add_argument('--date',action='store',help="Replace toady's date with DATE in %r format."%DATE_FMT.replace('%','%%'))
 ap.add_argument('--dir',action='store',type=os.path.expanduser,help="Give the name of the tmeplate directory. This can also be provided by giving a complete path in the argument to --template below.")
 ap.add_argument('--template',action='store',type=os.path.expanduser,help="Give the name of the template to be rendered. If no path is included, --dir (above) must be given.")
 ap.add_argument('--line-comment','-C',action='store',help="If given, any line begginning with this string will be a comment. Ordinarily statements must be surrounded by {# and #}.")
 ap.add_argument('--line-statement','-S',action='store',help="If given, any line begginning with this string will be a statement. Ordinarily statements must be surrounded by {%% and %%}.")
 ap.add_argument('--extension','-x',dest='extensions',metavar='EXT',action='append',help="Load the given Jinja2 extension (e.g. debug, do, i18n, or loopcontrols), one at a time, using as many --extension options as needed. See https://jinja.palletsprojects.com/en/3.1.x/extensions/#jinja-extensions for how each extension works. A warning message to standard error will result from any attempt to load an unavailable Jinja2 extension.")
 ap.add_argument('--debugger',action='store_true',help="Start this script in the debugger. DON'T DO THIS unless you're familiar with textual debuggers. For the initiated, see https://docs.python.org/3/library/pdb.html#debugger-commands for docs.")
+ap.add_argument('--help','-h',action='help',help="Show this help message and exit.")
 ap.add_argument('args',metavar='VAR=VAL',action='store',type=varval,nargs='*')
 opt=ap.parse_args()
 
@@ -262,7 +265,7 @@ variables['env']=dict(
   DATE=dt.date(),
   DATETIME=dt,
   TIME=dt.time(),
-  JINJA_RENDERER=sys.argv[0],
+  JINJA_RENDERER=os.path.abspath(sys.argv[0]),
   JINJA_RENDERER_VERSION_INFO=version,
   JINJA_RENDERER_VERSION=f"{version.major}.{version.minor}.{version.micro}-{version.releaselevel}-{version.serial}",
   JINJA_COMMAND=shlex.join([os.path.basename(sys.argv[0])]+sys.argv[1:]),
@@ -304,6 +307,9 @@ def render_from_template(directory,template_name,**kwargs):
     else:
       raise
   return s
+
+#TODO: Implement a --test option to render an internally defined test template,
+# and check the output to make sure it's right.
 
 # Now let Jinja2 do all the heavy lifting.
 s=render_from_template(template_dir,template_name,**variables)
