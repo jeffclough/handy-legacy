@@ -330,17 +330,20 @@ class Command(object):
   def __init__(self,cmd,stdin=None,stdout=None,stderr=None,quiet=False):
     "Initialize this Command instance."
 
+    dc(f"Command({cmd!r},stdin={stdin!r},stdout={stdout!r},stderr={stderr!r},quiet={quiet!r}").indent()
     if isinstance(cmd,str):
       self.cmd=shlex.split(cmd)
     elif isinstance(cmd,(list,tuple)):
       self.cmd=list(cmd)
     else:
       raise ValueError(f"Command must be a string or sequence, not {cmd!r}.")
+    dc(f"self.cmd={self.cmd!r}")
     self.stdin=stdin
     self.stdout=stdout
     self.stderr=stderr
     self.result=None
     self.quiet=quiet
+    dc.undent()
 
   def __call__(self,*args,quiet=None):
     """Run the command the caller has set up. Return this Command
@@ -365,8 +368,9 @@ class Command(object):
       r=CompletedProcess(self.cmd+args,0,"","")
     else:
       # Run our command, capturing it stdout and stderr output as string values.
-      dc(f"run({self.cmd+args},text=True,stdin={self.stdin},stdout={self.stdout},stderr={self.stderr})")
+      #dc(f"run({self.cmd+args},text=True,stdin={self.stdin},stdout={self.stdout},stderr={self.stderr})")
       r=run(self.cmd+args,text=True,stdin=self.stdin,stdout=self.stdout,stderr=self.stderr)
+      #dc.indent()(f"returns {r.returncode!r}\nstdout: {r.stdout!r}\nstderr: {r.stderr!r}").undent()
     self.result=r.returncode
     self.stdout=r.stdout
     self.stderr=r.stderr

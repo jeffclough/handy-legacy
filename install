@@ -142,8 +142,10 @@ File(lib_dir/'phonetics.py').copy(pylib/'phonetics.py').link(
 )()
 
 # Determine whether our Python supports SSL.
-res=Command(f"python3 -c 'import ssl'",stderr=DEVNULL)
+res=Command(f"python3 -c 'import ssl'",stderr=DEVNULL,quiet=True)()
+dc(f"res.result={res.result!r}")
 supports_ssl=res.result==0
+dc(f"supports_ssl={supports_ssl!r}")
 
 # Use pip to install pyparsing if it's not already there.
 pyparsing=lib_dir/'pyparsing'
