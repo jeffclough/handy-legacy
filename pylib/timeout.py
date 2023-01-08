@@ -22,18 +22,19 @@ class Timeout(object):
 
   If do_something_complicated() takes more than 8 seconds to return, a
   Timeout.Error exception is raised, which contains the exception
-  message given when the Timeout instance is created.
-  and processing continues after the except block. Otherwise all is
-  well, and execution continues after the except block.
+  message given when the Timeout instance was created. Otherwise all is
+  well, and execution continues after the try-except block.
 
-  This implementation of Timeout uses SIGALRM to do the heavy lifting, so it
-  can hanle only integer values (seconds) for the time-out duration.
+  This implementation of Timeout uses SIGALRM to do the heavy lifting,
+  so it can hanle only integer values (seconds) for the time-out
+  duration.
 
-  Because a given process can have only one SIGALRM timer, ONLY ONE Timeout CAN
-  BE IN OPERATION AT A TIME. Beginning a new Timeout opeation before an
-  existing one has finished effectively removes the time-out constraint on the
-  first, allowing it to run to completion (or forever). I'm mulling over
-  different techniques for removing this restriction."""
+  Because a given process can have only one SIGALRM timer, ONLY ONE
+  Timeout CAN BE IN OPERATION AT A TIME. Beginning a new Timeout
+  opeation before an existing one has finished effectively removes the
+  time-out constraint on the first, allowing it to run to completion (or
+  forever). I'm mulling over different techniques for removing this
+  restriction."""
 
   class Error(Exception):
     "Timeout.Error is raised if Timeout's timeer expires."
@@ -50,8 +51,7 @@ class Timeout(object):
 
     The error_msg argument defaults to "Timed out after 10 seconds." If
     the seconds argument is something other than 10, error_msg will use
-    that number in its default value.
-    """
+    that number in its default value."""
 
     self.seconds=seconds
     if error_msg:
