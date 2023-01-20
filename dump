@@ -4,8 +4,8 @@ import argparse,os,sys
 import ansi
 from math import ceil,log
 
-col_ctl=str(ansi.Color('yellow on black'))
-col_high=str(ansi.Color('bold red on black'))
+col_ctl=str(ansi.Color('black on yellow'))
+col_high=str(ansi.Color('black on cyan'))
 col_blank=str(ansi.Color('black on black'))
 col_norm=str(ansi.norm)
 
