@@ -368,8 +368,8 @@ class Command(object):
       r=CompletedProcess(self.cmd+args,0,"","")
     else:
       # Run our command, capturing it stdout and stderr output as string values.
-      #dc(f"run({self.cmd+args},text=True,stdin={self.stdin},stdout={self.stdout},stderr={self.stderr})")
-      r=run(self.cmd+args,text=True,stdin=self.stdin,stdout=self.stdout,stderr=self.stderr)
+      #dc(f"run({self.cmd+args},universal_newlines=True,stdin={self.stdin},stdout={self.stdout},stderr={self.stderr})")
+      r=run(self.cmd+args,universal_newlines=True,stdin=self.stdin,stdout=self.stdout,stderr=self.stderr)
       #dc.indent()(f"returns {r.returncode!r}\nstdout: {r.stdout!r}\nstderr: {r.stderr!r}").undent()
     self.result=r.returncode
     self.stdout=r.stdout
@@ -386,7 +386,7 @@ class Target(object):
   produce a target file from one or more sources. Tilde- and variable-
   expansion are performed on the target path if called for.
 
-  See the File class for examples."""
+  See class File for examples."""
 
   # This class attribute holds a list of exceptions that have occurred in an
   # instance of this class or that of any of its subclasses.
@@ -503,7 +503,9 @@ class Target(object):
 
   def __call__(self):
     """Create this target from its dependencies. This method MUST be
-    implemented in each instantiable subclass."""
+    implemented in each instantiable subclass. Target's implementation
+    only ensures dependencies are up to date, though it only does this
+    for dependencies of type Target or some subclass thereof."""
 
     # In theis base class, we ensure all dependencies are up to date.
     # It's up to the subclass to build the target.
@@ -521,7 +523,6 @@ class File(Target):
 
     super().__init__(target)
     self.source=None
-    self.links=[]
     self.force_links=False
     self.follow=False
     self.exception=None
