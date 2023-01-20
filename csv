@@ -3,6 +3,10 @@
 import argparse,contextlib,os,pipes,re,shlex,sys
 from functools import reduce
 
+# Make sure stdin and stdout is friendly to UTF-8 content.
+sys.stdin=open(sys.stdin.fileno(),mode='r',encoding='utf8',buffering=1)
+sys.stdout=open(sys.stdout.fileno(),mode='w',encoding='utf8',buffering=1)
+
 # Make sure we'll find our "handy" modules, regardless of our shell's
 # PYTHONPATH value (or lack thereof), or die with a helpful message.
 d=os.path.dirname(os.path.realpath(sys.argv[0]))
@@ -258,8 +262,10 @@ class ShellWriter(object):
       self.writerow(row)
 
 def tabfmt(val,width):
-  if isinstance(val,(int,float)):
-    return '%*g'%(width,val)
+  if isinstance(val,int):
+    return '%*d'%(width,val)
+  if isinstance(val,float):
+    return '%*f'%(width,val)
   return '%-*s'%(width,str(val))
 
 class TableWriter(object):
