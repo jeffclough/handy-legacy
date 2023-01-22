@@ -2,12 +2,14 @@
 
 import argparse,os,re,sys,urllib.request,urllib.parse,urllib.error
 import english
+from debug import DebugChannel
 from handy import die,getch
 try:
   import pyqrcode as qr
 except ImportError:
   die('Failed to import pyqrcode module. Consider running "pip install pypng pyqrcode".')
 
+dc=DebugChannel(False)
 
 formats=('text','show','png','terminal')
 rgba1=re.compile(r'(?P<r>[0-9A-Fa-f])(?P<g>[0-9A-Fa-f])(?P<b>[0-9A-Fa-f])(?P<a>[0-9A-Fa-f])?')
@@ -36,6 +38,7 @@ def get_color_tuple(color):
 
 # Handle command line stuff.
 ap=argparse.ArgumentParser(
+  add_help=False,
   formatter_class=argparse.RawDescriptionHelpFormatter,
   epilog="""
 Create or output the QR code containing the text on the command line.
@@ -62,19 +65,39 @@ ap.add_argument('--scale',metavar='N',default=16,type=int,help="""Scale the qr c
 ap.add_argument('--margin',metavar='N',default=2,type=int,help="""Surround the QR code with this many "units" of background color. The QR standard is 4, but this program's default is %(default)s because that's really big.""")
 ap.add_argument('--foreground',metavar='RGBA',action='store',default='000f',help="""RGBA (or RRGGBBAA) foreground color, which is normally %(default)s.""")
 ap.add_argument('--background',metavar='RGBA',action='store',default='ffff',help="""RGBA (or RRGGBBAA) background color, which is normally %(default)s.""")
+ap.add_argument('--wifi',action='store_true',help="""Create a WiFi QR with the given SSID, password, and security type (which defaults to "WPA2"). So rather than freeform text arguments, the command line arguments must be the SSID, the password, and (optionally) the security type.""")
 ap.add_argument('--debug',action='store_true',help="""Show some internal values before generating the QR image.""")
+ap.add_argument('--help','-h',action='help',help="Show this help message and exit.")
 ap.add_argument('text',metavar='WORD',nargs='+',action='append',help="""This is the text that will be encoded into the QR code.""")
 opt=ap.parse_args()
 
-if False:
-  print('Raw color options:')
-  print('  foreground: %s'%(opt.foreground,))
-  print('  background: %s'%(opt.background,))
+dc.enable(opt.debug)
+
+if dc:
+  dc('Raw color options:')
+  dc('  foreground: %s'%(opt.foreground,))
+  dc('  background: %s'%(opt.background,))
 
 # Cook some option values.
 opt.foreground=get_color_tuple(opt.foreground)
 opt.background=get_color_tuple(opt.background)
-opt.text=' '.join(opt.text[0])
+dc(f"opt.text={opt.text!r}")
+if type(opt.text[0])==list:
+  opt.text=opt.text[0]
+dc(f"opt.text={opt.text!r}")
+if opt.wifi:
+  # Format our command line arguments for WiFi authentication.
+  if len(opt.text) not in (2,3):
+    die(f"When using --wifi mode, there must be either two or three (not {len(opt.text)}) command line arguments: SSID, password, and (optionally) security type (which defaults to WPA2.")
+  ssid=opt.text.pop(0)
+  password=opt.text.pop(0)
+  if opt.text:
+    security=opt.text.pop(0)
+  else:
+    security='WPA2'
+  opt.text=f"WIFI:S:{ssid};T:{security};P:{password};;"
+else:
+  opt.text=' '.join(opt.text)
 
 # Make sure we have a filename if we need a filename.
 if opt.format in ('png'):
@@ -91,19 +114,20 @@ if opt.format in ('png'):
     else:
       opt.file+=ext
   if os.path.exists(opt.file) and not opt.force:
-    if getch('%s already exists. Overwrite? '%opt.file,echo=True).lower()!='y':
+    if getch(f"File \"{opt.file}\" already exists. Overwrite? ",echo=True).lower()!='y':
       print('Quitting.')
       sys.exit(0)
 
-if False:
-  print('Options:')
-  print('  file: %r'%(opt.file,))
-  print('  format: %r'%(opt.format,))
-  print('  scale: %r'%(opt.scale,))
-  print('  margin: %r'%(opt.margin,))
-  print('  foreground: %s'%(','.join(['%02x'%x for x in opt.foreground])))
-  print('  background: %s'%(','.join(['%02x'%x for x in opt.background])))
-  print('  text: %r'%(opt.text,))
+if dc:
+  dc('Options:')
+  dc('  file: %r'%(opt.file,))
+  dc('  format: %r'%(opt.format,))
+  dc('  scale: %r'%(opt.scale,))
+  dc('  margin: %r'%(opt.margin,))
+  dc('  foreground: %s'%(','.join(['%02x'%x for x in opt.foreground])))
+  dc('  background: %s'%(','.join(['%02x'%x for x in opt.background])))
+  dc('  wifi: %r'%(opt.wifi,))
+  dc('  text: %r'%(opt.text,))
 
 # Do the QR stuff.
 code=qr.create(opt.text)
