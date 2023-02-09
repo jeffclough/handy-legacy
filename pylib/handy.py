@@ -760,11 +760,13 @@ def getch(prompt=None,echo=False):
 
   if prompt:
     sys.stdout.write(prompt)
+    sys.stdout.flush()
   ch=_getch()
   if echo:
     sys.stdout.write(ch)
   if prompt:
     sys.stdout.write('\n')
+  sys.stdout.flush()
   return ch
 
 if __name__=='__main__':
