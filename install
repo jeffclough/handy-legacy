@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse,atexit,os,re,sys
+import argparse,atexit,os,re,shutil,sys
 
 # We run this code from the source directory, and we want to use the latest
 # version of our libraries.
@@ -90,6 +90,8 @@ Folder(options.tdir/'etc')()
 Folder(options.tdir/'include')()
 Folder(options.tdir/'lib')()
 lib_dir=Folder(options.tdir/'lib'/'python')()
+venv_dir=Folder(options.tdir/'venvs')()
+dc(f"venv_dir={venv_dir!r}")
 
 pylib=Folder(options.sdir/'pylib') # No need to create this in the filesystem.
 
@@ -140,6 +142,12 @@ File(lib_dir/'phonetics.py').copy(pylib/'phonetics.py').link(
   *[bin_dir/x for x in ('nato','police','raf','us','wu')],
   force=options.force
 )()
+
+
+# If pip installed, set up a "pip" command. Otherwise, pip is None.
+pip=shutil.which('pip3')
+if pip:
+  pip=Command(pip)
 
 # Determine whether our Python supports SSL.
 res=Command(f"python3 -c 'import ssl'",stderr=DEVNULL,quiet=True)()
@@ -229,6 +237,103 @@ scripts=[
 # Copy our scripts.
 for f in scripts:
   File(bin_dir/f).copy(f)()
+
+class VirtualEnv(Target):
+
+  def __init__(self,cmd,venv_dir=None):
+    """Prepare to create a Python virtual environment for command cmd,
+    which depends on the pip-installable packages named in the "deps"
+    arguments (if any)."""
+
+    if venv_dir is None:
+      venv_dir=options.tdir/'venvs'
+
+    super().__init__(venv_dir/cmd/cmd)
+    self.cmd=cmd
+    self.requirements=[]
+
+  def requires(self,*args):
+    """The venv requires these packages. We'll call pip to install them."""
+
+    self.requirements.extend(args)
+    return self
+
+  def __call__(self,*args):
+    """Create our virtual environment if needed, and set up our command
+    to run from there."""
+
+    # Create and initialize our Python virtual environment for this command.
+    if not self.target.isDir():
+      script=f"""\
+#!/bin/bash
+cd {venv_dir}
+python3 -m venv {cmd}
+"""
+      if self.requirements:
+        modules=' '.join(self.requirements)
+        script+=f"""\
+cd {cmd}
+source ./bin/activate
+pip install {modules}"""
+      res=ShellScript(script,stdout=PIPE,stderr=PIPE)()
+      self.stdout=res.stdout
+      self.stderr=res.stderr
+      self.result=res.result
+      self.script_filename=res.cmd
+
+    # Copy "runner" to our new venv directory, and symlink cmd to it from our bin directory.
+    runner=File(venv_dir/self.cmd/'runner').copy('runner')
+    runner.link(*self.links,link_dir=self.link_dir,force=self.force_links)
+    runner()
+
+    # Create our symlinks to runner from our bin_dir.
+    self.target=runner
+    
+    # --- RESUME ---
+    # Something has to create bin_dir/symlink --> venv_dir/cmd/runner.
+    #
+    # Figure out whether to VirtualEnv should subclass Target, File, or
+    # Folder.
+
+    return self
+
+# def link(self,*linknames,link_dir,force=None):
+#   """Prepare to create one or more symlinks (linknames) to our runner
+#   script. Non-absolute paths are relative to link_dir, or our target's
+#   directory otherwise.
+#
+#   The force argument defaults to None but is interpreted as boolean if
+#   it's anything else. Normally, symlinks won't replace an existing
+#   file or symlink, but force=True means the new symlink will be
+#   created unless it already exists as a symlink and points to this
+#   File object's target.
+#
+#   The link(s) won't be created until this VirtualEnv instance is
+#   called. The link(...) method just sets things up.
+#
+#   Return a reference to this VirtualEnv object."""
+#
+#   # Use our target's diretory as link_dir if None is given.
+#   if link_dir is None:
+#     link_dir=self.target.dirName()
+#   elif not isinstance(link_dir,Path):
+#     link_dir=Path(link_dir)
+#
+#   # Store these links as new LinkBundle instance to be processed when
+#   # this File instance is called.
+#   self.link_bundles.append(self.LinkBundle(linknames,link_dir,force))
+#
+#   return self
+
+# Create and set up our Python virtual environments.
+v=VirtualEnv(venv_dir/'j2p')
+dc(f"v={v!r}")
+v.requires('javalang','six')
+dc(f"v={v!r}")
+v.link('j2p',link_dir=bin_dir,force=True)
+dc(f"v={v!r}")
+v()
+VirtualEnv(venv_dir/'qr').requires('PyQRCode').link(bin_dir/'qr')()
 
 dc(f"platform.system={platform.system}")
 if platform.system=='Darwin':

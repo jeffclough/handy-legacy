@@ -13,6 +13,7 @@ __all__=[
   'DEVNULL',
   'PIPE',
   'STDOUT',
+  'ShellScript',
   'Command',
   'Error',
   'Path',
@@ -35,9 +36,10 @@ from functools import reduce
 from subprocess import run,DEVNULL,PIPE,STDOUT,CompletedProcess
 from path import Path
 from debug import DebugChannel
+from tempfile import NamedTemporaryFile
 
 dc=DebugChannel(
-  False,
+  True,
   sys.stdout,
   fmt="{label}: {basename}:{line} {function}: {indent}{message}\n"
 )
@@ -303,7 +305,7 @@ def chmod(path,mode,dir_fd=None,follow_symlinks=True):
   0001  For files, allow execution by others. For directories allow
         others to search in the directory."""
 
-  os.chmod(path,stat_mode(mode),dir_fd=dir_fd,follow_symlinks=follow_simlinks)
+  os.chmod(path,stat_mode(mode),dir_fd=dir_fd,follow_symlinks=follow_symlinks)
 
 def getmod(path,dir_fd=None,follow_symlinks=True):
   """Return the Unix shell mode of the given file (which might be a
@@ -381,10 +383,30 @@ class Command(object):
 #     raise Error(f"Non-zero return code ({self.result}): {shlex.join(self.cmd+args)}")
     return self
 
+class ShellScript(Command):
+  """The ShellScript class subclasses Command, allowing multi-line
+  scripts to be run in the shell with full #! support."""
+
+  def __init__(self,script,stdin=None,stdout=None,stderr=None,quiet=False):
+    """Create our shell script in a temp file and prepare to run it as
+    a Command instance."""
+
+    t=NamedTemporaryFile(mode='w+',delete=False)
+    print(script,file=t.file)
+    t.file.close()
+    chmod(t.name,0o755)
+    super().__init__(t.name,stdin=stdin,stdout=stdout,stderr=stderr,quiet=quiet)
+
+  def __call__(self,*args,**kwargs):
+    """Run the shell script the caller has set up. Return this
+    ShellScript instance."""
+
+    return super().__call__(*args,**kwargs)
+
 class Target(object):
   """Target is an abstract base class of classes that knows how to
   produce a target file from one or more sources. Tilde- and variable-
-  expansion are performed on the target path if called for.
+  filename expansion are performed on the target path.
 
   See class File for examples."""
 
@@ -463,6 +485,11 @@ class Target(object):
 
     return self.target
 
+  def __repr__(self):
+    "Return a declarative string expressing this object."
+
+    return f"{self.__class__.__name__}({self.target})"
+
   def __str__(self):
     "Return the string version of this target."
 
@@ -507,7 +534,7 @@ class Target(object):
     only ensures dependencies are up to date, though it only does this
     for dependencies of type Target or some subclass thereof."""
 
-    # In theis base class, we ensure all dependencies are up to date.
+    # In this base class, we ensure all dependencies are up to date.
     # It's up to the subclass to build the target.
     for d in self.deps:
       if isinstance(d,Target):
