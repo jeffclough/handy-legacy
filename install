@@ -23,11 +23,13 @@ Install the "handy" scripts and modules to the given (with --dir) or default ({o
 The --verbosity (-v) flags are any of quiet, ops, deps, time, debug, and full. The "quiet" flag turns all the others off. "full" turns them all on. Flags can be combined with + or - characters to add or remove those flags. The first flag listed is assumed to be added unless preceded by -. There are no spaces in --verbosity's value. E.g. "./install -v ops+time ..." or "./install -v full-debug".
 """
 )
-ap.add_argument('--dir',dest='tdir',action='store',default=options.tdir,help="Set the base of the target directory structure. Subdirectories like bin, doc, etc, include, lib, man, and sbin will be created here if and when needed. (default: %(default)r)")
+ap.add_argument('--dir',dest='tdir',action='store',default=options.tdir,help="Set the base of the target directory structure. Subdirectories like bin, doc, etc, include, lib, man, and sbin will be created here if and when needed. (default: %(default)s)")
+ap.add_argument('--vdir',dest='vdir',action='store',default=options.vdir,help="Set the directory where Python virtual environments are to be created. (default: %(default)s)")
+ap.add_argument('--python',metavar='COMMAND',action='store',default=options.python,help="The python command to run when installing virtual environments. (default: %(default)s)")
 ap.add_argument('--force',action='store_true',help="Rather than comparing the timestamps of source and target files, copy the former to the latter unconditionally.")
 ap.add_argument('--dryrun','-n',action='store_true',help="Go through all the motions, but don't do any work.")
 ap.add_argument('--test',action='store_true',help="Run internal tests, report the results, and terminate.")
-ap.add_argument('-v','--verbosity',action='store',default=options.verbFlags(),help="""Verbosity flags. See description text above for details. (default: %(default)r)""")
+ap.add_argument('-v','--verbosity',action='store',default=options.verbFlags(),help="""Verbosity flags. See description text above for details. (default: %(default)s)""")
 ap.add_argument('--debugger',action='store_true',help="Engage pdb within this script once we get through the setup. This is not for the uninitiated. See https://docs.python.org/3/library/pdb.html#debugger-commands for a command summary.")
 ap.add_argument('target',action='store',nargs='*',help="This is one of more files to be installed.")
 opt=ap.parse_args()
@@ -40,6 +42,8 @@ dc.enable(options.verb & V.DEBUG)
 options.dryrun=opt.dryrun
 options.force=opt.force
 options.tdir=Path(options.tdir).expandAll()
+options.vdir=Path(options.vdir).expandAll()
+options.python=opt.python
 
 dc(f"options: {options}")
 
@@ -90,8 +94,7 @@ Folder(options.tdir/'etc')()
 Folder(options.tdir/'include')()
 Folder(options.tdir/'lib')()
 lib_dir=Folder(options.tdir/'lib'/'python')()
-venv_dir=Folder(options.tdir/'venvs')()
-dc(f"venv_dir={venv_dir!r}")
+venv_dir=Folder(options.vdir)()
 
 pylib=Folder(options.sdir/'pylib') # No need to create this in the filesystem.
 
@@ -246,7 +249,7 @@ class VirtualEnv(Target):
     arguments (if any)."""
 
     if venv_dir is None:
-      venv_dir=options.tdir/'venvs'
+      venv_dir=options.vdir
 
     super().__init__(venv_dir/cmd/cmd)
     self.cmd=cmd
@@ -263,11 +266,12 @@ class VirtualEnv(Target):
     to run from there."""
 
     # Create and initialize our Python virtual environment for this command.
+    # TODO Don't create a venv that already exists.
     if not self.target.isDir():
       script=f"""\
 #!/bin/bash
 cd {venv_dir}
-python3 -m venv {cmd}
+{options.python} -m venv {cmd}
 """
       if self.requirements:
         modules=' '.join(self.requirements)
@@ -283,47 +287,13 @@ pip install {modules}"""
 
     # Copy "runner" to our new venv directory, and symlink cmd to it from our bin directory.
     runner=File(venv_dir/self.cmd/'runner').copy('runner')
-    runner.link(*self.links,link_dir=self.link_dir,force=self.force_links)
+    runner.link(cmd,link_dir=options.bdir,force=True)
     runner()
 
     # Create our symlinks to runner from our bin_dir.
     self.target=runner
     
-    # --- RESUME ---
-    # Something has to create bin_dir/symlink --> venv_dir/cmd/runner.
-    #
-    # Figure out whether to VirtualEnv should subclass Target, File, or
-    # Folder.
-
     return self
-
-# def link(self,*linknames,link_dir,force=None):
-#   """Prepare to create one or more symlinks (linknames) to our runner
-#   script. Non-absolute paths are relative to link_dir, or our target's
-#   directory otherwise.
-#
-#   The force argument defaults to None but is interpreted as boolean if
-#   it's anything else. Normally, symlinks won't replace an existing
-#   file or symlink, but force=True means the new symlink will be
-#   created unless it already exists as a symlink and points to this
-#   File object's target.
-#
-#   The link(s) won't be created until this VirtualEnv instance is
-#   called. The link(...) method just sets things up.
-#
-#   Return a reference to this VirtualEnv object."""
-#
-#   # Use our target's diretory as link_dir if None is given.
-#   if link_dir is None:
-#     link_dir=self.target.dirName()
-#   elif not isinstance(link_dir,Path):
-#     link_dir=Path(link_dir)
-#
-#   # Store these links as new LinkBundle instance to be processed when
-#   # this File instance is called.
-#   self.link_bundles.append(self.LinkBundle(linknames,link_dir,force))
-#
-#   return self
 
 # Create and set up our Python virtual environments.
 v=VirtualEnv(venv_dir/'j2p')

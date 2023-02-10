@@ -64,6 +64,9 @@ class Options(object):
     self.dryrun=False
     self.force=False
     self.tdir=Path('~/my').expandUser()
+    self.bdir=Path(self.tdir/'bin')
+    self.vdir=Path(self.tdir/'venvs')
+    self.python='python3'
     self.sdir=Path(sys.argv[0]).dirName().absolute()
     self.verb=V.OPS
 
@@ -528,6 +531,22 @@ class Target(object):
     self.mode=mode
     return self
 
+  def createLinks(self):
+    """Create our symlinks, and return this object. This should be
+    called from the __call__ method, but different subclasses will need
+    to call it from different parts of the __call__ implementation."""
+
+    # Create symlinks if called for.
+    for lb in self.link_bundles:
+      try:
+        lb.linkTo(self.target)
+      except OSError as e:
+        print(f"\n    {e}\n",file=sys.stderr)
+        self.exception=e
+        self.__class__.exceptions.append(e)
+
+    return self
+
   def __call__(self):
     """Create this target from its dependencies. This method MUST be
     implemented in each instantiable subclass. Target's implementation
@@ -542,8 +561,36 @@ class Target(object):
 
     return self
 
+  def link(self,*linknames,link_dir=None,force=None):
+    """Prepare to create one or more symlinks (linknames) to our target
+    file. Non-absolute paths are relative to link_dir if given, or our
+    target's directory otherwise.
+
+    The force argument defaults to None but is interpreted as boolean if
+    it's anything else. Normally, symlinks won't replace an existing
+    file or simlink, but force=True means the new symlink will be
+    creeated unless it already exists as a symlink and points to this
+    File object's target.
+
+    The link(s) won't be created until this File instance is called. The
+    link(...) method just sets things up.
+
+    Return a reference to this File object."""
+
+    # Use our target's diretory as link_dir if None is given.
+    if link_dir is None:
+      link_dir=self.target.dirName()
+    elif not isinstance(link_dir,Path):
+      link_dir=Path(link_dir)
+
+    # Store these links as new LinkBundle instance to be processed when
+    # this File instance is called.
+    self.link_bundles.append(self.LinkBundle(linknames,link_dir,force))
+
+    return self
+
 class File(Target):
-  """An instance of File is ... a filename."""
+  """An instance of File is ... a file to be installed."""
 
   def __init__(self,target):
     """Set the filename of this File object's target file."""
@@ -586,14 +633,7 @@ class File(Target):
           if self.user or self.group:
             shutil.chown(self.target,user=self.user,group=self.group)
 
-    # Create symlinks if called for.
-    for lb in self.link_bundles:
-      try:
-        lb.linkTo(self.target)
-      except OSError as e:
-        print(f"\n    {e}\n",file=sys.stderr)
-        self.exception=e
-        self.__class__.exceptions.append(e)
+    self.createLinks()
 
     return self
 
@@ -613,34 +653,6 @@ class File(Target):
     self.deps=[s] # Make sure our source file is a dependency.
     self.source=s
     self.follow=follow
-    return self
-
-  def link(self,*linknames,link_dir=None,force=None):
-    """Prepare to create one or more symlinks (linknames) to our target
-    file. Non-absolute paths are relative to link_dir if given, or our
-    target's directory otherwise.
-
-    The force argument defaults to None but is interpreted as boolean if
-    it's anything else. Normally, symlinks won't replace an existing
-    file or simlink, but force=True means the new symlink will be
-    creeated unless it already exists as a symlink and points to this
-    File object's target.
-
-    The link(s) won't be created until this File instance is called. The
-    link(...) method just sets things up.
-
-    Return a reference to this File object."""
-
-    # Use our target's diretory as link_dir if None is given.
-    if link_dir is None:
-      link_dir=self.target.dirName()
-    elif not isinstance(link_dir,Path):
-      link_dir=Path(link_dir)
-
-    # Store these links as new LinkBundle instance to be processed when
-    # this File instance is called.
-    self.link_bundles.append(self.LinkBundle(linknames,link_dir,force))
-
     return self
 
 class Folder(Target):
@@ -697,6 +709,8 @@ class Folder(Target):
         print(f"\n    {e}\n",file=sys.stderr)
         self.exception=e
         __class__.exceptions.append(e)
+
+    self.createLinks()
 
     return self
 
