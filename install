@@ -123,6 +123,7 @@ pylibs=[
   'png.py',
   'prime.py',
   'semver.py',
+  'shc.py',
   'stardate.py',
   'table.py',
   'tree.py',
