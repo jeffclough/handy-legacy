@@ -318,7 +318,7 @@ for arg in opt.args:
       if isinstance(first,int):
         warning(f"Starting line number {first} not found.")
       else:
-        warning(f"Starting pattern {first.pattern} not found.")
+        warning(f"Starting pattern {first.pattern!r} not found.")
     if not found_end:
       if isinstance(last,int):
         if relative:
@@ -326,7 +326,7 @@ for arg in opt.args:
         else:
           warning(f"Ending line number {last} not found.")
       else:
-        warning(f"Ending pattern {last.pattern} not found.")
+        warning(f"Ending pattern {last.pattern!r} not found.")
 
 sys.exit(EXIT_SUCCESS)
 
