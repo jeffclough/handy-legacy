@@ -43,7 +43,7 @@ op.add_option('-h',dest='radix',action='store_const',const=16,help="Hexadecimal 
 op.add_option('-o',dest='radix',action='store_const',const=8,help="Octal (--radix 8)")
 op.add_option('--pad',dest='pad',action='store',type='int',default=0,help="Pad with leading zeros to make numeric values occupy this many characters (not counting any prefix). (default: %default)")
 op.add_option('--prefix','-p',action='store_true',default=False,help="Prefix each numeric character value with notation indicating the base being used.")
-op.add_option('-t',dest='value_only',action='count',default=0,help="How terse would you like the output to be? -t suppresses the output each corresponding character, giving one numeric value per line. -tt gives one line with values separated by spaces. -ttt outputs all values on one line with nothing between them.")
+op.add_option('-t',dest='value_only',action='count',default=0,help="How terse would you like the output to be? -t suppresses the output each corresponding character, giving one numeric value per line. -tt gives one line with values separated by spaces. -ttt outputs all values on one line with nothing between them. (In this last case padding will be set to 2 if it's less than that.")
 op.add_option('--table',dest='table',action='store_true',help="Rather than translating standard input and the command line into ASCII on standard output, just wright an ASCII table to standard output.")
 op.add_option('--help',dest='help',action='store_true',default=False,help="Show this usage message.")
 try:
@@ -66,14 +66,19 @@ if opt.prefix:
 else:
   opt.prefix=''
 if opt.value_only:
-  if opt.value_only==1: opt.delimiter='\n'
-  elif opt.value_only==2: opt.delimiter=' '
-  else: opt.delimiter=''
+  if opt.value_only==1:
+    opt.delimiter='\n'
+  elif opt.value_only==2:
+    opt.delimiter=' '
+  else:
+    opt.delimiter=''
+    if opt.pad<2:
+      opt.pad=2
 
 # Get the input from stdin and/or command line.
 instr=''
 if not sys.stdin.isatty():
-  instr+=os.fdopen(sys.stdin.fileno(),'rb').read()
+  instr+=os.fdopen(sys.stdin.fileno(),'rb').read().decode()
 if args:
   instr+=' '.join(args)
 
