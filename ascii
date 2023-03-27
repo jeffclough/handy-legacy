@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse,os,sys
 from math import ceil
+from table import Table
 
 # default_padding[radix]=number of digits to allow for.
 default_padding={
@@ -8,13 +9,6 @@ default_padding={
   8:3,
   10:3,
   16:2
-}
-
-column_breaks={
-  2:4,
-  8:4,
-  10:5,
-  16:4
 }
 
 # Set up for outputting an ASCII table.
@@ -31,10 +25,10 @@ character3.append('DEL')
 # Handle command line options.
 ap=argparse.ArgumentParser(
   add_help=False,
-  usage="%(prog)s [OPTIONS] [string]",
+  #usage="%(prog)s [OPTIONS] [string]",
   description="Description: Read text from standard input and/or the command line argument(s), and output the ASCII value of each character in the given or default radix."
 )
-ap.add_argument('--radix','-r',dest='radix',action='store',type=int,default=16,help="Set the base to use when giving ASCII values for characters. The valid range is from 2 to 36. (default: %(default)s)")
+r=ap.add_argument('--radix','-r',dest='radix',action='store',type=int,default=16,help="Set the base to use when giving ASCII values for characters. The valid range is from 2 to 36. (default: %(default)s)")
 ap.add_argument('-b',dest='radix',action='store_const',const=2,help="Binary (--radix 2)")
 ap.add_argument('-d',dest='radix',action='store_const',const=10,help="Decimal (--radix 10)")
 ap.add_argument('-h',dest='radix',action='store_const',const=16,help="Hexadecimal (--radix 16)")
@@ -44,7 +38,7 @@ ap.add_argument('--prefix','-p',action='store_true',default=False,help="Prefix e
 ap.add_argument('-t',dest='value_only',action='count',default=0,help="How terse would you like the output to be? -t suppresses the output each corresponding character, giving one numeric value per line. -tt gives one line with values separated by spaces. -ttt outputs all values on one line with nothing between them. (In this last case padding will be set to 2 if it's less than that.")
 ap.add_argument('--table',dest='table',action='store_true',help="Rather than translating standard input and the command line into ASCII on standard output, just wright an ASCII table to standard output.")
 ap.add_argument('--help',dest='help',action='store_true',default=False,help="Show this usage message.")
-ap.add_argument('args',metavar='TEXT',nargs='*',help="If standard input isn't a file, we'll use this TEXT instead.")
+ap.add_argument('args',metavar='TEXT',nargs='*',help="If given, this TEXT is appended to the end of standard input (if any).")
 try:
   opt=ap.parse_args()
 except Exception as e:
@@ -87,53 +81,46 @@ def based_integer(n,b,prefix='',pad=0):
   """Return a string expressing the integer n in base b, optionally
   following the given prefix string."""
 
-  chars=[]
+  s=[]
   sign=1
   if n<0:
     sign=-1
+    n=-n
   elif n==0:
-    chars=digits[:1]
-  else:
-    sign=1
-  n*=sign
+    s=digits[0]
   while n>0:
-    chars.insert(0,digits[n%b])
+    s.insert(0,digits[n%b])
     n//=b
+
+  # Now s and n completely change meaning. Keep up.
+  s=''.join(s)
+  n=len(s)
   if sign==-1:
-    chars.insert('-')
-  if len(chars)<pad:
-    prefix+=digits[0]*(pad-len(chars))
-  return prefix+''.join(chars)
+    if pad>n+1:
+      return f"-{prefix}{s:0>{pad-1}}"
+    else:
+      return f"-{s}"
+  return f"{prefix}{s:0>{pad}}"
 
 if opt.table:
   if opt.radix not in default_padding:
     sys.stderr.write("I'm really not set up to output an ASCII table with radix=%d.\n"%opt.radix)
     sys.exit(1)
-  if default_padding[opt.radix]==2:
-    prefix='  '
-  else:
-    prefix=' '
   if opt.radix==2:
-    cw=8
     columns=8
   else:
-    cw=3
     columns=opt.radix
-  sys.stdout.write(' '*default_padding[opt.radix]+prefix)
-  for col in range(columns):
-#   if col%column_breaks[opt.radix]==0:
-#     sys.stdout.write('  ')
-    sys.stdout.write(based_integer(col,opt.radix,prefix,default_padding[opt.radix]))
-  for row in range(int(ceil(128.0/columns))):
-    sys.stdout.write('\n'+based_integer(row*opt.radix,opt.radix,prefix,default_padding[opt.radix]))
-    for col in range(columns):
-      ch=row*columns+col
-      if ch>=len(character3):
-        break
-#     if col%column_breaks[opt.radix]==0:
-#       sys.stdout.write('  ')
-      sys.stdout.write(' '+('%*s'%(cw,character3[ch])))
-  sys.stdout.write('\n')
+  headings=['']
+  headings.extend([based_integer(c,opt.radix,'',default_padding[opt.radix]) for c in range(columns)])
+  t=Table(colnames=headings)
+  for r in range(int(ceil(128.0/columns))):
+    b=r*columns # Compute the "base" position of this row.
+    values=[based_integer(b,opt.radix,'',default_padding[opt.radix])]
+    for c in range(columns):
+      ch=b+c
+      values.append(character3[ch] if ch<len(character3) else chr(ch))
+    t.append(Table.Row(t,values))
+  t.output()
 else:
   if opt.value_only:
     print(opt.delimiter.join([

@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 """
 
 A Table instance is fundamentally a list of rows, where each row is
