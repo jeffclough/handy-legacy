@@ -13,46 +13,47 @@ proper prefix to color the text and the proper suffix to turn that color
 back off.
 
     import ansi
-    print ansi.Color('bold','red','yellow')('Error message')
+    print(ansi.Color('bold','red','yellow')('Error message'))
 
-You can also assign Color instances to handy variables.
+This will print "Error message" in bold red on a yellow background. You
+can also assign Color instances to handy variables.
 
     import ansi
     error_text=Color('bold red on yellow')
     .
     .
     .
-    print error_text(some_message)
+    print(error_text(some_message))
 
 You can turn off the effect of ALL Color objects by disabling the whole
 ansi module.
 
-    print error_text("This text will be colored.")
+    print(error_text("This text will be colored."))
     ansi.enabled=False
-    print error_text("This text will NOT be colored.")
+    print(error_text("This text will NOT be colored."))
     ansi.enabled=True
-    print error_text("This text will AGAIN be colored.")
+    print(error_text("This text will AGAIN be colored."))
 
 This makes it easy to manage whether your script's output is colored or
-not without having to have a bunch of messy if statements.
+not without having to have a bunch of messy `if` statements.
 
 You can also call ansi.paint(), which takes any number of arguments
 
     import ansi
     error_type=ansi.Color('bold red on yellow')
     error_msg=ansi.Color('bold white on red')
-    ansi.paint(error_type,'Error:',error_msg,' message \n')
+    ansi.paint(error_type,'Error:',error_msg,' message\\n')
 
 The Color class can express itself into a string when called upon to do
 so, in which case it will yield the ANSI escape sequence to turn on the
 attribute, foreground, and background it contains. If you pass a Color
-object to repr(), you'll get a Python expression that can be used to
-recreate that Color object.
+object to repr(), you'll get a Python expression that will recreate that
+Color object.
 
-There's also the notion of a color palette that you can create with the
-Palette class. A Palette object is essentially a Python list of Color
-objects and can be treated as such, e.g. using len() to count its
-elements or its append() method to add to it.
+There's also the notion of a color palette you can create with the
+Palette class. A Palette object is essentially a list of Color objects
+and can be treated as such, e.g. using len() to count its elements or
+its append() method to add to it.
 
 A Palette class is can be created using, among other things, an
 extension of Color's spec string. Just use the single-string version of
@@ -67,32 +68,34 @@ an example:
     ansi.paint(WARN,"This is only a warning ... this time.")
     ansi.paint(ERROR,"This is an error message. No soup for you!")
 
-Notice that when specifying a palette all at once, attribute and
-background are persistent from the previous entry. We start the palette
-string by giving everything about the NORM text (normal attribute, green
-foreground, and black background). The next entry, WARN, specifies a
-bold yellow foreground and keeps the black background from the first
-entry. The last entry, ERROR, keeps "bold" from the WARN entry and then
-specifies a white foreground on a red background.
+When specifying a palette all at once, attribute and background carry
+over from the previous entry. We start the palette string by giving
+everything about the NORM text (normal attribute, green foreground, and
+black background). The next entry, WARN, specifies a bold yellow
+foreground and keeps the black background from the first entry. The last
+entry, ERROR, keeps "bold" from the WARN entry and then specifies a
+white foreground on a red background.
 
 Another option for Palette's constructor's argument is to give either
-"dark" or "light".  The author is very lazy, usually uses terminals with
-dark backgrounds, and likes to be able to call ansi.parsePalette('dark')
-to set things up. The "light" spec is supposed to work well with
-light-background terminals, but ... why would anyone need that?
+"dark" or "light".  The author of this module is very lazy, usually uses
+terminals with dark backgrounds, and likes to be able to call
+ansi.parsePalette('dark') to set things up. The "light" spec is supposed
+to work well with light-background terminals, but ... why would anyone
+need that?
 
 BE AWARE: The terminal in front of the user is ENTIRELY in control of
 how these ANSI sequences are interpreted. For example, while you can
 specify "white on white" or "bold white on white", your terminal may
 still render readable text. Some terminals are just "smart" that way.
 The same goes for "black on black". The terminal might try to be clever
-rather than doing what it's told. The particulars vary from terminal to
-terminal. Run this module directly to find out how YOUR terminal
-behaves:
+rather than doing what it's told, possibly in the pursuit of
+accessibility contstraints on foreground-background contrast. The
+particulars vary from terminal to terminal. Run this module directly to
+find out how YOUR terminal behaves:
 
     python -m ansi
 
-You'll need a terminal window that's at least 88 columns wide and 34
+You'll need a terminal window at least 88 columns wide and 34
 lines tall to see the output all at once.
 
 To test a specific color combination, you can pass it directly on the
@@ -103,6 +106,18 @@ or
     python -m ansi bold red on blue
 
 """
+
+__all__=[
+  'AnsiException',
+  'Color',
+  'Palette',
+  'flatten_list',
+  'paint',
+  'dark',
+  'enabled',
+  'light',
+  'norm',
+]
 
 import colorsys,math,sys
 from functools import reduce
@@ -193,12 +208,12 @@ class AnsiException(Exception):
   pass
 
 def englishList(l,conj='and'):
-  "Return a string listing all elements of l as an english list phrase."
+  "Return a string listing all elements of l as an English list phrase."
 
   if len(l)<1:    s=''
   elif len(l)==1: s=str(l[0])
   elif len(l)==2: s='%s %s %s'%(l[0],conj,l[1])
-  else:           s='%s %s %s'%(', '.join(l[:-1]),conj,l[-1])
+  else:           s='%s %s %s'%(''.join([w+', ' for w in l[:-1]]),conj,l[-1])
   return s
 
 def complete(word,wordlist):
@@ -212,8 +227,8 @@ def complete(word,wordlist):
   return l[0]
 
 class Color(object):
-  '''Objects of this class contain the attribute, foreground, and
-  background of the color such an object represents.'''
+  """Instances of this class contain the attribute, foreground, and
+  background of the color such an object represents."""
 
   attribute_list=sorted(attr.keys())
   foreground_list=sorted(foreground.keys())
@@ -489,7 +504,7 @@ class Palette(list):
     Ex:
         pal=ansi.Palette('norm red on black,green,bold blue')
         words='this is a list of words'.split()
-        ansi.paint(*ansi.flattenList(
+        ansi.paint(*ansi.flatten_list(
           [[pal(i),words[i],' '] for i in range(len(words))]
         ))
 
@@ -501,7 +516,7 @@ class Palette(list):
 
         pal=ansi.Palette('norm red on black,green,bold blue')
         words='this is a list of words'.split()
-        ansi.paint(*ansi.flattenList(
+        ansi.paint(*ansi.flatten_list(
           [[pal[i],words[i],' '] for i in range(len(words))]
         ))
 
@@ -512,7 +527,7 @@ class Palette(list):
 
 norm=Color('normal',None,None) #'\033['+attr['normal']+'m'
 
-def flattenList(l,result=None):
+def flatten_list(l,result=None):
   '''Recursively flatten the given list [of lists [of lists]]. This
   comes in handy when buiding arguments for ansi.paint() from list
   comprehensions. (See example under Palette.__call__().) But it's
@@ -521,13 +536,20 @@ def flattenList(l,result=None):
   The l argument is the list [of lists [of lists]] to be flattened. The
   second argument, if supplied, is the flattened list that's being built
   and can be thought of as an initializer for the result list that is
-  ultimately returned.'''
+  ultimately returned.
+
+  >>> l=['This','is',['a','test',['of'],[]],'flatten_list.']
+  >>> ' '.join(flatten_list(l))
+  'This is a test of flatten_list.'
+  >>> ' '.join(flatten_list(l,['Result:']))
+  'Result: This is a test of flatten_list.'
+  '''
 
   if result==None:
     result=[]
   for elem in l:
     if type(elem)==list:
-      flattenList(elem,result)
+      flatten_list(elem,result)
     else:
       result.append(elem)
   return result
@@ -620,36 +642,36 @@ if __name__=='__main__': # TEST CODE TEST CODE TEST CODE TEST CODE TEST CODE
       # Show a table of all color and attribute combinations.
       colors='Black Red Green Yellow Blue Magenta Cyan White'.split()
       # Print the column headings.
-      print('        '+(' '.join([Color('under','black',c)('%-9s'%c) for c in colors])))
+      print('        '+(' '.join([Color('under','white' if c=='Black' else 'black',c)('%-9s'%c) for c in colors])))
       # Foreground colors and attributes change from one line to the next.
       for fg in colors:
         # The first line of a given foreground color is labeled. Note that the
-        # color name in the row label is given as flattenList()'s result
+        # color name in the row label is given as flatten_list()'s result
         # initializer.
-        paint(*flattenList(
+        paint(*flatten_list(
           [[Color('norm',fg,bg),'Normal   ',norm,' '] for bg in colors],
           [Color('bold %s'%fg),'%7s '%fg]
         ))
         # The second line shows contrast values for the above foreground and
         # background combinations.
-        paint(*flattenList(
+        paint(*flatten_list(
           ['%-10.5f'%Color('norm',fg,bg).contrast() for bg in colors],
           [' '*8]
         ))
-        paint(*flattenList(
+        paint(*flatten_list(
           [[Color('Bold',fg,bg),'Bold     ',norm,' '] for bg in colors],
           [' '*8]
         ))
         # The fourth line shows contrast values for the above foreground and
         # background combinations.
-        paint(*flattenList(
+        paint(*flatten_list(
           ['%-10.5f'%Color('bold',fg,bg).contrast() for bg in colors],
           [' '*8]
         ))
         # Show the contrast figures for normal text.
         # Remaining lines of a given foreground just begin with spaces.
         for a in ('Italics','Underline'):
-          paint(*flattenList(
+          paint(*flatten_list(
             [[Color(a,fg,bg),'%-9s'%a,norm,' '] for bg in colors],
             [' '*8]
           ))
