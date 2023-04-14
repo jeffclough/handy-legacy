@@ -375,42 +375,54 @@ START TIME FORMATS:
 
     # If --started is given, parse its argument to a datetime value.
     if opt.started:
-      now=datetime.now()
-      for p in time_patterns:
-        m=p.match(opt.started)
-        if m:
-          break
-      else:
-        print(f"{prog}: Error: Can't parse a date and time from {opt.started!r}",file=sys.stderr)
-        sys.exit(2)
-      # Get our time components, make them integers (except for month), and put them into an object.
-      t=m.groupdict()
-      t={k:(None if t[k] is None else int(t[k]) if k!='month' else t[k]) for k in t.keys()}
-      t=type('',(),t)
-
-      # Fill in amy missing pieces of our start date and time.
-      if t.year is None: t.year=now.year
-      elif t.year<100: t.year+=(now.year//100)*100
-      elif t.year<1000: t.year+=(now.year//1000)*1000
-      if t.month is None: t.month=now.month
-      if t.day is None: t.day=now.day
-      if t.sec is None: t.sec=0
-
-      # Tolerate different types of month identifiers.
-      ts=f"{t.year}-{t.month}-{t.day} {t.hour}:{t.min}:{t.sec}"
-      #dc(f"{ts=}")
-      for m in ('%m','%B','%b'):
-        parser=f'%Y-{m}-%d %H:%M:%S'
-        #dc(f"{parser=}")
+      if opt.started=='file':
+        # Use the modification time of "the file" for the start time.
+        if not opt.file:
+          print(f"{prog}: Error: \"--started file\" can be used only with \"--file\".",file=sys.stderr)
+          sys.exit(2)
         try:
-          pt=datetime.strptime(ts,parser)
-          break
-        except ValueError:
-          pass # Try again using the next month type.
+          opt.started=datetime.fromtimestamp(os.stat('x').st_mtime)
+        except FileNotFoundError:
+          print(f"{prog}: File not found: \"{opt.limit}\"",file=sys.stderr)
+          sys.exit(2)
       else:
-        print(f"{prog}: Error: Can't parse month from {opt.started!r}",file=sys.stderr)
-        sys.exit(2)
-      opt.started=pt # Use our parsed time as --started's value.
+        # Parse the date and time in opt.started.
+        now=datetime.now()
+        for p in time_patterns:
+          m=p.match(opt.started)
+          if m:
+            break
+        else:
+          print(f"{prog}: Error: Can't parse a date and time from {opt.started!r}",file=sys.stderr)
+          sys.exit(2)
+        # Get our time components, make them integers (except for month), and put them into an object.
+        t=m.groupdict()
+        t={k:(None if t[k] is None else int(t[k]) if k!='month' else t[k]) for k in t.keys()}
+        t=type('',(),t)
+
+        # Fill in amy missing pieces of our start date and time.
+        if t.year is None: t.year=now.year
+        elif t.year<100: t.year+=(now.year//100)*100
+        elif t.year<1000: t.year+=(now.year//1000)*1000
+        if t.month is None: t.month=now.month
+        if t.day is None: t.day=now.day
+        if t.sec is None: t.sec=0
+
+        # Tolerate different types of month identifiers.
+        ts=f"{t.year}-{t.month}-{t.day} {t.hour}:{t.min}:{t.sec}"
+        #dc(f"{ts=}")
+        for m in ('%m','%B','%b'):
+          parser=f'%Y-{m}-%d %H:%M:%S'
+          #dc(f"{parser=}")
+          try:
+            pt=datetime.strptime(ts,parser)
+            break
+          except ValueError:
+            pass # Try again using the next month type.
+        else:
+          print(f"{prog}: Error: Can't parse month from {opt.started!r}",file=sys.stderr)
+          sys.exit(2)
+        opt.started=pt # Use our parsed time as --started's value.
 
     # If --file is given, find the position of the first occurance of the
     # opt.progress RE in the file named by opt.limit.
