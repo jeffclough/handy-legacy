@@ -284,7 +284,7 @@ class ByteSizeProgress(Progress):
     return s
 
 if __name__=='__main__':
-  import argparse,os,sys,time
+  import argparse,os,sys,textwrap,time
   from datetime import datetime
   #from ast import literal_eval
 
@@ -308,17 +308,51 @@ if __name__=='__main__':
         pass
       print(f"{prog}: Error: Cannot convert {val!r} to a numeric value.",file=sys.stderr)
 
-  try:
+  try: # This outer "try" is just for KeyboardInterrupt exceptions.
+    try:
+      term_width=os.environ.get('COLUMNS','80')
+      term_width=int(term_width)
+    except ValueError:
+      print(f"{sys.argv[0]}: Error: {term_width!r} is not a valid integer.",file=sys.stderr)
+      sys.exit(1)
     ap=argparse.ArgumentParser(
       add_help=False,
-      description="Output a progress bar that fills the character-width of the current terminal and terminate with 0 (true) if PROGRESS < LIMIT. Otherwise, return 1 (false)."
+      formatter_class=argparse.RawDescriptionHelpFormatter,
+      description='\n'.join(textwrap.wrap("Output a progress bar that fills the character-width of the current terminal and terminate with 0 (true) if PROGRESS < LIMIT. Otherwise, return 1 (false).",width=term_width)),
+      epilog='\n'.join(textwrap.wrap("""\
+START TIME FORMATS:
+
+  The --started (-s) option takes a start time value in one of two formats. This time is used to estimate when whatever progress is being measured will be complete, and this ETA is suffixed to each line of output.
+
+  [[YY]YY-MM-DD ]HH:MM[:SS]
+
+  I don't think this format needs much explanation. It can look like any of these:
+
+    2023-06-13 22:33:44
+    2023-06-13 22:33
+    23-06-13 22:33:44
+    23-06-13 22:33
+    22:33:44
+    22:33
+
+  abbr_day abbr_month day HH:MM:SS tz YYYY
+
+  This is a very common output format of the `date` command, e.g. "Tue Jun 6 22:33:44 EDT 2023". This simplifies using --started (-s) to append ETA values to the progress output.
+
+    T0=$(date);
+    cat some-file |\\
+    while read x; do
+      line-processor "$x"
+      progress -fnps "$T0" "^$x$" x
+    done
+""",width=term_width,replace_whitespace=False,break_on_hyphens=False))
     )
     ap.add_argument('--file','-f',action='store_true',help="""Use the PROGRESS and LIMIT arguments as a regular expression and filename, respectively. The file position of the line following the first line matching the regular expression will be used for PROGRESS, and the size of the named file will be used for LIMIT.""")
     ap.add_argument('--file-last',action='store_true',help="""Just like --file, but the last occurance of the pattern in the file is used for the position.""")
     ap.add_argument('--percent','-p',action='store_true',help="Express PROGRESS as a percentage of LIMIT rather than as an absolute value.")
     ap.add_argument('--bytes',action='store_true',help="Express PROGRESS as a number of bytes in human-friendly units (B, KB, MB, GB, TB, or EB) according to the number of bytes in question.")
     ap.add_argument('--divisor',metavar='D',action='store',type=int,choices=(1000,1024),default=1000,help="For use with --bytes. D is the value you divide a number by to convert from one unit (like KB) to the next higher unit (like GB). It defaults to 1000, but you can set it to 1024 if you're counting memory bytes rather than filesystem bytes. These are the only two permitted values for D.")
-    ap.add_argument('--started','-s',metavar='T',action='store',help="""T is the time matching the "[[YY]YY-MM-DD ]HH:MM[:SS]" pattern when the process being monitored was started. The presence of this option turns the ETA at the end of the output value.""")
+    ap.add_argument('--started','-s',metavar='T',action='store',help="""T is the time matching the "[[YY]YY-MM-DD ]HH:MM[:SS]" pattern when the process being monitored was started. The presence of this option suffixes the output value with an estimated time to completion.""")
     ap.add_argument('--fmt',action='store',help="""Format string for the numeric value of this progress bar. This option is ignored if --bytes is given. The default format is usually "({progress})", but it's "({progres}%%)" if --percent is present. The "limit" variable is also available for formatting, so for example, you could use "({progress} / {limit}" to indicate what value progress is working toward.""")
     ap.add_argument('--mark',metavar='CHAR',action='store',default='>',help="Character that marks the porgress bar's current position. (default: %(default)s)")
     ap.add_argument('--trailer',metavar='CHAR',action='store',default='=',help="Character to fill in the bar to the left of (trailing behind) the current position. (default: %(default)s)")
