@@ -333,11 +333,14 @@ def dump_character_classes():
   debug(None,indent=-1)
 
 # These variables are used for pronounceable passwords.
-consonents='b bl br c cl cr d dl dr f fr fl g gl gr h j k kl kr l m n p ph pl pr qu r s sh sl t v vl x z'.split()
+consonants='b bl br c cl cr d dl dr f fr fl g gl gr h j k kl kr l m n p ph pl pr qu r s sh sl t v vl x z'.split()
 vowels='a e i o u y'.split()
-endings='b b c ck ct d f fk ft g j k kle kt l lk lt m mb mc md mk mp mt mv mz n nb nc nd nk np nt nv nz p ph ple r rk rkle rt s sh sl tle v ve vle x z'.split()
+doublable=set(list('bdefglmnopst')) # Letters that *might possibly* be doubled.
+double_consonant_chance=30          # 1-in-N change of doubling a consonant.
+double_vowel_chance=20              # 1-in-N chance of doubling a vowel.
+endings='b c ck ct d f fk ft g j k kle kt l lk lt m mb mc md mk mp mt mv mz n nb nc nd nk np nt nv nz p ph ple r rk rkle rt s sh sl tle v ve vle x z'.split()
 digit_mapper=dict(a='4',e='3',i='1',o='0',s='5',t='7',z='2')
-punct_mapper=dict(a='@',c='<',d=']',e='{',g='&',h='#',k='<',l='!',s='$',t='?',v='>')
+punct_mapper=dict(a='@',c='(',d=']',e='{',g='&',h='#',k='<',l='!',s='$',t='?',v='>')
 
 # Cook up some character class data based on the user's options.
 class RandomString(object):
@@ -569,7 +572,7 @@ class RandomString(object):
     outer_patience=20
     while outer_patience>0:
       debug('outer_patience=%r'%(outer_patience))
-      pw=''
+      pw=random.choice(consonants)+random.choice(vowels)
       # Choose a random target password length.
       plen=random.randrange(self.min_length,max(self.min_length+1,self.max_length-4))
       debug('plen=%r'%(plen))
@@ -578,7 +581,13 @@ class RandomString(object):
         debug('  inner_patience=%r'%(inner_patience,))
         # Put together some syllables.
         while len(pw)<plen:
-          pw+=random.choice(consonents)+random.choice(vowels)
+          c=random.choice(consonants)
+          if c in doublable and random.randrange(double_consonant_chance)==0:
+            c=c+c
+          v=random.choice(vowels)
+          if v in doublable and random.randrange(double_vowel_chance)==0:
+            v=v+v
+          pw+=c+v
           debug('    pw=%r (len=%r)'%(pw,len(pw)))
         e=random.choice(endings)
         debug('    e=%r'%(e))
