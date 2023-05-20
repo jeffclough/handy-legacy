@@ -1,0 +1,29 @@
+#!/usr/bin/env python3
+
+import argparse,sys
+from fractions import Fraction
+
+ap=argparse.ArgumentParser(description="Given an integer numerator and denominator, simplify that ratio (with the given or default limit), and write the reduced numerator and denominator to standard output.")
+ap.add_argument('--limit',default='auto',help="Limit the denominator to this integer value. Or use \"auto\" to have a reasonable limit computed for you. (default: %(default)s)")
+ap.add_argument('numerator',type=int,help="The numerator.")
+ap.add_argument('denominator',type=int,help="The denominator.")
+opt=ap.parse_args()
+
+if opt.limit=='auto':
+  # Compute a reasonable limiting denominator based on the one we were given.
+  l='9'*(len(str(abs(opt.denominator)))-1)
+  if len(l):
+    opt.limit=int(l)
+  else:
+    opt.limit=9 # But don't be rediculous.
+else:
+  # Use the integer the user provided.
+  try:
+    opt.limit=int(opt.limit)
+  except:
+    print(f"{ap.prog}: Error: --limit must be either 'auto' or an integer value, not {opt.limit!r}",file=sys.stderr)
+    sys.exit(1)
+
+# Compute and output our reduced fraction.
+f=Fraction(opt.numerator/opt.denominator).limit_denominator(opt.limit)
+print(f"{f.numerator} {f.denominator}")
