@@ -43,6 +43,8 @@ def numeric(x):
   
   >>> numeric('4')
   4
+  >>> numeric('4.0000')
+  4
   >>> numeric('3.25')
   3.25
   >>> numeric('testing')
@@ -58,8 +60,13 @@ def numeric(x):
       y=y[1:]
     if ',' in y:
       y=y.replace(',','')
-  with contextlib.suppress(ValueError): return int(y)
-  with contextlib.suppress(ValueError): return float(y)
+  with contextlib.suppress(ValueError):
+    return int(y)
+  with contextlib.suppress(ValueError):
+    y=float(y)
+    if y.is_integer():
+      y=int(y)
+    return y
   return x
 
 def width(x):
@@ -435,7 +442,7 @@ for row in reader:
     # have interior commas. We also run any --lambda function on these rows.
     row=[numeric(v) for v in row]
     if opt.func:
-      row=opt.func(i,row)
+      row=opt.func(i-opt.heading_lines,row)
       if row==None:
         continue
   dc(f"row={row!r}")
