@@ -27,7 +27,7 @@ extensions by calling
 
 Doing so means that "(?E:name)" in regular expressions used with *this*
 module will be replaced with "(pattern)", and "(?E:label=name)" will be
-replaced with "(?P<name>pattern)", in any regular expressions you use
+replaced with "(?P\<label>pattern)", in any regular expressions you use
 with this module. To keep things compatible with the common usage of
 Python's standard re module, it's a good idea to import RE like this:
 
@@ -93,17 +93,17 @@ Network:
 |  email    | Any valid email address. (Well above average, but not quite perfect.) There's also an email_localpart extensior, which is used inside both "email" and "url" (below), but it's really just for internal use. Take a look if you're curious.
 |  url      | Any URL consisting of:<br>protocol - req (e.g. "http" or "presto:http:")<br>designator - req (either "email_localpart@" or "//")<br>host - req (anything matching our "host" extension)<br>port - opt (e.g. ":443")<br>path - opt (e.g. "/path/to/content.html")<br>params - opt (e.g. "q=regular%20expression&items=10") |
 
-Time and Date:
+Time and Date (all case-insensitive):
 
 <table>
   <tr><th>Extension</th><th>Description</th></tr>
   <tr><td>day      </td><td> Day of week, Sunday through Saturday, or any unambiguous prefix thereof. </td></tr>
-  <tr><td>day3     </td><td> First three letters of any day. </td></tr>
-  <tr><td>DAY      </td><td> Full name of month. </td></tr>
-  <tr><td>month    </td><td> January through December, or any unambiguous prefix thereof. </td></tr>
-  <tr><td>month3   </td><td> First three letters of any month. </td></tr>
-  <tr><td>MONTH    </td><td> Full name of any month. </td></tr>
-  <tr><td>date_YMD </td><td> [CC]YY(-|/|.)[M]M(-|/|.)[D]D </td></tr>
+  <tr><td>day3     </td><td> First three letters of any day.</td></tr>
+  <tr><td>DAY      </td><td> Full name of day.</td></tr>
+  <tr><td>month    </td><td> January through December, or any unambiguous prefix thereof.</td></tr>
+  <tr><td>month3   </td><td> First three letters of any month.</td></tr>
+  <tr><td>MONTH    </td><td> Full name of any month.</td></tr>
+  <tr><td>date_YMD </td><td> [CC]YY(-|/|.)[M]M(-|/|.)[D]D</td></tr>
   <tr><td>date_YmD </td><td> [CC]YY(-|/|.)month(-|/|.)[D]D </td></tr>
   <tr><td>date_mD  </td><td> "month DD" </td></tr>
   <tr><td>time_HM  </td><td> [H]H(-|:|.)MM </td></tr>
