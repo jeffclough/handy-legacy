@@ -162,8 +162,8 @@ p.add_argument('-g','--grep',dest='grep',action='store_true',default=False,
   help='''Output only lines that match at least one color filter.''')
 p.add_argument('-i',dest='ignore_case',action='store_true',default=False,
   help='''Ignore case when matching patterns. This applies both to RE arguments to be matched and to any argument to --discard or --keep.''')
-p.add_argument('-I','--input',dest='input_from',action='store',choices=('diff','du'),default=None,
-  help='''Use sets of pattern known to be helpful for marking the output of certain programs. Valid values are diff and du.''')
+p.add_argument('-I','--input',dest='input_from',action='store',choices=('comm','diff','du'),default=None,
+  help='''Use sets of patterns known to be helpful for marking the output of certain programs. Valid values are comm, diff, and du. (If comm is used, the first three palette entries are automatically reversed.)''')
 p.add_argument('--keep',dest='keep',metavar='RE',action='store',default=None,
   help='''Keep any lines matching the given RE and discards all others. Keeping lines of CSV data has not yet been implemented. This option is for filtering only and has no effect on colarization. (Cannot be used with --discard.)''')
 p.add_argument('-l',dest='whole_line',action='store_true',default=False,
@@ -283,6 +283,10 @@ elif opt.diff:
   opt.patterns.insert(0,'^==================+')
   opt.patterns.insert(0,'^[+>].*')
   opt.patterns.insert(0,'^[-<].*')
+elif opt.input_from=='comm':
+  opt.patterns.insert(0,r'^.*')
+  opt.patterns.insert(0,r'^\t.*')
+  opt.patterns.insert(0,r'^\t\t.*')
 elif opt.input_from=='diff':
   opt.patterns.insert(0,'^==================+')
   opt.patterns.insert(0,'^[+>].*')
@@ -425,6 +429,10 @@ def get_input_lines(f=sys.stdin):
 
 # Convert opt.palette into a list of ansi.Color objects.
 opt.palette=ansi.Palette(opt.palette)
+
+if opt.input_from=='comm':
+  # Reverse the first three palette entries.
+  opt.palette[:3]=reversed(opt.palette[:3])
 
 if opt.fields:
   if opt.delim:
