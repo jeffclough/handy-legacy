@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-import datetime,fnmatch,optparse,os,re,sys
+import datetime,fnmatch,optparse,os,sys
+import RE as re
 from handy import shellify,file_walker
 
 # Use this expression to recognize and parse log file data.
