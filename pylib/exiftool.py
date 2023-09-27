@@ -38,7 +38,7 @@ from types import SimpleNamespace
 class ComplexNamespace(SimpleNamespace):
   """ComplexNamespace works just like SimpleNamespace, from which it is
   derived, but the namespaces here are nested as deeply as the
-  initializing dictionary of keywards goes.
+  initializing dictionary of keywords goes.
 
   One other difference is that its __str__() method returns a multi-line
   outline-formatted string. (You can still get the ugly version from
