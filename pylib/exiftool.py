@@ -95,8 +95,8 @@ def exiftool(*args):
   return rc
 
 def readfile(filename):
-  '''Return a python object (an instance of class AdHoc) whose
-  attributes contain the grouped EXIF tags of the given file.'''
+  '''Return a python object (an instance of class ComplexNamespace)
+  whose attributes contain the grouped EXIF tags of the given file.'''
 
   out,err=exiftool('-g','-json',filename)
   if err:
